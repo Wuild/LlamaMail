@@ -1,0 +1,146 @@
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import type {AppSettings, DebugLogEntry} from '../../preload';
+
+const defaultSettings: AppSettings = {
+    language: 'system',
+    theme: 'system',
+    minimizeToTray: true,
+    syncIntervalMinutes: 2,
+};
+
+export default function DebugConsolePage() {
+    const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+    const [logs, setLogs] = useState<DebugLogEntry[]>([]);
+    const [autoScroll, setAutoScroll] = useState(true);
+    const listRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const media = window.matchMedia('(prefers-color-scheme: dark)');
+        const applyTheme = (next: AppSettings) => {
+            const useDark = next.theme === 'dark' || (next.theme === 'system' && media.matches);
+            document.documentElement.classList.toggle('dark', useDark);
+            document.body.classList.toggle('dark', useDark);
+        };
+
+        window.electronAPI.getAppSettings().then((next) => {
+            setSettings(next);
+            applyTheme(next);
+        }).catch(() => applyTheme(defaultSettings));
+        const off = window.electronAPI.onAppSettingsUpdated?.((next) => {
+            setSettings(next);
+            applyTheme(next);
+        });
+        const onChange = () => applyTheme(settings);
+        media.addEventListener('change', onChange);
+        return () => {
+            if (typeof off === 'function') off();
+            media.removeEventListener('change', onChange);
+        };
+    }, [settings]);
+
+    useEffect(() => {
+        let active = true;
+        window.electronAPI.getDebugLogs(1000).then((initial) => {
+            if (!active) return;
+            setLogs(initial);
+        }).catch(() => undefined);
+
+        const off = window.electronAPI.onDebugLog?.((entry) => {
+            setLogs((prev) => {
+                const next = [...prev, entry];
+                if (next.length > 2000) return next.slice(next.length - 2000);
+                return next;
+            });
+        });
+        return () => {
+            active = false;
+            if (typeof off === 'function') off();
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!autoScroll) return;
+        const list = listRef.current;
+        if (!list) return;
+        list.scrollTop = list.scrollHeight;
+    }, [logs, autoScroll]);
+
+    const renderedLogs = useMemo(
+        () => logs.map((entry) => ({
+            ...entry,
+            timestampLabel: new Date(entry.timestamp).toLocaleTimeString(),
+        })),
+        [logs],
+    );
+
+    function onClear(): void {
+        void window.electronAPI.clearDebugLogs().then(() => {
+            setLogs([]);
+        }).catch(() => undefined);
+    }
+
+    return (
+        <div className="h-screen w-screen overflow-hidden bg-slate-100 dark:bg-[#23252b]">
+            <div className="flex h-full flex-col">
+                <header
+                    className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 dark:border-[#3a3d44] dark:bg-[#1a1c21]">
+                    <div>
+                        <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">Debug Console</h1>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Live IMAP and SMTP protocol logs</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <input
+                                type="checkbox"
+                                checked={autoScroll}
+                                onChange={(event) => setAutoScroll(event.target.checked)}
+                            />
+                            Auto-scroll
+                        </label>
+                        <button
+                            type="button"
+                            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#2f3238]"
+                            onClick={onClear}
+                        >
+                            Clear
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#2f3238]"
+                            onClick={() => window.close()}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </header>
+                <main className="min-h-0 flex-1 p-3">
+                    <div
+                        ref={listRef}
+                        className="h-full overflow-auto rounded-lg border border-slate-200 bg-[#0d1117] p-3 font-mono text-xs leading-5 text-slate-100 dark:border-[#3a3d44]"
+                    >
+                        {renderedLogs.length === 0 && (
+                            <div className="text-slate-400">No debug events yet.</div>
+                        )}
+                        {renderedLogs.map((entry) => (
+                            <div key={entry.id} className="whitespace-pre-wrap break-words">
+                                <span className="text-slate-400">[{entry.timestampLabel}]</span>{' '}
+                                <span className={levelClass(entry.level)}>{entry.level.toUpperCase()}</span>{' '}
+                                <span className="text-cyan-300">{entry.source}</span>{' '}
+                                <span className="text-amber-300">{entry.scope}</span>{' '}
+                                <span className="text-slate-100">{entry.message}</span>
+                            </div>
+                        ))}
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+function levelClass(level: DebugLogEntry['level']): string {
+    if (level === 'error' || level === 'fatal') return 'text-rose-400';
+    if (level === 'warn') return 'text-amber-400';
+    if (level === 'info') return 'text-emerald-400';
+    if (level === 'debug') return 'text-sky-400';
+    return 'text-violet-300';
+}

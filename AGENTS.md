@@ -250,6 +250,10 @@ Use electron-builder:
 - KEEP logic out of React (UI only)
 - USE SQLite for offline-first behavior
 - USE Drizzle ORM for database queries; avoid raw SQL in app code except inside migrations
+- MAKE all user-visible app actions truly optimistic: apply local/UI state changes immediately and run remote sync in
+  the background in good faith (reconcile on failure, but do not block primary UX on network/server roundtrips)
+- FORMAT code by default using PhpStorm-style formatting conventions (consistent spacing, wrapping, and brace style as
+  the project/codebase expects)
 - WRITE modular, testable code
 
 ---

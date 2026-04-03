@@ -1,10 +1,12 @@
 import type {OpenDialogOptions} from 'electron';
 import {BrowserWindow, dialog, ipcMain} from 'electron';
 import path from 'node:path';
+import {clearDebugLogs, getDebugLogs} from '../debug/debugLog.js';
 import {openAddAccountWindow} from '../windows/addAccountWindow.js';
 import {getAccountSettingsTargetId, openAccountSettingsWindow} from '../windows/accountSettingsWindow.js';
 import {openAppSettingsWindow} from '../windows/appSettingsWindow.js';
 import {type ComposeDraftPayload, getComposeDraft, openComposeWindow} from '../windows/composeWindow.js';
+import {openDebugWindow} from '../windows/debugWindow.js';
 import {getMessageWindowTargetId, openMessageWindow} from '../windows/messageWindow.js';
 import {openSupportWindow} from '../windows/supportWindow.js';
 
@@ -44,6 +46,21 @@ export function registerWindowIpc(): void {
     ipcMain.handle('open-support-window', async (event) => {
         const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
         openSupportWindow(parentWindow);
+        return {ok: true} as const;
+    });
+
+    ipcMain.handle('open-debug-window', async (event) => {
+        const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+        openDebugWindow(parentWindow);
+        return {ok: true} as const;
+    });
+
+    ipcMain.handle('get-debug-logs', async (_event, limit?: number) => {
+        return getDebugLogs(limit);
+    });
+
+    ipcMain.handle('clear-debug-logs', async () => {
+        clearDebugLogs();
         return {ok: true} as const;
     });
 

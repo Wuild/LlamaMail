@@ -1,5 +1,6 @@
 import {ImapFlow} from 'imapflow';
 import {simpleParser} from 'mailparser';
+import {createMailDebugLogger} from '../debug/debugLog.js';
 import {getAccountSyncCredentials} from '../db/repositories/accountsRepo.js';
 import {
     getMessageBody,
@@ -45,6 +46,13 @@ export interface AccountSyncOptions {
     onClient?: (client: ImapFlow) => void;
 }
 
+export interface MessageAttachmentFile {
+    filename: string;
+    contentType: string;
+    size: number | null;
+    content: Buffer;
+}
+
 export async function syncAccountMailbox(accountId: number, options?: AccountSyncOptions): Promise<SyncSummary> {
     const account = await getAccountSyncCredentials(accountId);
     const client = new ImapFlow({
@@ -52,7 +60,7 @@ export async function syncAccountMailbox(accountId: number, options?: AccountSyn
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `sync:account:${accountId}`),
     });
     options?.onClient?.(client);
 
@@ -186,7 +194,7 @@ export async function syncMessageBody(messageId: number, options?: MessageBodySy
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `body:message:${messageId}`),
     });
     options?.onClient?.(client);
 
@@ -214,6 +222,62 @@ export async function syncMessageBody(messageId: number, options?: MessageBodySy
             replaceMessageAttachments(messageId, attachments);
 
             return {messageId, text, html, attachments, cached: false};
+        } finally {
+            lock.release();
+        }
+    } finally {
+        try {
+            await client.logout();
+        } catch {
+            // ignore close errors
+        }
+    }
+}
+
+export async function downloadMessageAttachment(
+    messageId: number,
+    attachmentIndex: number,
+    options?: MessageBodySyncOptions,
+): Promise<MessageAttachmentFile> {
+    if (!Number.isInteger(attachmentIndex) || attachmentIndex < 0) {
+        throw new Error('Invalid attachment index');
+    }
+    const ctx = getMessageContext(messageId);
+    if (!ctx) throw new Error(`Message ${messageId} not found`);
+
+    const account = await getAccountSyncCredentials(ctx.accountId);
+    const client = new ImapFlow({
+        host: account.imap_host,
+        port: account.imap_port,
+        secure: !!account.imap_secure,
+        auth: {user: account.user, pass: account.password},
+        logger: createMailDebugLogger('imap', `attachment:message:${messageId}`),
+    });
+    options?.onClient?.(client);
+
+    try {
+        if (options?.isCancelled?.()) throw new Error('Attachment request cancelled');
+        await client.connect();
+        if (options?.isCancelled?.()) throw new Error('Attachment request cancelled');
+        const lock = await client.getMailboxLock(ctx.folderPath);
+        try {
+            if (options?.isCancelled?.()) throw new Error('Attachment request cancelled');
+            const fetched = await client.fetchOne(ctx.uid, {source: true}, {uid: true});
+            if (options?.isCancelled?.()) throw new Error('Attachment request cancelled');
+            const src = fetched && typeof fetched === 'object' ? (fetched as any).source : null;
+            if (!src) throw new Error('Could not fetch message source for attachment');
+
+            const parsed = await simpleParser(src);
+            const attachments = parsed.attachments ?? [];
+            const target = attachments[attachmentIndex] as any;
+            if (!target) throw new Error('Attachment not found');
+
+            const filename = String(target.filename || '').trim() || `attachment-${attachmentIndex + 1}.bin`;
+            const contentType = String(target.contentType || '').trim() || 'application/octet-stream';
+            const size = Number.isFinite(Number(target.size)) ? Number(target.size) : null;
+            const content = Buffer.isBuffer(target.content) ? target.content : Buffer.from(target.content || '');
+
+            return {filename, contentType, size, content};
         } finally {
             lock.release();
         }

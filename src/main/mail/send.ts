@@ -3,7 +3,10 @@ import {ImapFlow} from 'imapflow';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {getAccountSendCredentials, getAccountSyncCredentials} from '../db/repositories/accountsRepo.js';
+import {createMailDebugLogger} from '../debug/debugLog.js';
 import {markdownToEmailHtml} from './markdown.js';
+
+const DRAFT_SESSION_HEADER = 'X-LunaMail-Draft-Session';
 
 export interface EmailAttachmentPayload {
     path: string;
@@ -23,6 +26,7 @@ export interface SendEmailPayload {
     inReplyTo?: string | null;
     references?: string[] | string | null;
     attachments?: EmailAttachmentPayload[] | null;
+    draftSessionId?: string | null;
 }
 
 export interface SendEmailResult {
@@ -41,6 +45,7 @@ export interface SaveDraftPayload {
     inReplyTo?: string | null;
     references?: string[] | string | null;
     attachments?: EmailAttachmentPayload[] | null;
+    draftSessionId?: string | null;
 }
 
 export interface SaveDraftResult {
@@ -58,6 +63,8 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
         port: account.smtp_port,
         secure: !!account.smtp_secure,
         auth: {user: account.user, pass: account.password},
+        logger: createMailDebugLogger('smtp', `send:${account.email}`),
+        debug: true,
     });
 
     const markdown = payload.markdown?.trim() ?? '';
@@ -94,6 +101,9 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
     } catch (error) {
         console.warn(`Sent email ${info.messageId} but failed to append to Sent mailbox:`, error);
     }
+    if (payload.draftSessionId?.trim()) {
+        void deleteDraftsBySession(payload.accountId, payload.draftSessionId.trim());
+    }
 
     return {
         ok: true,
@@ -129,6 +139,9 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
         attachments: await readAttachmentBodies(attachments),
         messageId: `<draft.${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}@lunamail.local>`,
         date: new Date(),
+        headers: payload.draftSessionId?.trim()
+            ? {[DRAFT_SESSION_HEADER]: payload.draftSessionId.trim()}
+            : undefined,
     };
     const raw = await buildRawMessage(message);
     const client = new ImapFlow({
@@ -136,7 +149,7 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `draft:${payload.accountId}`),
     });
 
     try {
@@ -165,6 +178,7 @@ async function buildRawMessage(message: {
     html?: string;
     inReplyTo?: string;
     references?: string[];
+    headers?: Record<string, string>;
     attachments?: Array<{ filename: string; contentType: string; content: Buffer }>;
     messageId?: string;
     date: Date;
@@ -179,6 +193,7 @@ async function buildRawMessage(message: {
         message.messageId ? `Message-ID: ${message.messageId}` : '',
         message.inReplyTo ? `In-Reply-To: ${message.inReplyTo}` : '',
         message.references && message.references.length ? `References: ${message.references.join(' ')}` : '',
+        ...Object.entries(message.headers || {}).map(([key, value]) => `${key}: ${value}`),
         'MIME-Version: 1.0',
     ].filter(Boolean);
 
@@ -277,7 +292,7 @@ async function appendToSentMailbox(accountId: number, raw: Buffer, date: Date): 
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `sent-append:${accountId}`),
     });
 
     try {
@@ -320,6 +335,40 @@ async function resolveDraftMailbox(client: ImapFlow): Promise<string | null> {
     if (byName?.path) return byName.path;
 
     return null;
+}
+
+async function deleteDraftsBySession(accountId: number, draftSessionId: string): Promise<void> {
+    const account = await getAccountSyncCredentials(accountId);
+    const client = new ImapFlow({
+        host: account.imap_host,
+        port: account.imap_port,
+        secure: !!account.imap_secure,
+        auth: {user: account.user, pass: account.password},
+        logger: createMailDebugLogger('imap', `draft-cleanup:${accountId}`),
+    });
+
+    try {
+        await client.connect();
+        const mailbox = await resolveDraftMailbox(client);
+        if (!mailbox) return;
+        const lock = await client.getMailboxLock(mailbox);
+        try {
+            const uids = await client.search(
+                {header: {[DRAFT_SESSION_HEADER]: draftSessionId}},
+                {uid: true},
+            );
+            if (!uids || uids.length === 0) return;
+            await (client as any).messageDelete(uids, {uid: true});
+        } finally {
+            lock.release();
+        }
+    } finally {
+        try {
+            await client.logout();
+        } catch {
+            // ignore close errors
+        }
+    }
 }
 
 function normalizeRecipients(raw?: string | null): string | undefined {

@@ -43,6 +43,7 @@ function ComposeEmailPage() {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSavedSignatureRef = useRef<string>('');
+    const draftSessionIdRef = useRef<string>(`draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
     useEffect(() => {
         const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -93,6 +94,11 @@ function ComposeEmailPage() {
                 setCcList(parsedCc);
                 if (draft.cc.trim()) setShowCcBcc(true);
             }
+            if (typeof draft.bcc === 'string') {
+                const parsedBcc = parseRecipients(draft.bcc);
+                setBccList(parsedBcc);
+                if (draft.bcc.trim()) setShowCcBcc(true);
+            }
             if (typeof draft.subject === 'string') setSubject(draft.subject);
             if (typeof draft.body === 'string') {
                 setBody(draft.body);
@@ -133,20 +139,15 @@ function ComposeEmailPage() {
                     contentType: attachment.contentType,
                 }))
                 : null,
+            draftSessionId: draftSessionIdRef.current,
         };
     }, [fromAccountId, toList, ccList, bccList, subject, body, plainBody, threadMeta.inReplyTo, threadMeta.references, attachments]);
 
     useEffect(() => {
         if (!draftPayload || sending) return;
-        const hasContent = Boolean(
-            draftPayload.to ||
-            draftPayload.cc ||
-            draftPayload.bcc ||
-            draftPayload.subject ||
-            draftPayload.html ||
-            draftPayload.text,
-        );
-        if (!hasContent) return;
+        const hasRecipient = Boolean((draftPayload.to || '').trim());
+        const hasBody = Boolean((draftPayload.text || draftPayload.html || '').trim());
+        if (!hasRecipient || !hasBody) return;
 
         const signature = JSON.stringify(draftPayload);
         if (signature === lastSavedSignatureRef.current) return;
@@ -211,6 +212,7 @@ function ComposeEmailPage() {
                         contentType: attachment.contentType,
                     }))
                     : null,
+                draftSessionId: draftSessionIdRef.current,
             });
             setStatus(`Sent (${res.messageId})`);
             setTimeout(() => {
@@ -349,8 +351,8 @@ function ComposeEmailPage() {
                             </div>
 
                             {showCcBcc && (
-                                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[220px_1fr]">
-                                    <label className="block text-sm">
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <label className="block min-w-0 text-sm">
                                         <span
                                             className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Cc</span>
                                         <RecipientsInput
@@ -360,7 +362,7 @@ function ComposeEmailPage() {
                                         />
                                     </label>
 
-                                    <label className="block text-sm">
+                                    <label className="block min-w-0 text-sm">
                                         <span
                                             className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Bcc</span>
                                         <RecipientsInput
@@ -387,7 +389,7 @@ function ComposeEmailPage() {
                         </div>
 
                         <div className="min-h-0 flex-1 p-5">
-                            <div className="relative h-full min-h-[280px]">
+                            <div className="relative h-full">
                                 <MarkdownLexicalEditor
                                     value={body}
                                     placeholder="Write your message..."
@@ -399,19 +401,10 @@ function ComposeEmailPage() {
                             </div>
                         </div>
 
-                        <footer
-                            className="flex items-center justify-between border-t border-slate-200 px-5 py-3 dark:border-[#3a3d44]">
-                            <div className="flex min-w-0 flex-1 flex-col gap-2 pr-3">
-                                <button
-                                    className="inline-flex h-9 w-fit items-center rounded-md border border-slate-300 px-3 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
-                                    onClick={() => void onPickAttachments()}
-                                    type="button"
-                                >
-                                    <Paperclip size={14} className="mr-2"/>
-                                    Attach
-                                </button>
-                                {attachments.length > 0 && (
-                                    <div className="flex max-h-32 min-w-0 flex-wrap gap-2 overflow-auto pr-1">
+                        <footer className="border-t border-slate-200 px-5 py-3 dark:border-[#3a3d44]">
+                            {attachments.length > 0 && (
+                                <div className="mb-3 overflow-x-auto overflow-y-hidden pr-1">
+                                    <div className="flex min-w-full w-max gap-2 pb-1">
                                         {attachments.map((attachment) => (
                                             <AttachmentCard
                                                 key={attachment.id}
@@ -420,15 +413,17 @@ function ComposeEmailPage() {
                                             />
                                         ))}
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between gap-2">
                                 <button
-                                    className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
-                                    onClick={() => window.close()}
+                                    className="inline-flex h-9 w-fit items-center rounded-md border border-slate-300 px-3 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
+                                    onClick={() => void onPickAttachments()}
+                                    type="button"
                                 >
-                                    Close
+                                    <Paperclip size={14} className="mr-2"/>
+                                    Attach
                                 </button>
                                 <button
                                     className="inline-flex h-9 items-center rounded-md bg-gradient-to-r from-sky-600 to-indigo-600 px-3 text-sm font-medium text-white transition-all hover:brightness-110 dark:from-[#5865f2] dark:to-[#4f5bd5]"
@@ -630,6 +625,10 @@ function RecipientsInput({
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={commitDraft}
                 onKeyDown={(e) => {
+                    const trimmedDraft = draft.trim();
+                    if (e.key === 'Tab' && trimmedDraft.length === 0) {
+                        return;
+                    }
                     if (e.key === 'Enter' || e.key === 'Tab' || e.key === ',' || e.key === ' ') {
                         e.preventDefault();
                         commitDraft();

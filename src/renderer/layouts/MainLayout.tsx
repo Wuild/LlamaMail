@@ -1,6 +1,7 @@
 import React from 'react';
 import {
     Archive,
+    Bug,
     ChevronDown,
     ChevronRight,
     CircleHelp,
@@ -9,12 +10,14 @@ import {
     FolderPlus,
     Inbox,
     Mail,
+    MailOpen,
     PenSquare,
     RefreshCw,
     Search,
     Send,
     Settings,
     ShieldAlert,
+    SquareArrowOutUpRight,
     Trash2,
     X
 } from 'lucide-react';
@@ -129,6 +132,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         | null
     >(null);
     const [accountMenu, setAccountMenu] = React.useState<{ x: number; y: number; account: PublicAccount } | null>(null);
+    const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
+    const accountMenuRef = React.useRef<HTMLDivElement | null>(null);
+    const moveToTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+    const [menuPosition, setMenuPosition] = React.useState<{ left: number; top: number }>({left: 0, top: 0});
+    const [accountMenuPosition, setAccountMenuPosition] = React.useState<{ left: number; top: number }>({
+        left: 0,
+        top: 0
+    });
+    const [moveSubmenuLeft, setMoveSubmenuLeft] = React.useState(false);
+    const [moveSubmenuOffsetY, setMoveSubmenuOffsetY] = React.useState(0);
     const [expandedAccountIds, setExpandedAccountIds] = React.useState<Set<number>>(
         () => new Set(accounts.map((account) => account.id)),
     );
@@ -158,20 +171,36 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         () => folders.filter((folder) => !isProtectedFolder(folder)),
         [folders],
     );
+    const moveTargets = React.useMemo(
+        () => folders.filter((f) => f.path !== selectedFolderPath).slice(0, 12),
+        [folders, selectedFolderPath],
+    );
     const headerLightTint = getHeaderLightTint(selectedFolder?.color);
 
     React.useEffect(() => {
-        if (accounts.length === 0) {
-            setExpandedAccountIds(new Set());
-            return;
-        }
         setExpandedAccountIds((prev) => {
-            const next = new Set(prev);
-            for (const account of accounts) next.add(account.id);
-            if (typeof selectedAccountId === 'number') next.add(selectedAccountId);
-            return next;
+            if (accounts.length === 0) {
+                return prev.size === 0 ? prev : new Set();
+            }
+            const validIds = new Set(accounts.map((account) => account.id));
+            const next = new Set<number>();
+            let changed = false;
+            for (const id of prev) {
+                if (validIds.has(id)) {
+                    next.add(id);
+                } else {
+                    changed = true;
+                }
+            }
+            for (const account of accounts) {
+                if (!next.has(account.id)) {
+                    next.add(account.id);
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
         });
-    }, [accounts, selectedAccountId]);
+    }, [accounts]);
 
     React.useEffect(() => {
         const close = () => {
@@ -185,6 +214,77 @@ const MainLayout: React.FC<MainLayoutProps> = ({
             window.removeEventListener('keydown', close);
         };
     }, []);
+
+    React.useEffect(() => {
+        if (!menu) {
+            setMoveSubmenuLeft(false);
+            setMoveSubmenuOffsetY(0);
+            return;
+        }
+        const updatePosition = () => {
+            const el = contextMenuRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const next = constrainToViewport(menu.x, menu.y, rect.width, rect.height);
+            setMenuPosition((prev) => (prev.left === next.left && prev.top === next.top ? prev : next));
+            if (menu.kind === 'message') {
+                const rightSpace = window.innerWidth - (next.left + rect.width) - 8;
+                setMoveSubmenuLeft(rightSpace < 236);
+            } else {
+                setMoveSubmenuLeft(false);
+            }
+        };
+        const raf = window.requestAnimationFrame(updatePosition);
+        window.addEventListener('resize', updatePosition);
+        return () => {
+            window.cancelAnimationFrame(raf);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [menu]);
+
+    React.useEffect(() => {
+        if (!menu || menu.kind !== 'message') {
+            setMoveSubmenuOffsetY(0);
+            return;
+        }
+        const updateSubmenuY = () => {
+            const trigger = moveToTriggerRef.current;
+            if (!trigger) return;
+            const triggerTop = trigger.getBoundingClientRect().top;
+            const estimatedSubmenuHeight = Math.min(moveTargets.length * 34 + 8, window.innerHeight - 16);
+            const availableBelow = window.innerHeight - triggerTop - 8;
+            let offsetY = 0;
+            if (availableBelow < estimatedSubmenuHeight) {
+                offsetY = availableBelow - estimatedSubmenuHeight;
+            }
+            const maxUpShift = 8 - triggerTop;
+            if (offsetY < maxUpShift) offsetY = maxUpShift;
+            setMoveSubmenuOffsetY(offsetY);
+        };
+        const raf = window.requestAnimationFrame(updateSubmenuY);
+        window.addEventListener('resize', updateSubmenuY);
+        return () => {
+            window.cancelAnimationFrame(raf);
+            window.removeEventListener('resize', updateSubmenuY);
+        };
+    }, [menu, menuPosition, moveTargets.length]);
+
+    React.useEffect(() => {
+        if (!accountMenu) return;
+        const updatePosition = () => {
+            const el = accountMenuRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const next = constrainToViewport(accountMenu.x, accountMenu.y, rect.width, rect.height);
+            setAccountMenuPosition((prev) => (prev.left === next.left && prev.top === next.top ? prev : next));
+        };
+        const raf = window.requestAnimationFrame(updatePosition);
+        window.addEventListener('resize', updatePosition);
+        return () => {
+            window.cancelAnimationFrame(raf);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [accountMenu]);
 
     async function saveFolderSettings() {
         if (!folderEditor || folderEditorSaving) return;
@@ -235,6 +335,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         });
     }
 
+    function syncAllAccountsNow(): void {
+        if (accounts.length === 0) return;
+        for (const account of accounts) {
+            syncAccountNow(account.id);
+        }
+    }
+
     return (
         <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-100 dark:bg-[#2f3136]">
             <header className={cn('h-14 shrink-0 text-white dark:bg-[#15161a]', headerLightTint)}>
@@ -268,6 +375,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         <Button
                             variant="ghost"
                             className="h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white"
+                            onClick={() => void window.electronAPI.openDebugWindow()}
+                            title="Debug console"
+                            aria-label="Debug console"
+                        >
+                            <Bug size={17}/>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            className="h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white"
                             onClick={() => void window.electronAPI.openSupportWindow()}
                             title="Support"
                             aria-label="Support"
@@ -286,14 +402,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                             <div className="mb-2 flex items-center justify-between px-3">
                                 <span
                                     className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Accounts</span>
-                                <button
-                                    className="rounded p-1 text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#3a3d44] dark:hover:text-white"
-                                    onClick={() => window.electronAPI.openAddAccountWindow()}
-                                    title="Add account"
-                                    aria-label="Add account"
-                                >
-                                    <FolderPlus size={14}/>
-                                </button>
                             </div>
 
                             {accounts.length === 0 && (
@@ -306,9 +414,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                 const isSelectedAccount = account.id === selectedAccountId;
                                 const isSyncingAccount = (syncingAccountIds?.has(account.id) ?? false) || localSyncingAccountIds.has(account.id);
                                 const isExpanded = expandedAccountIds.has(account.id);
-                                const accountFolders = isSelectedAccount
-                                    ? folders
-                                    : (accountFoldersById[account.id] ?? []);
+                                const accountFolders = accountFoldersById[account.id] ?? [];
                                 const accountProtectedFolders = accountFolders.filter((folder) => isProtectedFolder(folder));
                                 const accountCustomFolders = accountFolders.filter((folder) => !isProtectedFolder(folder));
                                 return (
@@ -339,9 +445,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                     setAccountMenu({x: e.clientX, y: e.clientY, account});
                                                 }}
                                             >
-                                                <Mail size={14} className="shrink-0 opacity-75"/>
-                                                <span
-                                                    className="truncate">{account.display_name?.trim() || account.email}</span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate">
+                                                        {account.display_name?.trim() || account.email}
+                                                    </span>
+                                                    {account.display_name?.trim() && (
+                                                        <span
+                                                            className="block truncate text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                                                            {account.email}
+                                                        </span>
+                                                    )}
+                                                </span>
                                             </button>
                                             <div
                                                 className={cn('flex items-center gap-1 pr-1 transition-opacity', isSyncingAccount ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
@@ -523,6 +637,29 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                             })}
                         </nav>
                     </ScrollArea>
+                    <div className="shrink-0 border-t border-slate-200 px-2 py-2 dark:border-[#2f3138]">
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:bg-[#25272c] dark:text-slate-200 dark:hover:bg-[#34363d]"
+                                onClick={() => window.electronAPI.openAddAccountWindow()}
+                                title="Add account"
+                                aria-label="Add account"
+                            >
+                                <FolderPlus size={14}/>
+                            </button>
+                            <button
+                                type="button"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-60 dark:border-[#3a3d44] dark:bg-[#25272c] dark:text-slate-200 dark:hover:bg-[#34363d]"
+                                onClick={syncAllAccountsNow}
+                                title="Sync all accounts"
+                                aria-label="Sync all accounts"
+                                disabled={accounts.length === 0}
+                            >
+                                <RefreshCw size={14}/>
+                            </button>
+                        </div>
+                    </div>
 
                 </aside>
 
@@ -619,6 +756,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                         ctrlKey: e.ctrlKey,
                                         metaKey: e.metaKey,
                                     })}
+                                onDoubleClick={() => {
+                                    void window.electronAPI.openMessageWindow(message.id);
+                                }}
                                 draggable
                                 onDragStart={(e) => {
                                     setDraggingMessageId(message.id);
@@ -701,45 +841,69 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
             {menu && (
                 <div
+                    ref={contextMenuRef}
                     className="fixed z-[1000] min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#313338]"
-                    style={{left: menu.x, top: menu.y}}
+                    style={{left: menuPosition.left, top: menuPosition.top}}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {menu.kind === 'message' && (
                         <>
                             <ContextItem
+                                label="Open in new window"
+                                icon={<SquareArrowOutUpRight size={14}/>}
+                                onClick={() => {
+                                    void window.electronAPI.openMessageWindow(menu.message.id);
+                                    setMenu(null);
+                                }}
+                            />
+                            <ContextItem
                                 label={menu.message.is_read ? 'Mark as unread' : 'Mark as read'}
+                                icon={menu.message.is_read ? <Mail size={14}/> : <MailOpen size={14}/>}
                                 onClick={() => {
                                     onMessageMarkReadToggle(menu.message);
                                     setMenu(null);
                                 }}
                             />
-                            <ContextItem
-                                label={menu.message.is_flagged ? 'Unstar' : 'Star'}
-                                onClick={() => {
-                                    onMessageFlagToggle(menu.message);
-                                    setMenu(null);
-                                }}
-                            />
                             <div className="my-1 h-px bg-slate-200"/>
-                            <div className="px-2 py-1 text-xs font-medium text-slate-500 dark:text-slate-400">Move to
+                            <div className="group relative">
+                                <button
+                                    ref={moveToTriggerRef}
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3e52]"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Folder size={14}/>
+                                        Move to
+                                    </span>
+                                    <ChevronRight size={14}/>
+                                </button>
+                                <div
+                                    className={cn(
+                                        'absolute top-0 z-[1010] hidden min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl group-hover:block group-focus-within:block dark:border-[#3a3d44] dark:bg-[#313338]',
+                                        moveSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1',
+                                    )}
+                                    style={{
+                                        transform: `translateY(${moveSubmenuOffsetY}px)`,
+                                        maxHeight: 'calc(100vh - 16px)',
+                                        overflowY: 'auto',
+                                    }}>
+                                    {moveTargets.map((f) => (
+                                        <ContextItem
+                                            key={f.id}
+                                            label={f.custom_name || f.name}
+                                            icon={getFolderIcon(f)}
+                                            onClick={() => {
+                                                onMessageMove(menu.message, f.path);
+                                                setMenu(null);
+                                            }}
+                                        />
+                                    ))}
+                                </div>
                             </div>
-                            {folders
-                                .filter((f) => f.path !== selectedFolderPath)
-                                .slice(0, 12)
-                                .map((f) => (
-                                    <ContextItem
-                                        key={f.id}
-                                        label={f.custom_name || f.name}
-                                        onClick={() => {
-                                            onMessageMove(menu.message, f.path);
-                                            setMenu(null);
-                                        }}
-                                    />
-                                ))}
                             <div className="my-1 h-px bg-slate-200"/>
                             <ContextItem
                                 label="Delete"
+                                icon={<Trash2 size={14}/>}
                                 danger
                                 onClick={() => {
                                     onMessageDelete(menu.message);
@@ -752,6 +916,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         <>
                             <ContextItem
                                 label="Open Folder"
+                                icon={<Folder size={14}/>}
                                 onClick={() => {
                                     if (menu.folder.account_id !== selectedAccountId) {
                                         onSelectAccount(menu.folder.account_id);
@@ -762,6 +927,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                             />
                             <ContextItem
                                 label="Edit Folder Settings"
+                                icon={<Settings size={14}/>}
                                 onClick={() => {
                                     setFolderEditor({
                                         folder: menu.folder,
@@ -775,6 +941,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                             />
                             <ContextItem
                                 label="Sync Account"
+                                icon={<RefreshCw size={14}/>}
                                 onClick={() => {
                                     syncAccountNow(menu.folder.account_id);
                                     setMenu(null);
@@ -785,6 +952,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                     <div className="my-1 h-px bg-slate-200"/>
                                     <ContextItem
                                         label="Delete Folder"
+                                        icon={<Trash2 size={14}/>}
                                         danger
                                         onClick={() => {
                                             onDeleteFolder(menu.folder);
@@ -800,12 +968,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
             {accountMenu && (
                 <div
+                    ref={accountMenuRef}
                     className="fixed z-[1000] min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#313338]"
-                    style={{left: accountMenu.x, top: accountMenu.y}}
+                    style={{left: accountMenuPosition.left, top: accountMenuPosition.top}}
                     onClick={(e) => e.stopPropagation()}
                 >
                     <ContextItem
                         label="Edit Account Settings"
+                        icon={<Settings size={14}/>}
                         onClick={() => {
                             void window.electronAPI.openAccountSettingsWindow(accountMenu.account.id);
                             setAccountMenu(null);
@@ -947,14 +1117,20 @@ const FolderItemRow: React.FC<{
     );
 };
 
-const ContextItem: React.FC<{ label: string; onClick: () => void; danger?: boolean }> = ({label, onClick, danger}) => (
+const ContextItem: React.FC<{
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+    icon?: React.ReactNode;
+}> = ({label, onClick, danger, icon}) => (
     <button
         className={cn(
-            'block w-full rounded px-2 py-1.5 text-left text-sm transition-colors',
+            'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
             danger ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3e52]',
         )}
         onClick={onClick}
     >
+        {icon && <span className="shrink-0">{icon}</span>}
         {label}
     </button>
 );
@@ -991,6 +1167,15 @@ function formatMessageSender(message: MessageItem): string {
     if (name) return name;
     if (email) return email;
     return 'Unknown sender';
+}
+
+function constrainToViewport(x: number, y: number, width: number, height: number): { left: number; top: number } {
+    const margin = 8;
+    const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - height - margin);
+    const left = Math.min(Math.max(x, margin), maxLeft);
+    const top = Math.min(Math.max(y, margin), maxTop);
+    return {left, top};
 }
 
 function getHeaderLightTint(color: string | null | undefined): string {

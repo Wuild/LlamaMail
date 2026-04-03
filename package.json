@@ -10,7 +10,7 @@
     "build:electron": "npm run build && electron-builder",
     "dev:ui": "vite",
     "dev:types": "tsc -w --preserveWatchOutput",
-    "dev:electron": "wait-on tcp:127.0.0.1:5174 file:build/main/index.js && nodemon --watch build/main --watch build/preload --ext js,mjs,cjs,json --exec \"electron .\"",
+    "dev:electron": "wait-on tcp:127.0.0.1:5174 file:build/main/index.js && nodemon --watch build/main --watch build/preload --watch preload.cjs --ext js,mjs,cjs,json --exec \"electron .\"",
     "dev": "concurrently -k -n TSC,VITE,ELECTRON -c yellow,blue,green \"tsc -w --preserveWatchOutput\" \"vite\" \"npm run dev:electron\"",
     "rebuild:native": "npm rebuild better-sqlite3 --runtime=electron --target=41.1.1 --dist-url=https://electronjs.org/headers",
     "postinstall": "npm run rebuild:native",
@@ -78,6 +78,14 @@
       "preload.cjs",
       "package.json"
     ],
+    "protocols": [
+      {
+        "name": "Email Link",
+        "schemes": [
+          "mailto"
+        ]
+      }
+    ],
     "extraResources": [
       {
         "from": "node_modules",
@@ -90,12 +98,13 @@
     "linux": {
       "target": [
         "AppImage",
-        "rpm"
+        "flatpak"
       ],
       "icon": "build/icons",
       "desktop": {
         "entry": {
-          "StartupWMClass": "lunamail"
+          "StartupWMClass": "lunamail",
+          "MimeType": "x-scheme-handler/mailto;"
         }
       },
       "category": "Network"

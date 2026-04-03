@@ -1,12 +1,14 @@
-import {app, BrowserWindow, Menu, nativeImage, nativeTheme, Notification, shell, Tray} from 'electron';
+import {app, BrowserWindow, clipboard, Menu, nativeImage, nativeTheme, Notification, shell, Tray} from 'electron';
 import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
+import {onDebugLog} from './debug/debugLog.js';
 import {initDb} from './db/index.js';
 import {getAccounts} from './db/repositories/accountsRepo.js';
 import {
     getCurrentUnreadCount,
     registerAccountIpc,
+    setAccountCountChangedListener,
     setAutoSyncIntervalMinutes,
     setNewMailListener,
     setUnreadCountListener,
@@ -16,7 +18,10 @@ import {
 import {registerSettingsIpc} from './ipc/settings.js';
 import {registerWindowIpc} from './ipc/windows.js';
 import {getAppSettings, getAppSettingsSync, getSpellCheckerLanguages} from './settings/store.js';
-import {openAddAccountWindow} from './windows/addAccountWindow.js';
+import type {ComposeDraftPayload} from './windows/composeWindow.js';
+import {openComposeWindow} from './windows/composeWindow.js';
+import {getAddAccountWindow, openAddAccountWindow} from './windows/addAccountWindow.js';
+import {openDebugWindow} from './windows/debugWindow.js';
 import {loadWindowContent} from './windows/loadWindowContent.js';
 
 const isDev = !app.isPackaged;
@@ -26,6 +31,8 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let currentUnreadCount = 0;
+const pendingMailtoUrls: string[] = [];
+let stopDebugForwarding: (() => void) | null = null;
 const appIconPath = resolveAppIconPath();
 const appIconPngBase64 = appIconPath && fs.existsSync(appIconPath) ? fs.readFileSync(appIconPath).toString('base64') : null;
 
@@ -64,6 +71,11 @@ function createWindow() {
         event.preventDefault();
         win.hide();
         ensureTray();
+    });
+    win.on('closed', () => {
+        if (mainWindow === win) {
+            mainWindow = null;
+        }
     });
     mainWindow = win;
 
@@ -129,6 +141,13 @@ function ensureTray(): void {
                 }
                 mainWindow.show();
                 mainWindow.focus();
+            },
+        },
+        {
+            label: 'Open Debug Console',
+            click: () => {
+                const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+                openDebugWindow(parent);
             },
         },
         {
@@ -229,57 +248,331 @@ function applyRuntimeSettings(): void {
     ensureTray();
 }
 
-app.whenReady().then(async () => {
-    // Initialize database and IPC handlers
-    initDb();
-    await getAppSettings();
-    applyRuntimeSettings();
-    setUnreadCountListener((count) => {
-        updateUnreadIndicators(count);
+function registerProtocolHandlers(): void {
+    app.on('open-url', (event, url) => {
+        event.preventDefault();
+        queueMailtoUrl(url);
     });
-    setNewMailListener(({newMessages, source, target}) => {
-        if (newMessages <= 0) return;
-        if (source === 'send') return;
-        if (!Notification.isSupported()) return;
-        const title = newMessages === 1 ? 'New email received' : `${newMessages} new emails`;
-        const body = source === 'startup'
-            ? 'Mailbox synced with new unread messages.'
-            : 'You have new unread messages.';
-        try {
-            const notification = new Notification({title, body, silent: false});
-            notification.on('click', () => {
-                focusMainWindowAndOpenMessage(target);
-            });
-            notification.show();
-            playNotificationSound();
-        } catch {
-            // ignore notification failures
+
+    app.on('second-instance', (_event, argv) => {
+        const mailtoUrl = findMailtoArg(argv);
+        if (mailtoUrl) {
+            queueMailtoUrl(mailtoUrl);
+        } else {
+            const existingWindow = BrowserWindow.getAllWindows().find((win) => !win.isDestroyed());
+            if (existingWindow) {
+                existingWindow.show();
+                existingWindow.focus();
+            }
         }
     });
-    registerAccountIpc();
-    registerSettingsIpc(() => {
-        applyRuntimeSettings();
-    });
-    registerWindowIpc();
+}
 
-    createWindow();
-    const accounts = await getAccounts();
-    if (accounts.length === 0) {
-        openAddAccountWindow(mainWindow ?? undefined);
+function installExternalNavigationPolicy(): void {
+    app.on('web-contents-created', (_event, contents) => {
+        contents.on('context-menu', (_menuEvent, params) => {
+            const template: Electron.MenuItemConstructorOptions[] = [];
+            const hasSelection = Boolean((params.selectionText || '').trim());
+            const linkUrl = String(params.linkURL || '').trim();
+            const hasLink = /^(https?:|mailto:)/i.test(linkUrl);
+            const canEdit = Boolean(params.isEditable);
+            const editFlags = params.editFlags ?? {};
+
+            if (hasLink) {
+                template.push({
+                    label: 'Open Link',
+                    click: () => {
+                        handleExternalUrl(linkUrl);
+                    },
+                });
+                template.push({
+                    label: 'Copy Link Address',
+                    click: () => {
+                        clipboard.writeText(linkUrl);
+                    },
+                });
+                template.push({type: 'separator'});
+            }
+
+            if (canEdit) {
+                template.push({label: 'Cut', role: 'cut', enabled: Boolean(editFlags.canCut)});
+                template.push({label: 'Copy', role: 'copy', enabled: Boolean(editFlags.canCopy)});
+                template.push({label: 'Paste', role: 'paste', enabled: Boolean(editFlags.canPaste)});
+                template.push({type: 'separator'});
+            } else if (hasSelection) {
+                template.push({label: 'Copy', role: 'copy'});
+                template.push({type: 'separator'});
+            }
+
+            template.push({label: 'Select All', role: 'selectAll'});
+            if (template.length === 0) return;
+            const menu = Menu.buildFromTemplate(template);
+            const owner = BrowserWindow.fromWebContents(contents) ?? undefined;
+            if (owner) {
+                menu.popup({window: owner});
+                return;
+            }
+            menu.popup();
+        });
+
+        contents.setWindowOpenHandler(({url}) => {
+            handleExternalUrl(url);
+            return {action: 'deny'};
+        });
+
+        contents.on('will-navigate', (event, url) => {
+            if (isInternalAppUrl(url)) return;
+            event.preventDefault();
+            handleExternalUrl(url);
+        });
+    });
+}
+
+function isInternalAppUrl(url: string): boolean {
+    if (url === 'about:blank' || url === 'about:srcdoc') return true;
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'file:') return true;
+        if (isDev && (parsed.origin === 'http://127.0.0.1:5174' || parsed.origin === 'http://localhost:5174')) {
+            return true;
+        }
+        return false;
+    } catch {
+        return false;
     }
-    updateUnreadIndicators(getCurrentUnreadCount());
-    startAccountAutoSync();
+}
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+function handleExternalUrl(url: string): void {
+    if (!url) return;
+    if (/^mailto:/i.test(url)) {
+        queueMailtoUrl(url);
+        return;
+    }
+    if (/^https?:/i.test(url)) {
+        void shell.openExternal(url);
+    }
+}
+
+function registerMailtoProtocolClient(): void {
+    try {
+        if (process.defaultApp) {
+            if (process.argv.length >= 2) {
+                app.setAsDefaultProtocolClient('mailto', process.execPath, [path.resolve(process.argv[1])]);
+            }
+            return;
+        }
+        app.setAsDefaultProtocolClient('mailto');
+    } catch (error) {
+        console.warn('Failed to register mailto protocol:', error);
+    }
+}
+
+function queueMailtoUrl(url: string): void {
+    if (!/^mailto:/i.test(url)) return;
+    pendingMailtoUrls.push(url);
+    flushPendingMailtoUrls();
+}
+
+function flushPendingMailtoUrls(): void {
+    if (!app.isReady()) return;
+    while (pendingMailtoUrls.length > 0) {
+        const next = pendingMailtoUrls.shift();
+        if (!next) continue;
+        openComposeFromMailto(next);
+    }
+}
+
+function openComposeFromMailto(url: string): void {
+    const draft = parseComposeDraftFromMailto(url);
+    if (!draft) return;
+    void getAccounts().then((accounts) => {
+        if (accounts.length === 0) {
+            openAddAccountWindow(undefined);
+            attachAddAccountWindowCloseBehavior();
+            return;
+        }
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            createWindow();
+        }
+        const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+        openComposeWindow(parent, draft);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show();
+            mainWindow.focus();
+        }
     });
-});
+}
 
-app.on('before-quit', () => {
-    isQuitting = true;
-    stopAccountAutoSync();
-});
+function parseComposeDraftFromMailto(url: string): ComposeDraftPayload | null {
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol.toLowerCase() !== 'mailto:') return null;
+        const toFromPath = splitAddressList(parsed.pathname);
+        const toFromQuery = parsed.searchParams.getAll('to').flatMap(splitAddressList);
+        const to = joinAddressList([...toFromPath, ...toFromQuery]);
+        const cc = joinAddressList(parsed.searchParams.getAll('cc').flatMap(splitAddressList));
+        const bcc = joinAddressList(parsed.searchParams.getAll('bcc').flatMap(splitAddressList));
+        const subject = parsed.searchParams.get('subject')?.trim() || null;
+        const bodyRaw = parsed.searchParams.get('body');
+        const body = bodyRaw === null ? null : bodyRaw.replace(/\r\n/g, '\n');
+        return {
+            to,
+            cc,
+            bcc,
+            subject,
+            body,
+        };
+    } catch {
+        return null;
+    }
+}
 
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-});
+function splitAddressList(value: string): string[] {
+    if (!value) return [];
+    let decoded = value;
+    try {
+        decoded = decodeURIComponent(value);
+    } catch {
+        // keep original value if decoding fails
+    }
+    return decoded
+        .split(/[;,]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function joinAddressList(items: string[]): string | null {
+    if (items.length === 0) return null;
+    return Array.from(new Set(items)).join(', ');
+}
+
+function findMailtoArg(argv: string[]): string | null {
+    for (const arg of argv) {
+        if (/^mailto:/i.test(arg)) return arg;
+    }
+    return null;
+}
+
+function attachAddAccountWindowCloseBehavior(): void {
+    const wizard = getAddAccountWindow();
+    if (!wizard || wizard.isDestroyed()) return;
+    wizard.once('closed', () => {
+        void maybeOpenMainWindowAfterAccountCreated();
+    });
+}
+
+async function maybeOpenMainWindowAfterAccountCreated(): Promise<void> {
+    const accounts = await getAccounts();
+    if (accounts.length === 0) return;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+        return;
+    }
+    createWindow();
+}
+
+function closeMainWindowForNoAccounts(): void {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const win = mainWindow;
+    mainWindow = null;
+    try {
+        win.destroy();
+    } catch {
+        // ignore close failures
+    }
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    app.quit();
+} else {
+    registerProtocolHandlers();
+    installExternalNavigationPolicy();
+
+    app.whenReady().then(async () => {
+        // Initialize database and IPC handlers
+        initDb();
+        await getAppSettings();
+        applyRuntimeSettings();
+        setUnreadCountListener((count) => {
+            updateUnreadIndicators(count);
+        });
+        setAccountCountChangedListener((count) => {
+            if (count > 0) return;
+            closeMainWindowForNoAccounts();
+            openAddAccountWindow(undefined);
+            attachAddAccountWindowCloseBehavior();
+        });
+        setNewMailListener(({newMessages, source, target}) => {
+            if (newMessages <= 0) return;
+            if (source === 'send') return;
+            if (!Notification.isSupported()) return;
+            const title = newMessages === 1 ? 'New email received' : `${newMessages} new emails`;
+            const body = source === 'startup'
+                ? 'Mailbox synced with new unread messages.'
+                : 'You have new unread messages.';
+            try {
+                const notification = new Notification({title, body, silent: false});
+                notification.on('click', () => {
+                    focusMainWindowAndOpenMessage(target);
+                });
+                notification.show();
+                playNotificationSound();
+            } catch {
+                // ignore notification failures
+            }
+        });
+        registerAccountIpc();
+        registerSettingsIpc(() => {
+            applyRuntimeSettings();
+        });
+        registerWindowIpc();
+        registerMailtoProtocolClient();
+        stopDebugForwarding = onDebugLog((entry) => {
+            for (const win of BrowserWindow.getAllWindows()) {
+                win.webContents.send('debug-log', entry);
+            }
+        });
+
+        const accounts = await getAccounts();
+        if (accounts.length === 0) {
+            openAddAccountWindow(undefined);
+            attachAddAccountWindowCloseBehavior();
+        } else {
+            createWindow();
+        }
+        const initialMailtoUrl = findMailtoArg(process.argv);
+        if (initialMailtoUrl) {
+            queueMailtoUrl(initialMailtoUrl);
+        }
+        flushPendingMailtoUrls();
+        updateUnreadIndicators(getCurrentUnreadCount());
+        startAccountAutoSync();
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length > 0) return;
+            void getAccounts().then((rows) => {
+                if (rows.length === 0) {
+                    openAddAccountWindow(undefined);
+                    attachAddAccountWindowCloseBehavior();
+                    return;
+                }
+                createWindow();
+            });
+        });
+    });
+
+    app.on('before-quit', () => {
+        isQuitting = true;
+        if (stopDebugForwarding) {
+            stopDebugForwarding();
+            stopDebugForwarding = null;
+        }
+        stopAccountAutoSync();
+    });
+
+    app.on('window-all-closed', () => {
+        if (process.platform !== 'darwin') app.quit();
+    });
+}

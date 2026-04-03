@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Forward, Paperclip, Reply, ReplyAll} from 'lucide-react';
+import {Forward, Paperclip, Reply, ReplyAll, SquareArrowOutUpRight, Trash2} from 'lucide-react';
 import MainLayout from './layouts/MainLayout';
 import {formatSystemDateTime} from './lib/dateTime';
 import type {
@@ -32,6 +32,7 @@ function App() {
     const [bodyLoading, setBodyLoading] = useState(false);
     const [syncStatusText, setSyncStatusText] = useState<string | null>(null);
     const [syncingAccountIds, setSyncingAccountIds] = useState<Set<number>>(new Set());
+    const [attachmentMenu, setAttachmentMenu] = useState<{ x: number; y: number; index: number } | null>(null);
     const [appSettings, setAppSettings] = useState<AppSettings>({
         language: 'system',
         theme: 'system',
@@ -51,6 +52,7 @@ function App() {
         () => messages.find((m) => m.id === selectedMessageId) ?? null,
         [messages, selectedMessageId],
     );
+    const messageAttachments = selectedMessageBody?.attachments ?? [];
 
     const renderedBodyHtml = useMemo(() => {
         if (!selectedMessageBody) return null;
@@ -81,13 +83,15 @@ function App() {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base target="_blank" />
     <style>
       html, body { width: 100%; margin: 0; }
       body { box-sizing: border-box; }
+      #lunamail-frame-content { box-sizing: border-box; padding: 16px; }
       ${defaultReadableCss}
     </style>
   </head>
-  <body>${rawHtml}</body>
+  <body><div id="lunamail-frame-content">${rawHtml}</div></body>
 </html>`;
     }, [selectedMessageBody, renderedBodyHtml]);
 
@@ -358,6 +362,17 @@ function App() {
     }, [searchQuery]);
 
     useEffect(() => {
+        if (!attachmentMenu) return;
+        const close = () => setAttachmentMenu(null);
+        window.addEventListener('click', close);
+        window.addEventListener('keydown', close);
+        return () => {
+            window.removeEventListener('click', close);
+            window.removeEventListener('keydown', close);
+        };
+    }, [attachmentMenu]);
+
+    useEffect(() => {
         const existing = new Set(accounts.map((a) => a.id));
         setSyncingAccountIds((prev) => {
             let changed = false;
@@ -495,14 +510,10 @@ function App() {
         );
     }
 
-    function applyRemoveOptimistic(messageId: number, folderPath: string | null) {
-        const msg = messages.find((m) => m.id === messageId);
-        if (!msg) return;
-
-        const nextMessages = messages.filter((m) => m.id !== messageId);
-        setMessages(nextMessages);
-        setSelectedMessageIds((prev) => prev.filter((id) => id !== messageId));
-        setSelectedMessageId((prev) => (prev === messageId ? null : prev));
+    function applyRemoveOptimistic(message: MessageItem, folderPath: string | null) {
+        setMessages((prev) => prev.filter((m) => m.id !== message.id));
+        setSelectedMessageIds((prev) => prev.filter((id) => id !== message.id));
+        setSelectedMessageId((prev) => (prev === message.id ? null : prev));
 
         if (!folderPath) return;
         setFolders((prev) =>
@@ -511,7 +522,7 @@ function App() {
                 return {
                     ...f,
                     total_count: Math.max(0, f.total_count - 1),
-                    unread_count: msg.is_read ? f.unread_count : Math.max(0, f.unread_count - 1),
+                    unread_count: message.is_read ? f.unread_count : Math.max(0, f.unread_count - 1),
                 };
             }),
         );
@@ -630,35 +641,27 @@ function App() {
     function confirmAndDeleteMessage(message: MessageItem): void {
         const confirmed = window.confirm(`Delete email "${message.subject || '(No subject)'}"?`);
         if (!confirmed) return;
-        void deleteMessagesBatch([message]);
+        deleteMessagesBatch([message]);
     }
 
-    async function deleteMessagesBatch(targets: MessageItem[]): Promise<void> {
+    function deleteMessagesBatch(targets: MessageItem[]): void {
         if (!selectedAccountId || targets.length === 0) return;
         const ids = Array.from(new Set(targets.map((m) => m.id)));
         const deleting = targets.filter((m) => ids.includes(m.id));
         deleting.forEach((message) => {
             pendingDeleteMessageIdsRef.current.add(message.id);
-            applyRemoveOptimistic(message.id, selectedFolderPath);
+            applyRemoveOptimistic(message, selectedFolderPath);
         });
 
-        setSyncStatusText('Syncing changes to server...');
-        let failed = 0;
+        setSyncStatusText(`Deleted ${deleting.length} locally. Syncing server in background...`);
         for (const message of deleting) {
-            try {
-                await window.electronAPI.deleteMessage(message.id);
-            } catch {
-                failed += 1;
-            } finally {
-                pendingDeleteMessageIdsRef.current.delete(message.id);
-            }
-        }
-
-        await reloadAccountData(selectedAccountId, selectedFolderPath, null);
-        if (failed === 0) {
-            setSyncStatusText('Changes synced');
-        } else {
-            setSyncStatusText(`Deleted ${deleting.length - failed}/${deleting.length}. ${failed} failed.`);
+            void window.electronAPI.deleteMessage(message.id)
+                .catch((error: any) => {
+                    setSyncStatusText(`Delete sync failed: ${error?.message || String(error)}`);
+                })
+                .finally(() => {
+                    pendingDeleteMessageIdsRef.current.delete(message.id);
+                });
         }
     }
 
@@ -702,6 +705,15 @@ function App() {
     function onOpenInNewWindow(): void {
         if (!selectedMessageId) return;
         void window.electronAPI.openMessageWindow(selectedMessageId);
+    }
+
+    function runAttachmentAction(index: number, action: 'open' | 'save') {
+        if (!selectedMessage) return;
+        void window.electronAPI
+            .openMessageAttachment(selectedMessage.id, index, action)
+            .catch((error: any) => {
+                setSyncStatusText(`Attachment failed: ${error?.message || String(error)}`);
+            });
     }
 
     useEffect(() => {
@@ -872,7 +884,7 @@ function App() {
                     if (targets.length === 0) return;
                     const confirmed = window.confirm(`Delete ${targets.length} selected emails?`);
                     if (!confirmed) return;
-                    await deleteMessagesBatch(targets);
+                    deleteMessagesBatch(targets);
                 })()
             }
             onClearMessageSelection={() => {
@@ -964,14 +976,43 @@ function App() {
                 }
             }}
         >
-            <div className="h-full overflow-hidden">
-                {!selectedMessage && (
-                    <div className="flex h-full items-center justify-center text-slate-500 dark:text-slate-400">
-                        Select a message to preview
-                    </div>
-                )}
+            <div className={`h-full overflow-hidden ${selectedMessage ? '' : 'bg-slate-50 dark:bg-[#26292f]'}`}>
                 {selectedMessage && (
                     <article className="flex h-full flex-col">
+                        <div
+                            role="toolbar"
+                            aria-label="Message actions"
+                            className="shrink-0 flex w-full flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2 dark:border-[#3a3d44] dark:bg-[#2b2d31]"
+                        >
+                            <ToolboxButton
+                                label="Reply"
+                                icon={<Reply size={14}/>}
+                                onClick={onReply}
+                                primary
+                            />
+                            <ToolboxButton
+                                label="Reply all"
+                                icon={<ReplyAll size={14}/>}
+                                onClick={onReplyAll}
+                            />
+                            <ToolboxButton
+                                label="Forward"
+                                icon={<Forward size={14}/>}
+                                onClick={onForward}
+                            />
+                            <span className="mx-1 h-6 w-px bg-slate-300 dark:bg-[#3a3d44]"/>
+                            <ToolboxButton
+                                label="Open"
+                                icon={<SquareArrowOutUpRight size={14}/>}
+                                onClick={onOpenInNewWindow}
+                            />
+                            <ToolboxButton
+                                label="Delete"
+                                icon={<Trash2 size={14}/>}
+                                onClick={onDeleteSelected}
+                                danger
+                            />
+                        </div>
                         <div
                             className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-indigo-50/60 px-8 py-6 dark:border-[#393c41] dark:from-[#34373d] dark:via-[#34373d] dark:to-[#3a3550]">
                             <div className="flex items-start justify-between gap-5">
@@ -989,61 +1030,6 @@ function App() {
                                         )}
                                     </div>
                                     <h2 className="truncate text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{selectedMessage.subject || '(No subject)'}</h2>
-                                </div>
-                                <div className="flex shrink-0 flex-col items-end gap-2">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            className="inline-flex h-9 items-center rounded-md bg-sky-600 px-3 text-sm text-white transition-colors hover:bg-sky-700 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
-                                            onClick={onReply}
-                                        >
-                                            <Reply size={14} className="mr-2"/>
-                                            Reply
-                                        </button>
-                                        <button
-                                            className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:bg-[#313338] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
-                                            onClick={onReplyAll}
-                                        >
-                                            <ReplyAll size={14} className="mr-2"/>
-                                            Reply all
-                                        </button>
-                                        <button
-                                            className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:bg-[#313338] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
-                                            onClick={onForward}
-                                        >
-                                            <Forward size={14} className="mr-2"/>
-                                            Forward
-                                        </button>
-                                        <button
-                                            className="inline-flex h-9 items-center rounded-md border border-red-300 bg-white px-3 text-sm text-red-700 transition-colors hover:bg-red-50 dark:border-red-900/60 dark:bg-[#313338] dark:text-red-300 dark:hover:bg-red-900/25"
-                                            onClick={onDeleteSelected}
-                                        >
-                                            Delete
-                                        </button>
-                                        <button
-                                            className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:bg-[#313338] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
-                                            onClick={onOpenInNewWindow}
-                                        >
-                                            Open in window
-                                        </button>
-                                    </div>
-                                    {(selectedMessageBody?.attachments?.length ?? 0) > 0 && (
-                                        <div className="flex max-h-24 flex-col flex-wrap gap-1 overflow-auto">
-                                            {selectedMessageBody!.attachments.map((attachment, index) => (
-                                                <button
-                                                    key={`${attachment.filename || 'attachment'}-${index}`}
-                                                    type="button"
-                                                    className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-[#3a3d44] dark:bg-[#313338] dark:text-slate-200"
-                                                    title={attachment.filename || 'Attachment'}
-                                                >
-                                                    <Paperclip size={12}/>
-                                                    <span className="max-w-[16rem] truncate">
-                            {attachment.filename || 'Attachment'}
-                                                        {typeof attachment.size === 'number' ? ` (${formatBytes(attachment.size)})` : ''}
-                          </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                             <div className="mt-4 grid gap-1.5 text-sm text-slate-700 dark:text-slate-200">
@@ -1110,7 +1096,7 @@ function App() {
                                 <iframe
                                     title={`message-body-${selectedMessage.id}`}
                                     srcDoc={iframeSrcDoc}
-                                    sandbox=""
+                                    sandbox="allow-popups allow-popups-to-escape-sandbox"
                                     className="h-full w-full border-0 bg-white"
                                 />
                             )}
@@ -1122,9 +1108,87 @@ function App() {
                                 </div>
                             )}
                         </div>
+                        {messageAttachments.length > 0 && (
+                            <div
+                                className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                <div className="overflow-x-auto overflow-y-hidden">
+                                    <div className="flex min-w-full w-max gap-2 pb-1">
+                                        {messageAttachments.map((attachment, index) => (
+                                            <button
+                                                key={`${attachment.filename || 'attachment'}-${index}`}
+                                                type="button"
+                                                className="group flex w-[17rem] shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white p-2 text-left text-xs text-slate-700 dark:border-[#3a3d44] dark:bg-[#1f2125] dark:text-slate-200"
+                                                title={attachment.filename || 'Attachment'}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setAttachmentMenu({
+                                                        x: event.clientX,
+                                                        y: event.clientY,
+                                                        index,
+                                                    });
+                                                }}
+                                                onContextMenu={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    setAttachmentMenu({
+                                                        x: event.clientX,
+                                                        y: event.clientY,
+                                                        index,
+                                                    });
+                                                }}
+                                            >
+                                                <span
+                                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-slate-100 text-slate-500 dark:border-[#3a3d44] dark:bg-[#2a2d31] dark:text-slate-300">
+                                                    <Paperclip size={15}/>
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate font-medium">
+                                                        {attachment.filename || 'Attachment'}
+                                                    </span>
+                                                    <span
+                                                        className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                                        {attachment.contentType || 'FILE'}
+                                                        {typeof attachment.size === 'number' ? ` • ${formatBytes(attachment.size)}` : ''}
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </article>
                 )}
             </div>
+            {attachmentMenu && (
+                <div
+                    className="fixed z-[1100] min-w-44 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#313338]"
+                    style={{
+                        left: clampToViewport(attachmentMenu.x, 184, window.innerWidth),
+                        top: clampToViewport(attachmentMenu.y, 108, window.innerHeight)
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <button
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3e52]"
+                        onClick={() => {
+                            runAttachmentAction(attachmentMenu.index, 'open');
+                            setAttachmentMenu(null);
+                        }}
+                    >
+                        Open
+                    </button>
+                    <button
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3e52]"
+                        onClick={() => {
+                            runAttachmentAction(attachmentMenu.index, 'save');
+                            setAttachmentMenu(null);
+                        }}
+                    >
+                        Save As...
+                    </button>
+                </div>
+            )}
         </MainLayout>
     );
 }
@@ -1218,6 +1282,42 @@ function formatBytes(bytes: number): string {
         unitIndex += 1;
     }
     return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function clampToViewport(value: number, size: number, limit: number): number {
+    const margin = 8;
+    return Math.min(Math.max(value, margin), Math.max(margin, limit - size - margin));
+}
+
+function ToolboxButton({
+                           label,
+                           icon,
+                           onClick,
+                           primary = false,
+                           danger = false,
+                       }: {
+    label: string;
+    icon: React.ReactNode;
+    onClick: () => void;
+    primary?: boolean;
+    danger?: boolean;
+}) {
+    const className = primary
+        ? 'bg-sky-600 text-white hover:bg-sky-700 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]'
+        : danger
+            ? 'text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30'
+            : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3d44]';
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${className}`}
+        >
+            {icon}
+            <span>{label}</span>
+        </button>
+    );
 }
 
 function isProtectedFolder(folder: FolderItem): boolean {

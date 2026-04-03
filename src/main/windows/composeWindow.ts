@@ -15,6 +15,7 @@ export interface ComposeDraftPayload {
     accountId?: number | null;
     to?: string | null;
     cc?: string | null;
+    bcc?: string | null;
     subject?: string | null;
     body?: string | null;
     inReplyTo?: string | null;

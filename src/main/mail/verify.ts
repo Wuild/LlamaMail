@@ -2,6 +2,7 @@ import {ImapFlow} from 'imapflow';
 import nodemailer from 'nodemailer';
 import tls from 'tls';
 import net from 'net';
+import {createMailDebugLogger} from '../debug/debugLog.js';
 
 export interface VerifyPayload {
     type: 'imap' | 'pop3' | 'smtp';
@@ -44,7 +45,7 @@ async function verifyImap(p: VerifyPayload): Promise<void> {
         port: p.port,
         secure: p.secure,
         auth: {user: p.user, pass: p.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `verify:${p.host}:${p.port}`),
     });
     try {
         await client.connect();
@@ -64,6 +65,8 @@ async function verifySmtp(p: VerifyPayload): Promise<void> {
         port: p.port,
         secure: p.secure, // true for 465, false for 587/25
         auth: {user: p.user, pass: p.password},
+        logger: createMailDebugLogger('smtp', `verify:${p.host}:${p.port}`),
+        debug: true,
     });
     await transporter.verify();
 }

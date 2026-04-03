@@ -1,5 +1,9 @@
-import {BrowserWindow, ipcMain} from 'electron';
+import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {ImapFlow} from 'imapflow';
+import {createMailDebugLogger} from '../debug/debugLog.js';
 import {
     addAccount,
     type AddAccountPayload,
@@ -13,6 +17,7 @@ import {
     deleteFolderByPath,
     deleteMessageLocally,
     getMessageById,
+    getMessageContext,
     getTotalUnreadCount,
     listFoldersByAccount,
     listMessagesByFolder,
@@ -23,13 +28,13 @@ import {autodiscover, autodiscoverBasic} from '../mail/autodiscover.js';
 import {
     createServerFolder,
     deleteServerFolder,
-    deleteServerMessage,
+    deleteServerMessageByContext,
     moveServerMessage,
     setServerMessageFlagged,
     setServerMessageRead
 } from '../mail/actions.js';
 import {saveDraftEmail, type SaveDraftPayload, sendEmail, type SendEmailPayload} from '../mail/send.js';
-import {syncAccountMailbox, syncMessageBody, type SyncSummary} from '../mail/sync.js';
+import {downloadMessageAttachment, syncAccountMailbox, syncMessageBody, type SyncSummary} from '../mail/sync.js';
 import {verifyConnection, type VerifyPayload} from '../mail/verify.js';
 
 const bodyRequests = new Map<string, { cancel: () => void }>();
@@ -38,6 +43,7 @@ let autoSyncIntervalMs = 2 * 60 * 1000;
 let autoSyncTimer: NodeJS.Timeout | null = null;
 let autoSyncRunning = false;
 let unreadCountListener: ((count: number) => void) | null = null;
+let accountCountChangedListener: ((count: number) => void) | null = null;
 let newMailListener:
     | ((event: {
     accountId: number;
@@ -97,6 +103,7 @@ export function registerAccountIpc(): void {
         for (const win of BrowserWindow.getAllWindows()) {
             win.webContents.send('account-added', created);
         }
+        notifyAccountCountChanged();
         void runSyncAndBroadcast(created.id, 'new-account');
         void ensureIdleWatcher(created.id);
         return created;
@@ -119,6 +126,7 @@ export function registerAccountIpc(): void {
             win.webContents.send('account-deleted', deleted);
         }
         stopIdleWatcher(accountId);
+        notifyAccountCountChanged();
         notifyUnreadCountChanged();
         return deleted;
     });
@@ -243,6 +251,76 @@ export function registerAccountIpc(): void {
         return {ok: true as const};
     });
 
+    ipcMain.handle(
+        'open-message-attachment',
+        async (event, messageId: number, attachmentIndex: number, action?: 'open' | 'save' | 'prompt') => {
+            const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+            const attachment = await downloadMessageAttachment(messageId, attachmentIndex);
+            const safeName = sanitizeAttachmentFilename(attachment.filename);
+            const requestedAction = action ?? 'prompt';
+            if (requestedAction === 'open') {
+                const targetPath = path.join(os.tmpdir(), `lunamail-${Date.now()}-${safeName}`);
+                await fs.writeFile(targetPath, attachment.content);
+                const openError = await shell.openPath(targetPath);
+                if (openError) throw new Error(openError);
+                return {ok: true as const, action: 'opened' as const, path: targetPath};
+            }
+            if (requestedAction === 'save') {
+                const saveDialogOptions = {
+                    title: 'Save attachment',
+                    defaultPath: safeName,
+                    showsTagField: false,
+                };
+                const saveResult = parentWindow
+                    ? await dialog.showSaveDialog(parentWindow, saveDialogOptions)
+                    : await dialog.showSaveDialog(saveDialogOptions);
+                if (saveResult.canceled || !saveResult.filePath) {
+                    return {ok: false as const, action: 'cancelled' as const};
+                }
+                await fs.writeFile(saveResult.filePath, attachment.content);
+                return {ok: true as const, action: 'saved' as const, path: saveResult.filePath};
+            }
+            const dialogOptions = {
+                type: 'question' as const,
+                title: 'Attachment',
+                message: safeName,
+                detail: 'Choose how to continue with this attachment.',
+                buttons: ['Open', 'Save As...', 'Cancel'],
+                defaultId: 0,
+                cancelId: 2,
+            };
+            const openOrSave = parentWindow
+                ? await dialog.showMessageBox(parentWindow, dialogOptions)
+                : await dialog.showMessageBox(dialogOptions);
+
+            if (openOrSave.response === 2) {
+                return {ok: false as const, action: 'cancelled' as const};
+            }
+
+            if (openOrSave.response === 0) {
+                const targetPath = path.join(os.tmpdir(), `lunamail-${Date.now()}-${safeName}`);
+                await fs.writeFile(targetPath, attachment.content);
+                const openError = await shell.openPath(targetPath);
+                if (openError) throw new Error(openError);
+                return {ok: true as const, action: 'opened' as const, path: targetPath};
+            }
+
+            const saveDialogOptions = {
+                title: 'Save attachment',
+                defaultPath: safeName,
+                showsTagField: false,
+            };
+            const saveResult = parentWindow
+                ? await dialog.showSaveDialog(parentWindow, saveDialogOptions)
+                : await dialog.showSaveDialog(saveDialogOptions);
+            if (saveResult.canceled || !saveResult.filePath) {
+                return {ok: false as const, action: 'cancelled' as const};
+            }
+            await fs.writeFile(saveResult.filePath, attachment.content);
+            return {ok: true as const, action: 'saved' as const, path: saveResult.filePath};
+        },
+    );
+
     ipcMain.handle('set-message-read', async (_event, messageId: number, isRead: number) => {
         const result = await setServerMessageRead(messageId, isRead);
         notifyUnreadCountChanged();
@@ -259,10 +337,28 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('delete-message', async (_event, messageId: number) => {
-        await deleteServerMessage(messageId);
+        const ctx = getMessageContext(messageId);
+        if (!ctx) throw new Error(`Message ${messageId} not found`);
         const {accountId} = deleteMessageLocally(messageId);
         notifyUnreadCountChanged();
-        return await runSyncAndBroadcast(accountId, 'delete');
+        void (async () => {
+            try {
+                await deleteServerMessageByContext({
+                    accountId: ctx.accountId,
+                    folderPath: ctx.folderPath,
+                    uid: ctx.uid,
+                });
+            } catch (error) {
+                console.error('Server delete failed, syncing mailbox for reconciliation:', error);
+            } finally {
+                try {
+                    await runSyncAndBroadcast(accountId, 'delete');
+                } catch {
+                    // ignore async sync failures for queued deletes
+                }
+            }
+        })();
+        return {accountId, queued: true as const};
     });
 }
 
@@ -294,6 +390,10 @@ export function setAutoSyncIntervalMinutes(minutes: number): void {
 
 export function setUnreadCountListener(listener: ((count: number) => void) | null): void {
     unreadCountListener = listener;
+}
+
+export function setAccountCountChangedListener(listener: ((count: number) => void) | null): void {
+    accountCountChangedListener = listener;
 }
 
 export function setNewMailListener(
@@ -480,6 +580,22 @@ function notifyUnreadCountChanged(): void {
     unreadCountListener(getTotalUnreadCount());
 }
 
+function notifyAccountCountChanged(): void {
+    if (!accountCountChangedListener) return;
+    void getAccounts().then((accounts) => {
+        accountCountChangedListener?.(accounts.length);
+    }).catch(() => {
+        // ignore listener failures
+    });
+}
+
+function sanitizeAttachmentFilename(filename: string): string {
+    const trimmed = String(filename || '').trim();
+    const normalized = trimmed.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').replace(/\s+/g, ' ');
+    if (!normalized || normalized === '.' || normalized === '..') return 'attachment.bin';
+    return normalized.slice(0, 255);
+}
+
 function restartIdleWatcher(accountId: number): void {
     stopIdleWatcher(accountId);
     ensureIdleWatcher(accountId);
@@ -532,7 +648,7 @@ async function connectIdleWatcher(state: IdleWatcherState): Promise<void> {
             port: account.imap_port,
             secure: !!account.imap_secure,
             auth: {user: account.user, pass: account.password},
-            logger: false,
+            logger: createMailDebugLogger('imap', `idle-probe:${state.accountId}`),
         });
         let mailboxes: any[] = [];
         try {
@@ -604,7 +720,7 @@ async function connectFolderIdleWatcher(state: IdleWatcherState, folder: FolderI
             port: account.imap_port,
             secure: !!account.imap_secure,
             auth: {user: account.user, pass: account.password},
-            logger: false,
+            logger: createMailDebugLogger('imap', `idle:${state.accountId}:${folder.mailboxPath}`),
         });
 
         client.on('exists', () => {

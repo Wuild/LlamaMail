@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchMessages: (accountId, query, folderPath, limit) => ipcRenderer.invoke('search-messages', accountId, query, folderPath ?? null, limit),
   getMessage: (messageId) => ipcRenderer.invoke('get-message', messageId),
   getMessageBody: (messageId, requestId) => ipcRenderer.invoke('get-message-body', messageId, requestId),
+  openMessageAttachment: (messageId, attachmentIndex, action) => ipcRenderer.invoke('open-message-attachment', messageId, attachmentIndex, action ?? 'prompt'),
   cancelMessageBody: (requestId) => ipcRenderer.invoke('cancel-message-body', requestId),
   setMessageRead: (messageId, isRead) => ipcRenderer.invoke('set-message-read', messageId, isRead),
   setMessageFlagged: (messageId, isFlagged) => ipcRenderer.invoke('set-message-flagged', messageId, isFlagged),
@@ -27,7 +28,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openComposeWindow: (draft) => ipcRenderer.invoke('open-compose-window', draft ?? null),
   openAppSettingsWindow: () => ipcRenderer.invoke('open-app-settings-window'),
   openSupportWindow: () => ipcRenderer.invoke('open-support-window'),
+  openDebugWindow: () => ipcRenderer.invoke('open-debug-window'),
   openMessageWindow: (messageId) => ipcRenderer.invoke('open-message-window', messageId ?? null),
+  getDebugLogs: (limit) => ipcRenderer.invoke('get-debug-logs', limit),
+  clearDebugLogs: () => ipcRenderer.invoke('clear-debug-logs'),
   getComposeDraft: () => ipcRenderer.invoke('get-compose-draft'),
   getMessageWindowTarget: () => ipcRenderer.invoke('get-message-window-target'),
   openAccountSettingsWindow: (accountId) => ipcRenderer.invoke('open-account-settings-window', accountId ?? null),
@@ -79,6 +83,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('message-window-target', listener);
     return () => ipcRenderer.removeListener('message-window-target', listener);
+  },
+  onDebugLog: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('debug-log', listener);
+    return () => ipcRenderer.removeListener('debug-log', listener);
   },
   // More to be added as we progress
 });

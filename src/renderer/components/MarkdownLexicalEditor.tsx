@@ -27,6 +27,8 @@ import {
     $createParagraphNode,
     $getRoot,
     $getSelection,
+    $isDecoratorNode,
+    $isElementNode,
     $isRangeSelection,
     FORMAT_TEXT_COMMAND,
     type LexicalEditor,
@@ -106,13 +108,34 @@ function applyHtmlToEditor(editor: LexicalEditor, value: string): void {
         }
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const nodes = $generateNodesFromDOM(editor, doc);
+        const nodes = normalizeImportedNodes($generateNodesFromDOM(editor, doc));
         if (nodes.length === 0) {
             root.append($createParagraphNode());
             return;
         }
         root.append(...nodes);
     });
+}
+
+function normalizeImportedNodes(nodes: Array<any>): Array<any> {
+    const normalized: any[] = [];
+    let paragraphBuffer: any | null = null;
+
+    for (const node of nodes) {
+        if ($isElementNode(node) || $isDecoratorNode(node)) {
+            paragraphBuffer = null;
+            normalized.push(node);
+            continue;
+        }
+
+        if (!paragraphBuffer) {
+            paragraphBuffer = $createParagraphNode();
+            normalized.push(paragraphBuffer);
+        }
+        paragraphBuffer.append(node);
+    }
+
+    return normalized;
 }
 
 function ExternalHtmlSyncPlugin({value}: { value: string }) {

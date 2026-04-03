@@ -1,4 +1,5 @@
 import {ImapFlow} from 'imapflow';
+import {createMailDebugLogger} from '../debug/debugLog.js';
 import {getAccountSyncCredentials} from '../db/repositories/accountsRepo.js';
 import {
     getMessageContext,
@@ -12,6 +13,12 @@ import {
 
 interface ActionResult {
     accountId: number;
+}
+
+interface MessageServerContext {
+    accountId: number;
+    folderPath: string;
+    uid: number;
 }
 
 export interface CreateFolderResult {
@@ -78,7 +85,15 @@ export async function moveServerMessage(messageId: number, targetFolderPath: str
 export async function deleteServerMessage(messageId: number): Promise<ActionResult> {
     const ctx = getMessageContext(messageId);
     if (!ctx) throw new Error(`Message ${messageId} not found`);
+    await deleteServerMessageByContext({
+        accountId: ctx.accountId,
+        folderPath: ctx.folderPath,
+        uid: ctx.uid,
+    });
+    return {accountId: ctx.accountId};
+}
 
+export async function deleteServerMessageByContext(ctx: MessageServerContext): Promise<void> {
     const folders = listFoldersByAccount(ctx.accountId);
     const trash = folders.find((f) => (f.type ?? '').toLowerCase() === 'trash')
         ?? folders.find((f) => /trash|deleted/i.test(f.path));
@@ -90,8 +105,6 @@ export async function deleteServerMessage(messageId: number): Promise<ActionResu
         }
         await (client as any).messageDelete(ctx.uid, {uid: true});
     });
-
-    return {accountId: ctx.accountId};
 }
 
 export async function createServerFolder(accountId: number, folderPath: string): Promise<CreateFolderResult> {
@@ -105,7 +118,7 @@ export async function createServerFolder(accountId: number, folderPath: string):
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `folder:create:${accountId}`),
     });
 
     try {
@@ -136,7 +149,7 @@ export async function deleteServerFolder(accountId: number, folderPath: string):
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `folder:delete:${accountId}`),
     });
 
     try {
@@ -164,7 +177,7 @@ async function withImapLock(
         port: account.imap_port,
         secure: !!account.imap_secure,
         auth: {user: account.user, pass: account.password},
-        logger: false,
+        logger: createMailDebugLogger('imap', `message:action:${accountId}:${folderPath}`),
     });
 
     try {

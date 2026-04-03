@@ -149,6 +149,12 @@ export interface MessageBodyResult {
     cached: boolean;
 }
 
+export interface OpenMessageAttachmentResult {
+    ok: boolean;
+    action: 'opened' | 'saved' | 'cancelled';
+    path?: string;
+}
+
 export interface EmailAttachmentPayload {
     path: string;
     filename?: string | null;
@@ -208,6 +214,7 @@ export interface SendEmailPayload {
     inReplyTo?: string | null;
     references?: string[] | string | null;
     attachments?: EmailAttachmentPayload[] | null;
+    draftSessionId?: string | null;
 }
 
 export interface SendEmailResult {
@@ -226,6 +233,7 @@ export interface SaveDraftPayload {
     inReplyTo?: string | null;
     references?: string[] | string | null;
     attachments?: EmailAttachmentPayload[] | null;
+    draftSessionId?: string | null;
 }
 
 export interface SaveDraftResult {
@@ -236,6 +244,7 @@ export interface ComposeDraftPayload {
     accountId?: number | null;
     to?: string | null;
     cc?: string | null;
+    bcc?: string | null;
     subject?: string | null;
     body?: string | null;
     inReplyTo?: string | null;
@@ -261,6 +270,15 @@ export interface OpenMessageTargetEvent {
     accountId: number;
     folderPath: string;
     messageId: number;
+}
+
+export interface DebugLogEntry {
+    id: number;
+    timestamp: string;
+    source: 'imap' | 'smtp' | 'app';
+    level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+    scope: string;
+    message: string;
 }
 
 export type AppSettingsPatch = Partial<AppSettings>;
@@ -298,6 +316,12 @@ const api = {
         ipcRenderer.invoke('get-message', messageId),
     getMessageBody: (messageId: number, requestId?: string): Promise<MessageBodyResult> =>
         ipcRenderer.invoke('get-message-body', messageId, requestId),
+    openMessageAttachment: (
+        messageId: number,
+        attachmentIndex: number,
+        action?: 'open' | 'save' | 'prompt',
+    ): Promise<OpenMessageAttachmentResult> =>
+        ipcRenderer.invoke('open-message-attachment', messageId, attachmentIndex, action ?? 'prompt'),
     cancelMessageBody: (requestId: string): Promise<{ ok: true }> =>
         ipcRenderer.invoke('cancel-message-body', requestId),
     setMessageRead: (messageId: number, isRead: number): Promise<SetMessageReadResult> =>
@@ -324,8 +348,14 @@ const api = {
         ipcRenderer.invoke('open-app-settings-window'),
     openSupportWindow: (): Promise<{ ok: true }> =>
         ipcRenderer.invoke('open-support-window'),
+    openDebugWindow: (): Promise<{ ok: true }> =>
+        ipcRenderer.invoke('open-debug-window'),
     openMessageWindow: (messageId?: number | null): Promise<{ ok: true }> =>
         ipcRenderer.invoke('open-message-window', messageId ?? null),
+    getDebugLogs: (limit?: number): Promise<DebugLogEntry[]> =>
+        ipcRenderer.invoke('get-debug-logs', limit),
+    clearDebugLogs: (): Promise<{ ok: true }> =>
+        ipcRenderer.invoke('clear-debug-logs'),
     getComposeDraft: (): Promise<ComposeDraftPayload | null> =>
         ipcRenderer.invoke('get-compose-draft'),
     getMessageWindowTarget: (): Promise<number | null> =>
@@ -389,6 +419,11 @@ const api = {
         const listener = (_event: Electron.IpcRendererEvent, payload: number | null) => callback(payload);
         ipcRenderer.on('message-window-target', listener);
         return () => ipcRenderer.removeListener('message-window-target', listener);
+    },
+    onDebugLog: (callback: (payload: DebugLogEntry) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, payload: DebugLogEntry) => callback(payload);
+        ipcRenderer.on('debug-log', listener);
+        return () => ipcRenderer.removeListener('debug-log', listener);
     },
 };
 

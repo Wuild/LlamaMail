@@ -65,3 +65,7 @@ export function openAddAccountWindow(parentWindow?: BrowserWindow): void {
         console.error('Failed to load add-account window:', error);
     });
 }
+
+export function getAddAccountWindow(): BrowserWindow | null {
+    return addAccountWin;
+}
