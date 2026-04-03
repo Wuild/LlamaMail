@@ -21,6 +21,7 @@ import {
     getTotalUnreadCount,
     listFoldersByAccount,
     listMessagesByFolder,
+    reorderCustomFolders,
     searchMessages,
     updateFolderSettings
 } from '../db/repositories/mailRepo.js';
@@ -36,6 +37,18 @@ import {
 import {saveDraftEmail, type SaveDraftPayload, sendEmail, type SendEmailPayload} from '../mail/send.js';
 import {downloadMessageAttachment, syncAccountMailbox, syncMessageBody, type SyncSummary} from '../mail/sync.js';
 import {verifyConnection, type VerifyPayload} from '../mail/verify.js';
+import {
+    addAddressBook,
+    addContact,
+    type DavSyncSummary,
+    discoverDav,
+    editContact,
+    getAddressBooks,
+    getCalendarEvents,
+    getContacts,
+    removeContact,
+    syncDav
+} from '../dav/sync.js';
 
 const bodyRequests = new Map<string, { cancel: () => void }>();
 const SYNC_DEBOUNCE_MS = 350;
@@ -66,7 +79,11 @@ type AccountSyncState = {
     timer: NodeJS.Timeout | null;
     runner: Promise<void> | null;
     cancelCurrent: (() => void) | null;
-    pending: Deferred<SyncSummary> | null;
+    pending: Deferred<AccountSyncSummary> | null;
+};
+
+export type AccountSyncSummary = SyncSummary & {
+    dav?: DavSyncSummary;
 };
 
 const accountSyncState = new Map<number, AccountSyncState>();
@@ -94,6 +111,10 @@ export function registerAccountIpc(): void {
     // Get all accounts (without passwords)
     ipcMain.handle('get-accounts', async () => {
         return await getAccounts();
+    });
+
+    ipcMain.handle('get-unread-count', async () => {
+        return getTotalUnreadCount();
     });
 
     // Add account: persist metadata in DB, secret in keytar (via repo)
@@ -194,6 +215,10 @@ export function registerAccountIpc(): void {
         },
     );
 
+    ipcMain.handle('reorder-custom-folders', async (_event, accountId: number, orderedFolderPaths: string[]) => {
+        return reorderCustomFolders(accountId, Array.isArray(orderedFolderPaths) ? orderedFolderPaths : []);
+    });
+
     ipcMain.handle('get-folder-messages', async (_event, accountId: number, folderPath: string, limit?: number) => {
         return listMessagesByFolder(accountId, folderPath, limit ?? 100);
     });
@@ -206,6 +231,59 @@ export function registerAccountIpc(): void {
         'search-messages',
         async (_event, accountId: number, query: string, folderPath?: string | null, limit?: number) => {
             return searchMessages(accountId, query, folderPath ?? null, limit ?? 200);
+        },
+    );
+
+    ipcMain.handle('discover-dav', async (_event, accountId: number) => {
+        return discoverDav(accountId);
+    });
+
+    ipcMain.handle('sync-dav', async (_event, accountId: number) => {
+        return syncDav(accountId);
+    });
+
+    ipcMain.handle('get-contacts', async (_event, accountId: number, query?: string | null, limit?: number, addressBookId?: number | null) => {
+        return getContacts(accountId, query ?? null, limit ?? 200, addressBookId ?? null);
+    });
+
+    ipcMain.handle('get-address-books', async (_event, accountId: number) => {
+        return getAddressBooks(accountId);
+    });
+
+    ipcMain.handle('add-address-book', async (_event, accountId: number, name: string) => {
+        return addAddressBook(accountId, name);
+    });
+
+    ipcMain.handle(
+        'add-contact',
+        async (_event, accountId: number, payload: {
+            addressBookId?: number | null;
+            fullName?: string | null;
+            email: string
+        }) => {
+            return addContact(accountId, payload);
+        },
+    );
+
+    ipcMain.handle(
+        'update-contact',
+        async (_event, contactId: number, payload: {
+            addressBookId?: number | null;
+            fullName?: string | null;
+            email?: string
+        }) => {
+            return editContact(contactId, payload);
+        },
+    );
+
+    ipcMain.handle('delete-contact', async (_event, contactId: number) => {
+        return removeContact(contactId);
+    });
+
+    ipcMain.handle(
+        'get-calendar-events',
+        async (_event, accountId: number, startIso?: string | null, endIso?: string | null, limit?: number) => {
+            return getCalendarEvents(accountId, startIso ?? null, endIso ?? null, limit ?? 500);
         },
     );
 
@@ -432,7 +510,7 @@ async function runAutoSyncCycle(source: 'startup' | 'interval'): Promise<void> {
     }
 }
 
-async function runSyncAndBroadcast(accountId: number, source: string): Promise<SyncSummary> {
+async function runSyncAndBroadcast(accountId: number, source: string): Promise<AccountSyncSummary> {
     const blockedReason = blockedSyncAccounts.get(accountId);
     if (blockedReason) {
         const error = `Sync paused for this account: ${blockedReason}. Update account settings or restart app.`;
@@ -443,7 +521,7 @@ async function runSyncAndBroadcast(accountId: number, source: string): Promise<S
     const state = getAccountSyncState(accountId);
     state.latestSource = source;
     if (!state.pending) {
-        state.pending = createDeferred<SyncSummary>();
+        state.pending = createDeferred<AccountSyncSummary>();
     }
 
     if (state.inFlight) {
@@ -492,7 +570,7 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
         broadcastSync({accountId, status: 'syncing', source});
 
         try {
-            const summary = await syncAccountMailbox(accountId, {
+            const mailSummary = await syncAccountMailbox(accountId, {
                 isCancelled: () => cancelled,
                 onClient: (client) => {
                     clientRef = client;
@@ -500,13 +578,27 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
             });
             if (cancelled && state.queued) continue;
 
+            let davSummary: DavSyncSummary | undefined;
+            try {
+                davSummary = await syncDav(accountId);
+            } catch (davError: any) {
+                console.warn(
+                    `DAV sync skipped for account ${accountId}:`,
+                    davError?.message || String(davError),
+                );
+            }
+            const summary: AccountSyncSummary = {
+                ...mailSummary,
+                ...(davSummary ? {dav: davSummary} : {}),
+            };
+
             notifyUnreadCountChanged();
-            if (summary.newMessages > 0 && newMailListener) {
+            if (mailSummary.newMessages > 0 && newMailListener) {
                 newMailListener({
                     accountId,
-                    newMessages: summary.newMessages,
+                    newMessages: mailSummary.newMessages,
                     source,
-                    target: summary.newestMessageTarget,
+                    target: mailSummary.newestMessageTarget,
                 });
             }
             broadcastSync({accountId, status: 'done', summary, source});
@@ -576,8 +668,12 @@ function broadcastSync(payload: any) {
 }
 
 function notifyUnreadCountChanged(): void {
+    const count = getTotalUnreadCount();
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('unread-count-updated', count);
+    }
     if (!unreadCountListener) return;
-    unreadCountListener(getTotalUnreadCount());
+    unreadCountListener(count);
 }
 
 function notifyAccountCountChanged(): void {

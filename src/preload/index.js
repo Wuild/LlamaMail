@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addAccount: (account) => ipcRenderer.invoke('add-account', account),
   updateAccount: (accountId, payload) => ipcRenderer.invoke('update-account', accountId, payload),
   deleteAccount: (accountId) => ipcRenderer.invoke('delete-account', accountId),
+  getUnreadCount: () => ipcRenderer.invoke('get-unread-count'),
   discoverMailSettings: (email) => ipcRenderer.invoke('discover-mail-settings', email),
   verifyCredentials: (payload) => ipcRenderer.invoke('verify-credentials', payload),
   syncAccount: (accountId) => ipcRenderer.invoke('sync-account', accountId),
@@ -12,6 +13,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createFolder: (accountId, folderPath) => ipcRenderer.invoke('create-folder', accountId, folderPath),
   deleteFolder: (accountId, folderPath) => ipcRenderer.invoke('delete-folder', accountId, folderPath),
   updateFolderSettings: (accountId, folderPath, payload) => ipcRenderer.invoke('update-folder-settings', accountId, folderPath, payload),
+  reorderCustomFolders: (accountId, orderedFolderPaths) => ipcRenderer.invoke('reorder-custom-folders', accountId, orderedFolderPaths),
+  discoverDav: (accountId) => ipcRenderer.invoke('discover-dav', accountId),
+  syncDav: (accountId) => ipcRenderer.invoke('sync-dav', accountId),
+  getContacts: (accountId, query, limit, addressBookId) => ipcRenderer.invoke('get-contacts', accountId, query ?? null, limit, addressBookId ?? null),
+  getAddressBooks: (accountId) => ipcRenderer.invoke('get-address-books', accountId),
+  addAddressBook: (accountId, name) => ipcRenderer.invoke('add-address-book', accountId, name),
+  addContact: (accountId, payload) => ipcRenderer.invoke('add-contact', accountId, payload),
+  updateContact: (contactId, payload) => ipcRenderer.invoke('update-contact', contactId, payload),
+  deleteContact: (contactId) => ipcRenderer.invoke('delete-contact', contactId),
+  getCalendarEvents: (accountId, startIso, endIso, limit) => ipcRenderer.invoke('get-calendar-events', accountId, startIso ?? null, endIso ?? null, limit),
   getFolderMessages: (accountId, folderPath, limit) => ipcRenderer.invoke('get-folder-messages', accountId, folderPath, limit),
   searchMessages: (accountId, query, folderPath, limit) => ipcRenderer.invoke('search-messages', accountId, query, folderPath ?? null, limit),
   getMessage: (messageId) => ipcRenderer.invoke('get-message', messageId),
@@ -58,6 +69,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('account-deleted', listener);
     return () => ipcRenderer.removeListener('account-deleted', listener);
+  },
+  onUnreadCountUpdated: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('unread-count-updated', listener);
+    return () => ipcRenderer.removeListener('unread-count-updated', listener);
   },
   onAccountSyncStatus: (callback) => {
     const listener = (_event, payload) => callback(payload);

@@ -100,6 +100,8 @@ export function initDb(): void {
             TEXT,
             color
             TEXT,
+            sort_order
+            INTEGER,
             path
             TEXT
             NOT
@@ -273,6 +275,197 @@ export function initDb(): void {
             id
         ) ON DELETE CASCADE
             );
+
+        CREATE TABLE IF NOT EXISTS account_dav_settings
+        (
+            account_id
+            INTEGER
+            PRIMARY
+            KEY,
+            carddav_url
+            TEXT,
+            caldav_url
+            TEXT,
+            updated_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            FOREIGN
+            KEY
+        (
+            account_id
+        ) REFERENCES accounts
+        (
+            id
+        ) ON DELETE CASCADE
+            );
+
+        CREATE TABLE IF NOT EXISTS contacts
+        (
+            id
+            INTEGER
+            PRIMARY
+            KEY
+            AUTOINCREMENT,
+            account_id
+            INTEGER
+            NOT
+            NULL,
+            address_book_id
+            INTEGER,
+            source
+            TEXT
+            NOT
+            NULL
+            DEFAULT
+            'carddav',
+            source_uid
+            TEXT
+            NOT
+            NULL,
+            full_name
+            TEXT,
+            email
+            TEXT
+            NOT
+            NULL,
+            etag
+            TEXT,
+            last_seen_sync
+            TEXT
+            NOT
+            NULL,
+            created_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            updated_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            FOREIGN
+            KEY
+        (
+            account_id
+        ) REFERENCES accounts
+        (
+            id
+        ) ON DELETE CASCADE,
+            UNIQUE
+        (
+            account_id,
+            source,
+            source_uid,
+            email
+        )
+            );
+
+        CREATE TABLE IF NOT EXISTS address_books
+        (
+            id
+            INTEGER
+            PRIMARY
+            KEY
+            AUTOINCREMENT,
+            account_id
+            INTEGER
+            NOT
+            NULL,
+            name
+            TEXT
+            NOT
+            NULL,
+            source
+            TEXT
+            NOT
+            NULL
+            DEFAULT
+            'local',
+            remote_url
+            TEXT,
+            created_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            updated_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            UNIQUE
+        (
+            account_id,
+            source,
+            name
+        )
+            );
+
+        CREATE TABLE IF NOT EXISTS calendar_events
+        (
+            id
+            INTEGER
+            PRIMARY
+            KEY
+            AUTOINCREMENT,
+            account_id
+            INTEGER
+            NOT
+            NULL,
+            source
+            TEXT
+            NOT
+            NULL
+            DEFAULT
+            'caldav',
+            calendar_url
+            TEXT
+            NOT
+            NULL,
+            uid
+            TEXT
+            NOT
+            NULL,
+            summary
+            TEXT,
+            description
+            TEXT,
+            location
+            TEXT,
+            starts_at
+            TEXT,
+            ends_at
+            TEXT,
+            etag
+            TEXT,
+            raw_ics
+            TEXT,
+            last_seen_sync
+            TEXT
+            NOT
+            NULL,
+            created_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            updated_at
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
+            FOREIGN
+            KEY
+        (
+            account_id
+        ) REFERENCES accounts
+        (
+            id
+        ) ON DELETE CASCADE,
+            UNIQUE
+        (
+            account_id,
+            source,
+            calendar_url,
+            uid
+        )
+            );
     `);
 
     // Ensure POP3 columns exist for older DBs created before POP3 support
@@ -317,5 +510,14 @@ export function initDb(): void {
     }
     if (!folderNames.has('color')) {
         db.exec("ALTER TABLE folders ADD COLUMN color TEXT");
+    }
+    if (!folderNames.has('sort_order')) {
+        db.exec("ALTER TABLE folders ADD COLUMN sort_order INTEGER");
+    }
+
+    const contactCols = db.prepare("PRAGMA table_info('contacts')").all() as { name: string }[];
+    const contactNames = new Set(contactCols.map((c) => c.name));
+    if (!contactNames.has('address_book_id')) {
+        db.exec("ALTER TABLE contacts ADD COLUMN address_book_id INTEGER");
     }
 }

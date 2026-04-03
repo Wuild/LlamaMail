@@ -6,6 +6,7 @@ export interface FolderRow {
     name: string;
     custom_name: string | null;
     color: string | null;
+    sort_order: number | null;
     path: string;
     type: string | null;
     unread_count: number;
@@ -277,10 +278,64 @@ export function listFoldersByAccount(accountId: number): FolderRow[] {
                          WHEN lower(type) = 'trash' OR lower(path) LIKE '%trash%' OR lower(path) LIKE '%deleted%' THEN 5
                          ELSE 100
                          END ASC,
+                     CASE
+                         WHEN (lower(path) = 'inbox' OR lower(type) = 'inbox'
+                             OR lower(type) = 'sent' OR lower(path) LIKE '%sent%'
+                             OR lower(type) = 'drafts' OR lower(path) LIKE '%draft%'
+                             OR lower(type) = 'archive' OR lower(path) LIKE '%archive%'
+                             OR lower(type) = 'junk' OR lower(path) LIKE '%spam%' OR lower(path) LIKE '%junk%'
+                             OR lower(type) = 'trash' OR lower(path) LIKE '%trash%' OR lower(path) LIKE '%deleted%')
+                             THEN 0
+                         ELSE COALESCE(sort_order, 9999)
+                         END ASC,
                      lower(name) ASC,
                      lower(path) ASC
         `,
     ).all(accountId) as FolderRow[];
+}
+
+export function reorderCustomFolders(accountId: number, orderedFolderPaths: string[]): FolderRow[] {
+    const db = getDb();
+    const rows = db.prepare(
+        `
+            SELECT id, path, type
+            FROM folders
+            WHERE account_id = ?
+        `,
+    ).all(accountId) as Array<{ id: number; path: string; type: string | null }>;
+
+    const customRows = rows.filter((row) => !isSystemFolder(row.path, row.type));
+    if (customRows.length <= 1) return listFoldersByAccount(accountId);
+
+    const customPathSet = new Set(customRows.map((r) => r.path));
+    const requested = orderedFolderPaths.filter((path) => customPathSet.has(path));
+    const requestedSet = new Set(requested);
+    const missing = customRows
+        .map((r) => r.path)
+        .filter((path) => !requestedSet.has(path));
+    const mergedOrder = [...requested, ...missing];
+
+    const tx = db.transaction((paths: string[]) => {
+        const stmt = db.prepare('UPDATE folders SET sort_order = ? WHERE account_id = ? AND path = ?');
+        paths.forEach((path, index) => {
+            stmt.run(index, accountId, path);
+        });
+    });
+    tx(mergedOrder);
+
+    return listFoldersByAccount(accountId);
+}
+
+function isSystemFolder(pathRaw: string | null | undefined, typeRaw: string | null | undefined): boolean {
+    const path = (pathRaw || '').toLowerCase();
+    const type = (typeRaw || '').toLowerCase();
+    if (type === 'inbox' || path === 'inbox') return true;
+    if (type === 'sent' || path.includes('sent')) return true;
+    if (type === 'drafts' || path.includes('draft')) return true;
+    if (type === 'archive' || path.includes('archive')) return true;
+    if (type === 'junk' || path.includes('spam') || path.includes('junk')) return true;
+    if (type === 'trash' || path.includes('trash') || path.includes('deleted')) return true;
+    return false;
 }
 
 export function listMessagesByFolder(accountId: number, folderPath: string, limit: number = 100): MessageRow[] {

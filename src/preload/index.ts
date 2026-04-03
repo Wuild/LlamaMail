@@ -103,6 +103,7 @@ export interface FolderItem {
     name: string;
     custom_name: string | null;
     color: string | null;
+    sort_order?: number | null;
     path: string;
     type: string | null;
     unread_count: number;
@@ -134,7 +135,7 @@ export interface SyncStatusEvent {
     accountId: number;
     status: 'syncing' | 'done' | 'error';
     error?: string;
-    summary?: { accountId: number; folders: number; messages: number; newMessages?: number };
+    summary?: AccountSyncSummary;
 }
 
 export interface MessageBodyResult {
@@ -147,6 +148,69 @@ export interface MessageBodyResult {
         size: number | null;
     }>;
     cached: boolean;
+}
+
+export interface DavDiscoveryResult {
+    accountId: number;
+    carddavUrl: string | null;
+    caldavUrl: string | null;
+}
+
+export interface DavSyncSummary {
+    accountId: number;
+    discovered: DavDiscoveryResult;
+    contacts: { upserted: number; removed: number; books: number };
+    events: { upserted: number; removed: number; calendars: number };
+}
+
+export interface AccountSyncSummary {
+    accountId: number;
+    folders: number;
+    messages: number;
+    newMessages?: number;
+    dav?: DavSyncSummary;
+}
+
+export interface ContactItem {
+    id: number;
+    account_id: number;
+    address_book_id: number | null;
+    source: string;
+    source_uid: string;
+    full_name: string | null;
+    email: string;
+    etag: string | null;
+    last_seen_sync: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AddressBookItem {
+    id: number;
+    account_id: number;
+    name: string;
+    source: string;
+    remote_url: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CalendarEventItem {
+    id: number;
+    account_id: number;
+    source: string;
+    calendar_url: string;
+    uid: string;
+    summary: string | null;
+    description: string | null;
+    location: string | null;
+    starts_at: string | null;
+    ends_at: string | null;
+    etag: string | null;
+    raw_ics: string | null;
+    last_seen_sync: string;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface OpenMessageAttachmentResult {
@@ -313,11 +377,13 @@ const api = {
         ipcRenderer.invoke('update-account', accountId, payload),
     deleteAccount: (accountId: number): Promise<AccountDeletedEvent> =>
         ipcRenderer.invoke('delete-account', accountId),
+    getUnreadCount: (): Promise<number> =>
+        ipcRenderer.invoke('get-unread-count'),
     discoverMailSettings: (email: string): Promise<DiscoverResult> =>
         ipcRenderer.invoke('discover-mail-settings', email),
     verifyCredentials: (payload: VerifyPayload): Promise<VerifyResult> =>
         ipcRenderer.invoke('verify-credentials', payload),
-    syncAccount: (accountId: number): Promise<{ accountId: number; folders: number; messages: number }> =>
+    syncAccount: (accountId: number): Promise<AccountSyncSummary> =>
         ipcRenderer.invoke('sync-account', accountId),
     getFolders: (accountId: number): Promise<FolderItem[]> =>
         ipcRenderer.invoke('get-folders', accountId),
@@ -330,6 +396,37 @@ const api = {
         folderPath: string,
         payload: { customName?: string | null; color?: string | null; type?: string | null },
     ): Promise<FolderItem> => ipcRenderer.invoke('update-folder-settings', accountId, folderPath, payload),
+    reorderCustomFolders: (accountId: number, orderedFolderPaths: string[]): Promise<FolderItem[]> =>
+        ipcRenderer.invoke('reorder-custom-folders', accountId, orderedFolderPaths),
+    discoverDav: (accountId: number): Promise<DavDiscoveryResult> =>
+        ipcRenderer.invoke('discover-dav', accountId),
+    syncDav: (accountId: number): Promise<DavSyncSummary> =>
+        ipcRenderer.invoke('sync-dav', accountId),
+    getContacts: (accountId: number, query?: string | null, limit?: number, addressBookId?: number | null): Promise<ContactItem[]> =>
+        ipcRenderer.invoke('get-contacts', accountId, query ?? null, limit, addressBookId ?? null),
+    getAddressBooks: (accountId: number): Promise<AddressBookItem[]> =>
+        ipcRenderer.invoke('get-address-books', accountId),
+    addAddressBook: (accountId: number, name: string): Promise<AddressBookItem> =>
+        ipcRenderer.invoke('add-address-book', accountId, name),
+    addContact: (accountId: number, payload: {
+        addressBookId?: number | null;
+        fullName?: string | null;
+        email: string;
+    }): Promise<ContactItem> => ipcRenderer.invoke('add-contact', accountId, payload),
+    updateContact: (contactId: number, payload: {
+        addressBookId?: number | null;
+        fullName?: string | null;
+        email?: string;
+    }): Promise<ContactItem> => ipcRenderer.invoke('update-contact', contactId, payload),
+    deleteContact: (contactId: number): Promise<{ removed: boolean }> =>
+        ipcRenderer.invoke('delete-contact', contactId),
+    getCalendarEvents: (
+        accountId: number,
+        startIso?: string | null,
+        endIso?: string | null,
+        limit?: number,
+    ): Promise<CalendarEventItem[]> =>
+        ipcRenderer.invoke('get-calendar-events', accountId, startIso ?? null, endIso ?? null, limit),
     getFolderMessages: (accountId: number, folderPath: string, limit?: number): Promise<MessageItem[]> =>
         ipcRenderer.invoke('get-folder-messages', accountId, folderPath, limit),
     searchMessages: (accountId: number, query: string, folderPath?: string | null, limit?: number): Promise<MessageItem[]> =>
@@ -419,6 +516,11 @@ const api = {
         const listener = (_event: Electron.IpcRendererEvent, payload: AccountDeletedEvent) => callback(payload);
         ipcRenderer.on('account-deleted', listener);
         return () => ipcRenderer.removeListener('account-deleted', listener);
+    },
+    onUnreadCountUpdated: (callback: (payload: number) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, payload: number) => callback(payload);
+        ipcRenderer.on('unread-count-updated', listener);
+        return () => ipcRenderer.removeListener('unread-count-updated', listener);
     },
     onAccountSyncStatus: (callback: (payload: SyncStatusEvent) => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent, payload: SyncStatusEvent) => callback(payload);

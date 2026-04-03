@@ -30,6 +30,7 @@ export const folders = sqliteTable('folders', {
     name: text('name').notNull(),
     customName: text('custom_name'),
     color: text('color'),
+    sortOrder: integer('sort_order'),
     path: text('path').notNull(),
     type: text('type'),
     unreadCount: integer('unread_count').default(0).notNull(),
@@ -75,6 +76,55 @@ export const attachments = sqliteTable('attachments', {
     contentType: text('content_type'),
     size: integer('size'),
     content: text('content'),
+});
+
+export const accountDavSettings = sqliteTable('account_dav_settings', {
+    accountId: integer('account_id').primaryKey(),
+    carddavUrl: text('carddav_url'),
+    caldavUrl: text('caldav_url'),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP').notNull(),
+});
+
+export const contacts = sqliteTable('contacts', {
+    id: integer('id').primaryKey({autoIncrement: true}),
+    accountId: integer('account_id').notNull(),
+    addressBookId: integer('address_book_id'),
+    source: text('source').notNull(),
+    sourceUid: text('source_uid').notNull(),
+    fullName: text('full_name'),
+    email: text('email').notNull(),
+    etag: text('etag'),
+    lastSeenSync: text('last_seen_sync').notNull(),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP').notNull(),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP').notNull(),
+});
+
+export const addressBooks = sqliteTable('address_books', {
+    id: integer('id').primaryKey({autoIncrement: true}),
+    accountId: integer('account_id').notNull(),
+    name: text('name').notNull(),
+    source: text('source').notNull().default('local'),
+    remoteUrl: text('remote_url'),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP').notNull(),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP').notNull(),
+});
+
+export const calendarEvents = sqliteTable('calendar_events', {
+    id: integer('id').primaryKey({autoIncrement: true}),
+    accountId: integer('account_id').notNull(),
+    source: text('source').notNull(),
+    calendarUrl: text('calendar_url').notNull(),
+    uid: text('uid').notNull(),
+    summary: text('summary'),
+    description: text('description'),
+    location: text('location'),
+    startsAt: text('starts_at'),
+    endsAt: text('ends_at'),
+    etag: text('etag'),
+    rawIcs: text('raw_ics'),
+    lastSeenSync: text('last_seen_sync').notNull(),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP').notNull(),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP').notNull(),
 });
 
 export type AccountRow = typeof accounts.$inferSelect;

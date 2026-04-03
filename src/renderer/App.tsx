@@ -4,6 +4,8 @@ import MainLayout from './layouts/MainLayout';
 import {formatSystemDateTime} from './lib/dateTime';
 import type {
     AppSettings,
+    CalendarEventItem,
+    ContactItem,
     FolderItem,
     MessageBodyResult,
     MessageItem,
@@ -12,6 +14,7 @@ import type {
 } from '../preload/index';
 
 const MESSAGE_PAGE_SIZE = 100;
+type Workspace = 'mail' | 'calendar' | 'contacts';
 
 function App() {
     const [accounts, setAccounts] = useState<PublicAccount[]>([]);
@@ -20,6 +23,8 @@ function App() {
     const [accountFoldersById, setAccountFoldersById] = useState<Record<number, FolderItem[]>>({});
     const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<MessageItem[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
     const [messages, setMessages] = useState<MessageItem[]>([]);
     const [messageFetchLimit, setMessageFetchLimit] = useState<number>(MESSAGE_PAGE_SIZE);
     const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
@@ -45,8 +50,13 @@ function App() {
     const selectedMessageIdRef = useRef<number | null>(null);
     const pendingDeleteMessageIdsRef = useRef<Set<number>>(new Set());
     const selectionAnchorIndexRef = useRef<number | null>(null);
-    const searchQueryRef = useRef('');
     const [systemLocale, setSystemLocale] = useState<string>('en-US');
+    const [workspace, setWorkspace] = useState<Workspace>('mail');
+    const [contacts, setContacts] = useState<ContactItem[]>([]);
+    const [contactsQuery, setContactsQuery] = useState('');
+    const [contactsLoading, setContactsLoading] = useState(false);
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
+    const [calendarLoading, setCalendarLoading] = useState(false);
 
     const selectedMessage = useMemo(
         () => messages.find((m) => m.id === selectedMessageId) ?? null,
@@ -265,12 +275,9 @@ function App() {
         }
 
         const loadMessages = async () => {
-            const query = searchQuery.trim();
             setLoadingMoreMessages(true);
             try {
-                const rowsRaw = query
-                    ? await window.electronAPI.searchMessages(selectedAccountId, query, selectedFolderPath, messageFetchLimit)
-                    : await window.electronAPI.getFolderMessages(selectedAccountId, selectedFolderPath, messageFetchLimit);
+                const rowsRaw = await window.electronAPI.getFolderMessages(selectedAccountId, selectedFolderPath, messageFetchLimit);
                 setHasMoreMessages(rowsRaw.length >= messageFetchLimit);
                 setMessages(filterOutPendingDeletes(rowsRaw));
             } finally {
@@ -278,12 +285,108 @@ function App() {
             }
         };
         void loadMessages();
-    }, [selectedAccountId, selectedFolderPath, searchQuery, messageFetchLimit]);
+    }, [selectedAccountId, selectedFolderPath, messageFetchLimit]);
+
+    useEffect(() => {
+        const query = searchQuery.trim();
+        if (query.length === 0) {
+            setSearchResults([]);
+            setSearchLoading(false);
+            return;
+        }
+        if (accounts.length === 0) {
+            setSearchResults([]);
+            setSearchLoading(false);
+            return;
+        }
+
+        let active = true;
+        const run = async () => {
+            setSearchLoading(true);
+            try {
+                const perAccountLimit = 120;
+                const rowsByAccount = await Promise.all(
+                    accounts.map((account) => window.electronAPI.searchMessages(account.id, query, null, perAccountLimit)),
+                );
+                if (!active) return;
+                const merged = rowsByAccount
+                    .flat()
+                    .sort((a, b) => {
+                        const aTime = a.date ? Date.parse(a.date) : 0;
+                        const bTime = b.date ? Date.parse(b.date) : 0;
+                        return bTime - aTime;
+                    });
+                setSearchResults(merged);
+            } finally {
+                if (active) setSearchLoading(false);
+            }
+        };
+        void run();
+        return () => {
+            active = false;
+        };
+    }, [searchQuery, accounts]);
+
+    useEffect(() => {
+        if (workspace !== 'contacts' || !selectedAccountId) {
+            setContacts([]);
+            setContactsLoading(false);
+            return;
+        }
+        let active = true;
+        const run = async () => {
+            setContactsLoading(true);
+            try {
+                const rows = await window.electronAPI.getContacts(selectedAccountId, contactsQuery.trim() || null, 500);
+                if (!active) return;
+                setContacts(rows);
+            } finally {
+                if (active) setContactsLoading(false);
+            }
+        };
+        void run();
+        return () => {
+            active = false;
+        };
+    }, [workspace, selectedAccountId, contactsQuery]);
+
+    useEffect(() => {
+        if (workspace !== 'calendar' || !selectedAccountId) {
+            setCalendarEvents([]);
+            setCalendarLoading(false);
+            return;
+        }
+        let active = true;
+        const run = async () => {
+            setCalendarLoading(true);
+            try {
+                const now = new Date();
+                const start = new Date(now);
+                start.setDate(start.getDate() - 30);
+                const end = new Date(now);
+                end.setDate(end.getDate() + 365);
+                const rows = await window.electronAPI.getCalendarEvents(
+                    selectedAccountId,
+                    start.toISOString(),
+                    end.toISOString(),
+                    1000,
+                );
+                if (!active) return;
+                setCalendarEvents(rows);
+            } finally {
+                if (active) setCalendarLoading(false);
+            }
+        };
+        void run();
+        return () => {
+            active = false;
+        };
+    }, [workspace, selectedAccountId]);
 
     useEffect(() => {
         setMessageFetchLimit(MESSAGE_PAGE_SIZE);
         setHasMoreMessages(false);
-    }, [selectedAccountId, selectedFolderPath, searchQuery]);
+    }, [selectedAccountId, selectedFolderPath]);
 
     useEffect(() => {
         if (!selectedMessageId) {
@@ -358,10 +461,6 @@ function App() {
     }, [messages]);
 
     useEffect(() => {
-        searchQueryRef.current = searchQuery;
-    }, [searchQuery]);
-
-    useEffect(() => {
         if (!attachmentMenu) return;
         const close = () => setAttachmentMenu(null);
         window.addEventListener('click', close);
@@ -399,7 +498,16 @@ function App() {
         if (!selectedAccountId) return;
         setSyncStatusText('Syncing mailbox...');
         try {
-            await window.electronAPI.syncAccount(selectedAccountId);
+            const summary = await window.electronAPI.syncAccount(selectedAccountId);
+            if (summary.dav) {
+                const contacts = summary.dav.contacts.upserted;
+                const events = summary.dav.events.upserted;
+                if (contacts > 0 || events > 0) {
+                    setSyncStatusText(`Synced mailbox + DAV (${contacts} contacts, ${events} events)`);
+                    return;
+                }
+            }
+            setSyncStatusText(`Synced ${summary.messages ?? 0} messages`);
         } catch (e: any) {
             setSyncStatusText(`Sync failed: ${e?.message || String(e)}`);
         }
@@ -430,10 +538,7 @@ function App() {
             return;
         }
 
-        const activeQuery = searchQueryRef.current.trim();
-        const msgRowsRaw = activeQuery
-            ? await window.electronAPI.searchMessages(accountId, activeQuery, chosenFolder, messageFetchLimit)
-            : await window.electronAPI.getFolderMessages(accountId, chosenFolder, messageFetchLimit);
+        const msgRowsRaw = await window.electronAPI.getFolderMessages(accountId, chosenFolder, messageFetchLimit);
         const msgRows = filterOutPendingDeletes(msgRowsRaw);
         setHasMoreMessages(msgRowsRaw.length >= messageFetchLimit);
         setMessages(msgRows);
@@ -479,6 +584,17 @@ function App() {
                         : f,
                 ),
             );
+            setAccountFoldersById((prev) => {
+                const accountFolders = prev[res.accountId] ?? [];
+                return {
+                    ...prev,
+                    [res.accountId]: accountFolders.map((f) =>
+                        f.id === res.folderId
+                            ? {...f, unread_count: res.unreadCount, total_count: res.totalCount}
+                            : f,
+                    ),
+                };
+            });
             setSyncStatusText('Read state synced');
         } catch (e: any) {
             applyReadOptimistic(messageId, nextRead ? 0 : 1, folderPath);
@@ -502,6 +618,18 @@ function App() {
                 return {...f, unread_count: Math.max(0, f.unread_count + delta)};
             }),
         );
+        setAccountFoldersById((prev) => {
+            const accountId = msg.account_id;
+            const accountFolders = prev[accountId] ?? [];
+            return {
+                ...prev,
+                [accountId]: accountFolders.map((f) => {
+                    if (f.path !== folderPath) return f;
+                    const delta = nextRead ? -1 : 1;
+                    return {...f, unread_count: Math.max(0, f.unread_count + delta)};
+                }),
+            };
+        });
     }
 
     function applyFlagOptimistic(messageId: number, nextFlag: number) {
@@ -681,6 +809,7 @@ function App() {
             setSelectedMessageIds(rangeIds);
             setSelectedMessageId(id);
             setPendingAutoReadMessageId(id);
+            setWorkspace('mail');
             return;
         }
 
@@ -690,6 +819,7 @@ function App() {
                 const next = exists ? prev.filter((x) => x !== id) : [...prev, id];
                 setSelectedMessageId(id);
                 setPendingAutoReadMessageId(id);
+                setWorkspace('mail');
                 return next;
             });
             selectionAnchorIndexRef.current = index;
@@ -700,6 +830,7 @@ function App() {
         setSelectedMessageId(id);
         setPendingAutoReadMessageId(id);
         selectionAnchorIndexRef.current = index;
+        setWorkspace('mail');
     }
 
     function onOpenInNewWindow(): void {
@@ -766,6 +897,7 @@ function App() {
 
     return (
         <MainLayout
+            hideHeader
             accounts={accounts}
             selectedAccountId={selectedAccountId}
             accountFoldersById={accountFoldersById}
@@ -778,6 +910,7 @@ function App() {
                     setSelectedAccountId(accountId);
                 }
                 setSelectedFolderPath(path);
+                setWorkspace('mail');
             }}
             messages={messages}
             selectedMessageId={selectedMessageId}
@@ -785,6 +918,8 @@ function App() {
             onSelectMessage={handleSelectMessage}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
+            searchResults={searchResults}
+            searchLoading={searchLoading}
             onLoadMoreMessages={() => {
                 if (loadingMoreMessages || !hasMoreMessages) return;
                 setMessageFetchLimit((prev) => prev + MESSAGE_PAGE_SIZE);
@@ -792,28 +927,94 @@ function App() {
             hasMoreMessages={hasMoreMessages}
             loadingMoreMessages={loadingMoreMessages}
             onRefresh={onRefresh}
+            onOpenCalendar={() => {
+                setWorkspace((prev) => {
+                    if (prev === 'calendar') return 'mail';
+                    setSelectedFolderPath(null);
+                    setSelectedMessageId(null);
+                    setSelectedMessageIds([]);
+                    return 'calendar';
+                });
+            }}
+            onOpenContacts={() => {
+                setWorkspace((prev) => {
+                    if (prev === 'contacts') return 'mail';
+                    setSelectedFolderPath(null);
+                    setSelectedMessageId(null);
+                    setSelectedMessageIds([]);
+                    return 'contacts';
+                });
+            }}
+            activeWorkspace={workspace}
+            hideFolderSidebar={workspace === 'calendar' || workspace === 'contacts'}
             syncStatusText={syncStatusText}
             syncInProgress={Boolean(syncStatusText && syncStatusText.toLowerCase().startsWith('syncing'))}
             syncingAccountIds={syncingAccountIds}
-            onCreateFolder={() =>
-                void (async () => {
-                    if (!selectedAccountId) {
-                        setSyncStatusText('Select an account first');
-                        return;
+            onCreateFolder={async ({accountId, folderPath, type, color}) => {
+                const targetAccountId = accountId;
+                const normalizedPath = (folderPath || '').trim();
+                if (!targetAccountId) throw new Error('Select an account first');
+                if (!normalizedPath) throw new Error('Folder path is required');
+                setSyncStatusText('Creating folder...');
+                try {
+                    await window.electronAPI.createFolder(targetAccountId, normalizedPath);
+                    if ((type && type.trim()) || (color && color.trim())) {
+                        await window.electronAPI.updateFolderSettings(targetAccountId, normalizedPath, {
+                            customName: null,
+                            type: type && type.trim().length ? type.trim() : null,
+                            color: color && color.trim().length ? color.trim() : null,
+                        });
                     }
-                    const folderPath = window.prompt('New folder name or path');
-                    if (!folderPath || !folderPath.trim()) return;
-                    setSyncStatusText('Creating folder...');
-                    try {
-                        await window.electronAPI.createFolder(selectedAccountId, folderPath.trim());
-                        await reloadAccountData(selectedAccountId, folderPath.trim(), null);
-                        setSelectedFolderPath(folderPath.trim());
-                        setSyncStatusText(`Folder created: ${folderPath.trim()}`);
-                    } catch (e: any) {
-                        setSyncStatusText(`Create folder failed: ${e?.message || String(e)}`);
+                    await reloadAccountData(targetAccountId, normalizedPath, null);
+                    if (targetAccountId !== selectedAccountId) {
+                        setSelectedAccountId(targetAccountId);
                     }
-                })()
-            }
+                    setSelectedFolderPath(normalizedPath);
+                    setSyncStatusText(`Folder created: ${normalizedPath}`);
+                } catch (e: any) {
+                    setSyncStatusText(`Create folder failed: ${e?.message || String(e)}`);
+                    throw e;
+                }
+            }}
+            onReorderCustomFolders={async (accountId, orderedFolderPaths) => {
+                const previousAccountFoldersById = accountFoldersById;
+                const previousFolders = folders;
+
+                const accountAll = accountFoldersById[accountId] ?? [];
+                const accountCustom = accountAll.filter((f) => !isProtectedFolder(f));
+                const customByPath = new Map(accountCustom.map((f) => [f.path, f] as const));
+                const requested = orderedFolderPaths.filter((path) => customByPath.has(path));
+                const requestedSet = new Set(requested);
+                const remainder = accountCustom.map((f) => f.path).filter((path) => !requestedSet.has(path));
+                const mergedPaths = [...requested, ...remainder];
+                const customOrdered = mergedPaths.map((path) => customByPath.get(path)).filter(Boolean) as FolderItem[];
+                const protectedOrdered = accountAll.filter((f) => isProtectedFolder(f));
+                const optimisticAccountFolders = [...protectedOrdered, ...customOrdered];
+
+                setAccountFoldersById((prev) => ({
+                    ...prev,
+                    [accountId]: optimisticAccountFolders,
+                }));
+                if (selectedAccountId === accountId) {
+                    setFolders(optimisticAccountFolders);
+                }
+
+                try {
+                    const updated = await window.electronAPI.reorderCustomFolders(accountId, mergedPaths);
+                    setAccountFoldersById((prev) => ({
+                        ...prev,
+                        [accountId]: updated,
+                    }));
+                    if (selectedAccountId === accountId) {
+                        setFolders(updated);
+                    }
+                } catch (e: any) {
+                    setAccountFoldersById(previousAccountFoldersById);
+                    setFolders(previousFolders);
+                    setSyncStatusText(`Reorder failed: ${e?.message || String(e)}`);
+                    throw e;
+                }
+            }}
             onDeleteFolder={(folder) =>
                 void (async () => {
                     if (!selectedAccountId) {
@@ -944,6 +1145,7 @@ function App() {
             onUpdateFolderSettings={async (folder, payload) => {
                 if (!selectedAccountId) return;
                 const previous = folders;
+                const previousAccountFoldersById = accountFoldersById;
                 const normalizedName = payload.customName && payload.customName.trim().length ? payload.customName.trim() : null;
                 const normalizedColor = payload.color && payload.color.trim().length ? payload.color.trim() : null;
                 const normalizedType = payload.type && payload.type.trim().length ? payload.type.trim() : null;
@@ -960,6 +1162,23 @@ function App() {
                             : f,
                     ),
                 );
+                setAccountFoldersById((prev) => {
+                    const accountId = folder.account_id;
+                    const accountFolders = prev[accountId] ?? [];
+                    return {
+                        ...prev,
+                        [accountId]: accountFolders.map((f) =>
+                            f.id === folder.id
+                                ? {
+                                    ...f,
+                                    custom_name: normalizedName,
+                                    color: normalizedColor,
+                                    type: normalizedType,
+                                }
+                                : f,
+                        ),
+                    };
+                });
 
                 try {
                     const updated = await window.electronAPI.updateFolderSettings(selectedAccountId, folder.path, {
@@ -968,16 +1187,113 @@ function App() {
                         type: normalizedType,
                     });
                     setFolders((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+                    setAccountFoldersById((prev) => {
+                        const accountId = updated.account_id;
+                        const accountFolders = prev[accountId] ?? [];
+                        return {
+                            ...prev,
+                            [accountId]: accountFolders.map((f) => (f.id === updated.id ? updated : f)),
+                        };
+                    });
                     setSyncStatusText('Folder settings saved');
                 } catch (e: any) {
                     setFolders(previous);
+                    setAccountFoldersById(previousAccountFoldersById);
                     setSyncStatusText(`Folder settings failed: ${e?.message || String(e)}`);
                     throw e;
                 }
             }}
         >
             <div className={`h-full overflow-hidden ${selectedMessage ? '' : 'bg-slate-50 dark:bg-[#26292f]'}`}>
-                {selectedMessage && (
+                {workspace === 'calendar' && (
+                    <section className="h-full overflow-auto bg-slate-50 p-5 dark:bg-[#26292f]">
+                        <div className="mx-auto max-w-5xl">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Calendar</h2>
+                            {!selectedAccountId && (
+                                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Select an account to load
+                                    calendar events.</p>
+                            )}
+                            {selectedAccountId && (
+                                <>
+                                    {calendarLoading && (
+                                        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading
+                                            events...</p>
+                                    )}
+                                    {!calendarLoading && calendarEvents.length === 0 && (
+                                        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No events
+                                            found.</p>
+                                    )}
+                                    {!calendarLoading && calendarEvents.length > 0 && (
+                                        <div
+                                            className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                            <ul className="divide-y divide-slate-200 dark:divide-[#3a3d44]">
+                                                {calendarEvents.map((event) => (
+                                                    <li key={event.id} className="px-4 py-3">
+                                                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{event.summary || '(No title)'}</p>
+                                                        <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                                                            {formatSystemDateTime(event.starts_at, systemLocale)} - {formatSystemDateTime(event.ends_at, systemLocale)}
+                                                        </p>
+                                                        {event.location && (
+                                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.location}</p>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {workspace === 'contacts' && (
+                    <section className="h-full overflow-auto bg-slate-50 p-5 dark:bg-[#26292f]">
+                        <div className="mx-auto max-w-5xl">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Contacts</h2>
+                            {!selectedAccountId && (
+                                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Select an account to load
+                                    contacts.</p>
+                            )}
+                            {selectedAccountId && (
+                                <>
+                                    <div className="mt-4">
+                                        <input
+                                            type="text"
+                                            value={contactsQuery}
+                                            onChange={(event) => setContactsQuery(event.target.value)}
+                                            placeholder="Search contacts..."
+                                            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                        />
+                                    </div>
+                                    {contactsLoading && (
+                                        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading
+                                            contacts...</p>
+                                    )}
+                                    {!contactsLoading && contacts.length === 0 && (
+                                        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No contacts
+                                            found.</p>
+                                    )}
+                                    {!contactsLoading && contacts.length > 0 && (
+                                        <div
+                                            className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                            <ul className="divide-y divide-slate-200 dark:divide-[#3a3d44]">
+                                                {contacts.map((contact) => (
+                                                    <li key={contact.id} className="px-4 py-3">
+                                                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{contact.full_name || '(No name)'}</p>
+                                                        <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">{contact.email}</p>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {workspace === 'mail' && selectedMessage && (
                     <article className="flex h-full flex-col">
                         <div
                             role="toolbar"
