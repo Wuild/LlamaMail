@@ -43,6 +43,7 @@ function App() {
         theme: 'system',
         minimizeToTray: true,
         syncIntervalMinutes: 2,
+        autoUpdateEnabled: true,
     });
     const bodyRequestSeqRef = useRef(0);
     const activeBodyRequestIdRef = useRef<string | null>(null);

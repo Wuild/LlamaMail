@@ -323,6 +323,7 @@ export interface AppSettings {
     theme: AppTheme;
     minimizeToTray: boolean;
     syncIntervalMinutes: number;
+    autoUpdateEnabled: boolean;
 }
 
 export interface AccountDeletedEvent {
@@ -469,6 +470,14 @@ const api = {
         ipcRenderer.invoke('open-support-window'),
     openDebugWindow: (): Promise<{ ok: true }> =>
         ipcRenderer.invoke('open-debug-window'),
+    minimizeWindow: (): Promise<{ ok: true }> =>
+        ipcRenderer.invoke('window-minimize'),
+    toggleMaximizeWindow: (): Promise<{ ok: true; isMaximized: boolean }> =>
+        ipcRenderer.invoke('window-toggle-maximize'),
+    closeWindow: (): Promise<{ ok: true }> =>
+        ipcRenderer.invoke('window-close'),
+    isWindowMaximized: (): Promise<boolean> =>
+        ipcRenderer.invoke('window-is-maximized'),
     openMessageWindow: (messageId?: number | null): Promise<{ ok: true }> =>
         ipcRenderer.invoke('open-message-window', messageId ?? null),
     getDebugLogs: (limit?: number): Promise<DebugLogEntry[]> =>

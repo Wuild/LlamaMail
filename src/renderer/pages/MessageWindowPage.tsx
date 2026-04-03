@@ -8,6 +8,7 @@ const defaultSettings: AppSettings = {
     theme: 'system',
     minimizeToTray: true,
     syncIntervalMinutes: 2,
+    autoUpdateEnabled: true,
 };
 
 export default function MessageWindowPage() {

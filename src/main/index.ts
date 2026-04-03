@@ -19,7 +19,7 @@ import {registerSettingsIpc} from './ipc/settings.js';
 import {broadcastAutoUpdateState, registerUpdaterIpc} from './ipc/updater.js';
 import {registerWindowIpc} from './ipc/windows.js';
 import {getAppSettings, getAppSettingsSync, getSpellCheckerLanguages} from './settings/store.js';
-import {initAutoUpdater, runStartupUpdateFlow} from './updater/autoUpdate.js';
+import {initAutoUpdater, runStartupUpdateFlow, setAutoUpdateEnabled} from './updater/autoUpdate.js';
 import type {ComposeDraftPayload} from './windows/composeWindow.js';
 import {openComposeWindow} from './windows/composeWindow.js';
 import {getAddAccountWindow, openAddAccountWindow} from './windows/addAccountWindow.js';
@@ -46,6 +46,8 @@ function createWindow() {
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
+        frame: false,
+        titleBarStyle: 'hidden',
         autoHideMenuBar: true,
         icon: appIconPath || undefined,
         webPreferences: {
@@ -263,6 +265,7 @@ function applyRuntimeSettings(): void {
     const settings = getAppSettingsSync();
     nativeTheme.themeSource = settings.theme === 'system' ? 'system' : settings.theme;
     setAutoSyncIntervalMinutes(settings.syncIntervalMinutes);
+    setAutoUpdateEnabled(settings.autoUpdateEnabled);
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.session.setSpellCheckerLanguages(getSpellCheckerLanguages(settings.language));
     }

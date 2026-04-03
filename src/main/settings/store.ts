@@ -10,6 +10,7 @@ export interface AppSettings {
     theme: AppTheme;
     minimizeToTray: boolean;
     syncIntervalMinutes: number;
+    autoUpdateEnabled: boolean;
 }
 
 export type AppSettingsPatch = Partial<AppSettings>;
@@ -19,6 +20,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     theme: 'system',
     minimizeToTray: true,
     syncIntervalMinutes: 2,
+    autoUpdateEnabled: true,
 };
 
 let settingsCache: AppSettings = {...DEFAULT_APP_SETTINGS};
@@ -50,12 +52,17 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
         typeof input?.minimizeToTray === 'boolean'
             ? input.minimizeToTray
             : DEFAULT_APP_SETTINGS.minimizeToTray;
+    const autoUpdateEnabled =
+        typeof input?.autoUpdateEnabled === 'boolean'
+            ? input.autoUpdateEnabled
+            : DEFAULT_APP_SETTINGS.autoUpdateEnabled;
 
     return {
         language,
         theme,
         minimizeToTray,
         syncIntervalMinutes,
+        autoUpdateEnabled,
     };
 }
 

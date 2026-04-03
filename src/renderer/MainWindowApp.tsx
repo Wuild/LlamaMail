@@ -1,10 +1,11 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Bug, CalendarDays, CircleHelp, Mail, Settings, Users} from 'lucide-react';
+import {Bug, CalendarDays, CircleHelp, Copy, Mail, Minus, Settings, Square, Users, X} from 'lucide-react';
 import {HashRouter, Navigate, NavLink, Route, Routes} from 'react-router-dom';
 import MailPage from './App';
 import AppSettingsPage from './pages/AppSettingsPage';
 import DebugConsolePage from './pages/DebugConsolePage';
 import SupportPage from './pages/SupportPage';
+import lunaLogo from '../resources/luna.png';
 import type {AddressBookItem, CalendarEventItem, ContactItem, PublicAccount} from '../preload';
 import {formatSystemDateTime} from './lib/dateTime';
 import {cn} from './lib/utils';
@@ -21,6 +22,8 @@ function MainWindowShell() {
     const [accounts, setAccounts] = useState<PublicAccount[]>([]);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+    const [isMaximized, setIsMaximized] = useState(false);
+    const [appVersion, setAppVersion] = useState('unknown');
 
     useEffect(() => {
         let active = true;
@@ -60,33 +63,118 @@ function MainWindowShell() {
         };
     }, []);
 
-    return (
-        <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-[#2f3136]">
-            <aside
-                className="flex h-full w-16 shrink-0 flex-col items-center justify-between bg-slate-800 py-3 dark:bg-[#111216]">
-                <div className="flex flex-col items-center gap-2">
-                    <NavRailItem to="/mail" icon={<Mail size={18}/>} label="Mail" badgeCount={totalUnreadCount}/>
-                    <NavRailItem to="/contacts" icon={<Users size={18}/>} label="Contacts"/>
-                    <NavRailItem to="/calendar" icon={<CalendarDays size={18}/>} label="Calendar"/>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                    <NavRailItem to="/settings" icon={<Settings size={16}/>} label="Settings"/>
-                    <NavRailItem to="/debug" icon={<Bug size={16}/>} label="Debug"/>
-                    <NavRailItem to="/help" icon={<CircleHelp size={16}/>} label="Help"/>
-                </div>
-            </aside>
+    useEffect(() => {
+        let active = true;
+        void window.electronAPI.isWindowMaximized().then((value) => {
+            if (!active) return;
+            setIsMaximized(Boolean(value));
+        }).catch(() => undefined);
+        const onResize = () => {
+            void window.electronAPI.isWindowMaximized().then((value) => {
+                if (!active) return;
+                setIsMaximized(Boolean(value));
+            }).catch(() => undefined);
+        };
+        window.addEventListener('resize', onResize);
+        return () => {
+            active = false;
+            window.removeEventListener('resize', onResize);
+        };
+    }, []);
 
-            <main className="min-h-0 flex-1 overflow-hidden">
-                <Routes>
-                    <Route path="/" element={<Navigate to="/mail" replace/>}/>
-                    <Route path="/mail" element={<MailPage/>}/>
-                    <Route path="/contacts" element={<ContactsRoute accountId={selectedAccountId}/>}/>
-                    <Route path="/calendar" element={<CalendarRoute accountId={selectedAccountId}/>}/>
-                    <Route path="/settings" element={<AppSettingsPage embedded/>}/>
-                    <Route path="/debug" element={<DebugConsolePage embedded/>}/>
-                    <Route path="/help" element={<SupportPage embedded/>}/>
-                </Routes>
-            </main>
+    useEffect(() => {
+        let active = true;
+        void window.electronAPI.getAutoUpdateState().then((state) => {
+            if (!active) return;
+            setAppVersion(state.currentVersion || 'unknown');
+        }).catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    return (
+        <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 dark:bg-[#2f3136]">
+            <header
+                className="relative flex h-9 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-2 text-slate-100 dark:border-[#08090c] dark:bg-[#0b0c10]"
+                style={{WebkitAppRegion: 'drag'} as React.CSSProperties}
+                onDoubleClick={() => {
+                    void window.electronAPI.toggleMaximizeWindow().then((res) => setIsMaximized(!!res?.isMaximized)).catch(() => undefined);
+                }}
+            >
+                <div className="w-48 shrink-0"/>
+                <div
+                    className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center justify-center">
+                    <div className="flex items-center gap-2 text-xs font-medium text-white/80">
+                        <img src={lunaLogo} alt="" className="h-4 w-4 rounded-sm object-contain" draggable={false}/>
+                        <span>LunaMail</span>
+                        <span
+                            className="text-[10px] font-semibold uppercase tracking-wide text-white/55">v{appVersion}</span>
+                    </div>
+                </div>
+                <div
+                    className="flex w-24 shrink-0 items-center justify-end gap-1"
+                    style={{WebkitAppRegion: 'no-drag'} as React.CSSProperties}
+                >
+                    <button
+                        type="button"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-white/80 hover:bg-white/15 hover:text-white"
+                        onClick={() => void window.electronAPI.minimizeWindow()}
+                        title="Minimize"
+                        aria-label="Minimize"
+                    >
+                        <Minus size={14}/>
+                    </button>
+                    <button
+                        type="button"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-white/80 hover:bg-white/15 hover:text-white"
+                        onClick={() =>
+                            void window.electronAPI.toggleMaximizeWindow().then((res) => setIsMaximized(!!res?.isMaximized)).catch(() => undefined)
+                        }
+                        title={isMaximized ? 'Restore' : 'Maximize'}
+                        aria-label={isMaximized ? 'Restore' : 'Maximize'}
+                    >
+                        {isMaximized ? <Copy size={13}/> : <Square size={13}/>}
+                    </button>
+                    <button
+                        type="button"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-white/80 hover:bg-red-600 hover:text-white"
+                        onClick={() => void window.electronAPI.closeWindow()}
+                        title="Close"
+                        aria-label="Close"
+                    >
+                        <X size={14}/>
+                    </button>
+                </div>
+            </header>
+
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+                <aside
+                    className="flex h-full w-16 shrink-0 flex-col items-center justify-between bg-slate-800 py-3 dark:bg-[#111216]">
+                    <div className="flex flex-col items-center gap-2">
+                        <NavRailItem to="/mail" icon={<Mail size={18}/>} label="Mail" badgeCount={totalUnreadCount}/>
+                        <NavRailItem to="/contacts" icon={<Users size={18}/>} label="Contacts"/>
+                        <NavRailItem to="/calendar" icon={<CalendarDays size={18}/>} label="Calendar"/>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                        <NavRailItem to="/settings" icon={<Settings size={16}/>} label="Settings"/>
+                        <NavRailItem to="/debug" icon={<Bug size={16}/>} label="Debug"/>
+                        <NavRailItem to="/help" icon={<CircleHelp size={16}/>} label="Help"/>
+                    </div>
+                </aside>
+
+                <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                    <Routes>
+                        <Route path="/" element={<Navigate to="/mail" replace/>}/>
+                        <Route path="/mail" element={<MailPage/>}/>
+                        <Route path="/contacts" element={<ContactsRoute accountId={selectedAccountId}/>}/>
+                        <Route path="/calendar" element={<CalendarRoute accountId={selectedAccountId}/>}/>
+                        <Route path="/settings" element={<AppSettingsPage embedded/>}/>
+                        <Route path="/debug" element={<DebugConsolePage embedded/>}/>
+                        <Route path="/help" element={<SupportPage embedded/>}/>
+                    </Routes>
+                </main>
+            </div>
         </div>
     );
 }

@@ -91,4 +91,36 @@ export function registerWindowIpc(): void {
             contentType: null,
         }));
     });
+
+    ipcMain.handle('window-minimize', async (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win && !win.isDestroyed()) {
+            win.minimize();
+        }
+        return {ok: true} as const;
+    });
+
+    ipcMain.handle('window-toggle-maximize', async (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win && !win.isDestroyed()) {
+            if (win.isMaximized()) win.unmaximize();
+            else win.maximize();
+            return {ok: true as const, isMaximized: win.isMaximized()};
+        }
+        return {ok: true as const, isMaximized: false};
+    });
+
+    ipcMain.handle('window-close', async (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win && !win.isDestroyed()) {
+            win.close();
+        }
+        return {ok: true} as const;
+    });
+
+    ipcMain.handle('window-is-maximized', async (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win || win.isDestroyed()) return false;
+        return win.isMaximized();
+    });
 }

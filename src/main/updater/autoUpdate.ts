@@ -40,6 +40,7 @@ const updateState: AutoUpdateState = {
 
 let initialized = false;
 let notifyRenderer: ((state: AutoUpdateState) => void) | null = null;
+let autoUpdateEnabledByUser = true;
 
 function setState(patch: Partial<AutoUpdateState>): void {
     Object.assign(updateState, patch);
@@ -62,12 +63,6 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
         });
         return;
     }
-
-    setState({
-        enabled: true,
-        phase: 'idle',
-        message: null,
-    });
 
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -124,10 +119,47 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
             message: error.message || String(error),
         });
     });
+
+    setAutoUpdateEnabled(autoUpdateEnabledByUser);
 }
 
 export function getAutoUpdateState(): AutoUpdateState {
     return {...updateState};
+}
+
+export function setAutoUpdateEnabled(enabled: boolean): void {
+    autoUpdateEnabledByUser = Boolean(enabled);
+    if (!app.isPackaged) {
+        setState({
+            enabled: false,
+            phase: 'disabled',
+            message: 'Auto-update is available only in packaged builds.',
+        });
+        return;
+    }
+    if (!autoUpdateEnabledByUser) {
+        setState({
+            enabled: false,
+            phase: 'disabled',
+            latestVersion: null,
+            downloadedVersion: null,
+            percent: null,
+            transferred: null,
+            total: null,
+            message: 'Auto-update is disabled in settings.',
+        });
+        return;
+    }
+    setState({
+        enabled: true,
+        phase: 'idle',
+        message: null,
+        latestVersion: null,
+        downloadedVersion: null,
+        percent: null,
+        transferred: null,
+        total: null,
+    });
 }
 
 export async function checkForUpdates(): Promise<AutoUpdateState> {
@@ -136,6 +168,14 @@ export async function checkForUpdates(): Promise<AutoUpdateState> {
             enabled: false,
             phase: 'disabled',
             message: 'Auto-update is available only in packaged builds.',
+        });
+        return getAutoUpdateState();
+    }
+    if (!autoUpdateEnabledByUser) {
+        setState({
+            enabled: false,
+            phase: 'disabled',
+            message: 'Auto-update is disabled in settings.',
         });
         return getAutoUpdateState();
     }
@@ -158,6 +198,14 @@ export async function downloadUpdate(): Promise<AutoUpdateState> {
             enabled: false,
             phase: 'disabled',
             message: 'Auto-update is available only in packaged builds.',
+        });
+        return getAutoUpdateState();
+    }
+    if (!autoUpdateEnabledByUser) {
+        setState({
+            enabled: false,
+            phase: 'disabled',
+            message: 'Auto-update is disabled in settings.',
         });
         return getAutoUpdateState();
     }
@@ -188,6 +236,14 @@ export async function runStartupUpdateFlow(): Promise<'proceed' | 'installing'> 
             enabled: false,
             phase: 'disabled',
             message: 'Development build detected. Skipping update check.',
+        });
+        return 'proceed';
+    }
+    if (!autoUpdateEnabledByUser) {
+        setState({
+            enabled: false,
+            phase: 'disabled',
+            message: 'Auto-update is disabled in settings.',
         });
         return 'proceed';
     }

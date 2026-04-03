@@ -594,9 +594,21 @@ const MainLayout: React.FC<MainLayoutProps> = ({
             <div className="min-h-0 flex flex-1 overflow-hidden">
                 {!hideFolderSidebar && (
                     <aside
-                        className="flex min-h-0 w-16 shrink-0 flex-col border-r border-slate-200 bg-gradient-to-b from-slate-100 via-slate-50 to-white text-slate-800 dark:border-[#1b1c20] dark:bg-gradient-to-b dark:from-[#1f2125] dark:via-[#1f2125] dark:to-[#22242a] dark:text-slate-100 lg:w-80">
+                        className="flex min-h-0 w-80 shrink-0 flex-col border-r border-slate-200 bg-gradient-to-b from-slate-100 via-slate-50 to-white text-slate-800 dark:border-[#1b1c20] dark:bg-gradient-to-b dark:from-[#1f2125] dark:via-[#1f2125] dark:to-[#22242a] dark:text-slate-100">
                         <ScrollArea className="min-h-0 flex-1 px-2.5 py-3">
                             <nav className="space-y-2">
+                                <div className="mb-2">
+                                    <button
+                                        type="button"
+                                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
+                                        onClick={() => void window.electronAPI.openComposeWindow(selectedAccountId ? {accountId: selectedAccountId} : null)}
+                                        title="Compose"
+                                        aria-label="Compose"
+                                    >
+                                        <PenSquare size={16}/>
+                                        <span>Compose</span>
+                                    </button>
+                                </div>
                                 <div className="mb-2 flex items-center justify-between px-2.5">
                                 <span
                                     className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Accounts</span>
@@ -604,7 +616,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
                             {accounts.length === 0 && (
                                 <div
-                                    className="hidden rounded-lg px-3 py-2.5 text-sm text-slate-500 dark:text-slate-400 lg:block">No
+                                    className="rounded-lg px-3 py-2.5 text-sm text-slate-500 dark:text-slate-400">No
                                     accounts yet</div>
                             )}
 
@@ -712,7 +724,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                 className="relative space-y-1 pl-7 before:absolute before:bottom-2 before:left-3.5 before:top-1 before:w-px before:bg-gradient-to-b before:from-slate-300 before:to-slate-200/30 before:content-[''] dark:before:from-[#4a4d55] dark:before:to-transparent">
                                                 {accountFolders.length === 0 ? (
                                                     <div
-                                                        className="hidden rounded-md px-2 py-1.5 text-xs text-slate-500 dark:text-slate-400 lg:block">
+                                                        className="rounded-md px-2 py-1.5 text-xs text-slate-500 dark:text-slate-400">
                                                         No folders yet
                                                     </div>
                                                 ) : (
@@ -1739,7 +1751,7 @@ const FolderItemRow: React.FC<{
                     {icon}
                   </span>
                   <span
-                      className={cn('hidden truncate pr-8 text-xs lg:inline', active ? 'font-semibold' : 'font-medium')}>{label}</span>
+                      className={cn('truncate pr-8 text-xs', active ? 'font-semibold' : 'font-medium')}>{label}</span>
               </span>
                 <span className="flex items-center">
                     {typeof count === 'number' && count > 0 && (
