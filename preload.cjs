@@ -40,20 +40,16 @@ const api = {
     saveDraft: (payload) => ipcRenderer.invoke('save-draft', payload),
     openAddAccountWindow: () => ipcRenderer.invoke('open-add-account-window'),
     openComposeWindow: (draft) => ipcRenderer.invoke('open-compose-window', draft ?? null),
-    openAppSettingsWindow: () => ipcRenderer.invoke('open-app-settings-window'),
-    openSupportWindow: () => ipcRenderer.invoke('open-support-window'),
-    openDebugWindow: () => ipcRenderer.invoke('open-debug-window'),
     minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
     toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
     closeWindow: () => ipcRenderer.invoke('window-close'),
     isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+    openDevTools: () => ipcRenderer.invoke('window-open-dev-tools'),
     openMessageWindow: (messageId) => ipcRenderer.invoke('open-message-window', messageId ?? null),
     getDebugLogs: (limit) => ipcRenderer.invoke('get-debug-logs', limit),
     clearDebugLogs: () => ipcRenderer.invoke('clear-debug-logs'),
     getComposeDraft: () => ipcRenderer.invoke('get-compose-draft'),
     getMessageWindowTarget: () => ipcRenderer.invoke('get-message-window-target'),
-    openAccountSettingsWindow: (accountId) => ipcRenderer.invoke('open-account-settings-window', accountId ?? null),
-    getAccountSettingsTarget: () => ipcRenderer.invoke('get-account-settings-target'),
     getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
     getSystemLocale: () => ipcRenderer.invoke('get-system-locale'),
     updateAppSettings: (patch) => ipcRenderer.invoke('update-app-settings', patch),
@@ -62,6 +58,9 @@ const api = {
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     downloadUpdate: () => ipcRenderer.invoke('download-update'),
     quitAndInstallUpdate: () => ipcRenderer.invoke('quit-and-install-update'),
+    devShowNotification: (payload) => ipcRenderer.invoke('dev-show-notification', payload ?? null),
+    devPlayNotificationSound: () => ipcRenderer.invoke('dev-play-notification-sound'),
+    devOpenUpdaterWindow: () => ipcRenderer.invoke('dev-open-updater-window'),
     onAccountAdded: (callback) => {
         const listener = (_event, payload) => callback(payload);
         ipcRenderer.on('account-added', listener);
@@ -101,11 +100,6 @@ const api = {
         const listener = (_event, payload) => callback(payload);
         ipcRenderer.on('open-message-target', listener);
         return () => ipcRenderer.removeListener('open-message-target', listener);
-    },
-    onAccountSettingsTarget: (callback) => {
-        const listener = (_event, payload) => callback(payload);
-        ipcRenderer.on('account-settings-target', listener);
-        return () => ipcRenderer.removeListener('account-settings-target', listener);
     },
     onMessageWindowTarget: (callback) => {
         const listener = (_event, payload) => callback(payload);

@@ -1,6 +1,7 @@
 import {app, BrowserWindow} from 'electron';
 import path from 'path';
 import {fileURLToPath} from 'url';
+import {getAppSettingsSync} from '../settings/store.js';
 import {loadWindowContent} from './loadWindowContent.js';
 
 const isDev = !app.isPackaged;
@@ -9,21 +10,26 @@ const __dirname = path.dirname(__filename);
 
 let splashWin: BrowserWindow | null = null;
 
-export function openSplashWindow(): BrowserWindow {
+type OpenSplashWindowOptions = {
+    forceTitleBar?: boolean;
+};
+
+export function openSplashWindow(options: OpenSplashWindowOptions = {}): BrowserWindow {
     if (splashWin && !splashWin.isDestroyed()) {
         splashWin.focus();
         return splashWin;
     }
 
     const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
+    const showTitleBar = Boolean(options.forceTitleBar || getAppSettingsSync().developerMode);
 
     splashWin = new BrowserWindow({
-        width: 520,
-        height: 320,
-        frame: false,
-        titleBarStyle: 'hidden',
+        width: 420,
+        height: 500,
+        frame: showTitleBar,
+        ...(showTitleBar ? {} : {titleBarStyle: 'hidden' as const}),
         resizable: false,
-        minimizable: false,
+        minimizable: showTitleBar,
         maximizable: false,
         fullscreenable: false,
         autoHideMenuBar: true,

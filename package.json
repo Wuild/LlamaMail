@@ -19,16 +19,17 @@
     "build:linux": "npm run build && electron-builder --linux",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
+    "sync:preload": "node scripts/sync-preload.cjs",
     "dev:ui": "vite",
     "dev:types": "tsc -w --preserveWatchOutput",
-    "dev:electron": "wait-on tcp:127.0.0.1:5174 file:build/main/index.js && nodemon --watch build/main --watch build/preload --watch preload.cjs --ext js,mjs,cjs,json --exec \"electron .\"",
+    "dev:electron": "wait-on tcp:127.0.0.1:5174 file:build/main/index.js file:build/preload/index.js && nodemon --watch build/main --watch build/preload --watch preload.cjs --ext js,mjs,cjs,json --exec \"npm run sync:preload && electron .\"",
     "dev": "concurrently -k -n TSC,VITE,ELECTRON -c yellow,blue,green \"tsc -w --preserveWatchOutput\" \"vite\" \"npm run dev:electron\"",
     "rebuild:native": "npm rebuild better-sqlite3 --runtime=electron --target=41.1.1 --dist-url=https://electronjs.org/headers",
     "generate:icons": "node scripts/generate-icons.cjs",
     "prebuild": "npm run generate:icons",
     "postinstall": "npm run rebuild:native",
-    "build": "tsc && vite build",
-    "start": "electron .",
+    "build": "tsc && npm run sync:preload && vite build",
+    "start": "npm run sync:preload && electron .",
     "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "drizzle:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -144,6 +145,7 @@
       "baseVersion": "24.08"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis"
       ]

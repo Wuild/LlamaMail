@@ -1,4 +1,5 @@
 import React from 'react';
+import {NavLink} from 'react-router-dom';
 import {cn} from '../../lib/utils';
 
 export type DynamicSidebarItem = {
@@ -6,6 +7,7 @@ export type DynamicSidebarItem = {
     label: string;
     description?: string | null;
     disabled?: boolean;
+    to?: string;
 };
 
 export type DynamicSidebarSection = {
@@ -18,7 +20,7 @@ export type DynamicSidebarSection = {
 type DynamicSidebarProps = {
     sections: DynamicSidebarSection[];
     selectedItemId: string;
-    onSelectItem: (itemId: string) => void;
+    onSelectItem?: (itemId: string) => void;
     className?: string;
 };
 
@@ -43,18 +45,39 @@ export default function DynamicSidebar({
                         <div className="space-y-1">
                             {section.items.map((item) => {
                                 const active = item.id === selectedItemId;
+                                const itemClassName = cn(
+                                    'block w-full rounded-md px-3 py-2 text-left text-sm no-underline transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                                    active
+                                        ? 'bg-sky-100 text-sky-900 dark:bg-[#3d4153] dark:text-slate-100'
+                                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#35373c]',
+                                );
+
+                                if (item.to && !item.disabled) {
+                                    return (
+                                        <NavLink
+                                            key={item.id}
+                                            to={item.to}
+                                            className={itemClassName}
+                                            onClick={() => onSelectItem?.(item.id)}
+                                        >
+                                            {item.label}
+                                            {item.description && (
+                                                <span
+                                                    className="block truncate text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                                                {item.description}
+                                            </span>
+                                            )}
+                                        </NavLink>
+                                    );
+                                }
+
                                 return (
                                     <button
                                         key={item.id}
                                         type="button"
                                         disabled={item.disabled}
-                                        className={cn(
-                                            'w-full rounded-md px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-                                            active
-                                                ? 'bg-sky-100 text-sky-900 dark:bg-[#3d4153] dark:text-slate-100'
-                                                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#35373c]',
-                                        )}
-                                        onClick={() => onSelectItem(item.id)}
+                                        className={itemClassName}
+                                        onClick={() => onSelectItem?.(item.id)}
                                     >
                                         {item.label}
                                         {item.description && (

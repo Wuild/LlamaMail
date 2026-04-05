@@ -350,9 +350,25 @@ function deriveHostDomains(host: string): string[] {
     const out: string[] = [];
     for (let i = 1; i <= parts.length - 2; i += 1) {
         const candidate = parts.slice(i).join('.');
-        if (candidate.split('.').length >= 2) out.push(candidate);
+        if (candidate.split('.').length < 2) continue;
+        if (isLikelyPublicSuffixDomain(candidate)) continue;
+        out.push(candidate);
     }
     return dedupe(out);
+}
+
+function isLikelyPublicSuffixDomain(domain: string): boolean {
+    const normalized = domain.trim().toLowerCase().replace(/\.$/, '');
+    const parts = normalized.split('.').filter(Boolean);
+    if (parts.length < 2) return true;
+    if (parts.length !== 2) return false;
+
+    const [left, right] = parts;
+    const commonSecondLevelLabels = new Set([
+        'ac', 'co', 'com', 'edu', 'gov', 'ltd', 'me', 'mil', 'net', 'nhs', 'nic', 'nom', 'org', 'plc', 'police',
+        'sch',
+    ]);
+    return right.length === 2 && commonSecondLevelLabels.has(left);
 }
 
 function buildRadicaleCandidates(host: string, email: string): string[] {

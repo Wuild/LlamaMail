@@ -1,0 +1,31 @@
+const fs = require('node:fs');
+const path = require('node:path');
+
+const projectRoot = path.resolve(__dirname, '..');
+const builtPreloadPath = path.join(projectRoot, 'build', 'preload', 'index.js');
+const targetPreloadPath = path.join(projectRoot, 'preload.cjs');
+
+function normalizePreloadSource(input) {
+    const importLine = "import { contextBridge, ipcRenderer } from 'electron';";
+    if (!input.includes(importLine)) {
+        throw new Error('Unexpected build/preload/index.js format: missing electron import');
+    }
+    return input.replace(importLine, "const {contextBridge, ipcRenderer} = require('electron');");
+}
+
+function main() {
+    if (!fs.existsSync(builtPreloadPath)) {
+        throw new Error(`Missing ${builtPreloadPath}. Run TypeScript build first.`);
+    }
+    const source = fs.readFileSync(builtPreloadPath, 'utf8');
+    const normalized = normalizePreloadSource(source);
+    fs.writeFileSync(targetPreloadPath, normalized);
+    console.log(`Synced preload bridge: ${targetPreloadPath}`);
+}
+
+try {
+    main();
+} catch (error) {
+    console.error('Failed to sync preload bridge:', error.message || error);
+    process.exit(1);
+}

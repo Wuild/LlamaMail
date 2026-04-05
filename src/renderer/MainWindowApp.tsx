@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
     Bug,
     CalendarDays,
@@ -18,7 +18,7 @@ import {
     Users,
     X,
 } from 'lucide-react';
-import {HashRouter, Navigate, NavLink, Route, Routes, useLocation} from 'react-router-dom';
+import {HashRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams} from 'react-router-dom';
 import MailPage from './pages/MailPage';
 import AppSettingsPage from './pages/AppSettingsPage';
 import DebugConsolePage from './pages/DebugConsolePage';
@@ -28,6 +28,7 @@ import lunaLogo from '../resources/luna.png';
 import type {
     AddressBookItem,
     AppSettings,
+    AutoUpdateState,
     CalendarEventItem,
     ContactItem,
     PublicAccount,
@@ -48,11 +49,14 @@ export default function MainWindowApp() {
 
 function MainWindowShell() {
     const location = useLocation();
+    const navigate = useNavigate();
     const [accounts, setAccounts] = useState<PublicAccount[]>([]);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [totalUnreadCount, setTotalUnreadCount] = useState(0);
     const [isMaximized, setIsMaximized] = useState(false);
     const [appVersion, setAppVersion] = useState('unknown');
+    const [autoUpdatePhase, setAutoUpdatePhase] = useState<AutoUpdateState['phase']>('idle');
+    const [autoUpdateMessage, setAutoUpdateMessage] = useState<string | null>(null);
     const [developerMode, setDeveloperMode] = useState(false);
 
     useEffect(() => {
@@ -131,11 +135,29 @@ function MainWindowShell() {
         void window.electronAPI.getAutoUpdateState().then((state) => {
             if (!active) return;
             setAppVersion(state.currentVersion || 'unknown');
+            setAutoUpdatePhase(state.phase);
+            setAutoUpdateMessage(state.message ?? null);
         }).catch(() => undefined);
+        const offUpdate = window.electronAPI.onAutoUpdateStatus?.((state) => {
+            if (!active) return;
+            setAppVersion(state.currentVersion || 'unknown');
+            setAutoUpdatePhase(state.phase);
+            setAutoUpdateMessage(state.message ?? null);
+        });
         return () => {
             active = false;
+            if (typeof offUpdate === 'function') offUpdate();
         };
     }, []);
+
+    const hasUpdateIndicator = autoUpdatePhase === 'available' || autoUpdatePhase === 'downloading' || autoUpdatePhase === 'downloaded';
+    const updateIndicatorTitle = autoUpdateMessage || (
+        autoUpdatePhase === 'downloaded'
+            ? 'Update downloaded. Open settings to install.'
+            : autoUpdatePhase === 'downloading'
+                ? 'Update downloading. Open settings for details.'
+                : 'Update available. Open settings for details.'
+    );
 
     useEffect(() => {
         let active = true;
@@ -177,6 +199,18 @@ function MainWindowShell() {
                     className="flex w-24 shrink-0 items-center justify-end gap-1"
                     style={{WebkitAppRegion: 'no-drag'} as React.CSSProperties}
                 >
+                    {hasUpdateIndicator && (
+                        <button
+                            type="button"
+                            className="relative inline-flex h-7 w-7 items-center justify-center rounded text-amber-300/95 hover:bg-white/15 hover:text-amber-200"
+                            onClick={() => navigate('/settings/application')}
+                            title={updateIndicatorTitle}
+                            aria-label="Open update status"
+                        >
+                            <Download size={13}/>
+                            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400"/>
+                        </button>
+                    )}
                     <button
                         type="button"
                         className="inline-flex h-7 w-7 items-center justify-center rounded text-white/80 hover:bg-white/15 hover:text-white"
@@ -218,7 +252,7 @@ function MainWindowShell() {
                         <NavRailItem to="/calendar" icon={<CalendarDays size={18}/>} label="Calendar"/>
                     </div>
                     <div className="flex flex-col items-center gap-2">
-                        <NavRailItem to="/settings" icon={<Settings size={16}/>} label="Settings"/>
+                        <NavRailItem to="/settings/application" icon={<Settings size={16}/>} label="Settings"/>
                         <NavRailItem to="/debug" icon={<Bug size={16}/>} label="Debug"/>
                         <NavRailItem to="/help" icon={<CircleHelp size={16}/>} label="Help"/>
                     </div>
@@ -252,7 +286,8 @@ function MainWindowShell() {
                                 />
                             )}
                         />
-                        <Route path="/settings" element={<SettingsRoute/>}/>
+                        <Route path="/settings" element={<Navigate to="/settings/application" replace/>}/>
+                        <Route path="/settings/:tab" element={<SettingsRoute/>}/>
                         <Route path="/debug" element={<DebugConsolePage embedded/>}/>
                         <Route path="/help" element={<SupportPage embedded/>}/>
                     </Routes>
@@ -269,11 +304,29 @@ function MainWindowShell() {
 }
 
 function SettingsRoute() {
+    const {tab} = useParams<{ tab: string }>();
     const location = useLocation();
     const query = new URLSearchParams(location.search);
+    const normalizedTab = String(tab || '').toLowerCase();
+    const validTabs = new Set(['application', 'developer', 'account']);
+    if (!validTabs.has(normalizedTab)) {
+        return <Navigate to="/settings/application" replace/>;
+    }
     const rawTarget = Number(query.get('accountId'));
-    const targetAccountId = Number.isFinite(rawTarget) ? rawTarget : null;
-    return <AppSettingsPage embedded targetAccountId={targetAccountId}/>;
+    const targetAccountId = normalizedTab === 'account' && Number.isFinite(rawTarget) ? rawTarget : null;
+    if (normalizedTab === 'account' && targetAccountId === null) {
+        return <Navigate to="/settings/application" replace/>;
+    }
+    const panel = normalizedTab === 'developer' ? 'developer' : 'app';
+    const openUpdaterToken = query.get('openUpdater');
+    return (
+        <AppSettingsPage
+            embedded
+            targetAccountId={targetAccountId}
+            initialPanel={panel}
+            openUpdaterToken={openUpdaterToken}
+        />
+    );
 }
 
 function NavRailItem({to, icon, label, badgeCount = 0}: {
@@ -1075,6 +1128,9 @@ function CalendarRoute({
     accounts: PublicAccount[];
     onSelectAccount: (accountId: number | null) => void;
 }) {
+    const DAY_CONTEXT_MENU_WIDTH = 224;
+    const DAY_CONTEXT_MENU_HEIGHT = 92;
+    const DAY_CONTEXT_MENU_MARGIN = 8;
     const [loading, setLoading] = useState(false);
     const [savingEvent, setSavingEvent] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -1085,13 +1141,16 @@ function CalendarRoute({
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventItem | null>(null);
     const [selectedDayForModal, setSelectedDayForModal] = useState<string | null>(null);
     const [dayContextMenu, setDayContextMenu] = useState<{ x: number; y: number; dayKey: string } | null>(null);
+    const dayContextMenuRef = useRef<HTMLDivElement | null>(null);
     const [showAddEventModal, setShowAddEventModal] = useState(false);
     const [calendarError, setCalendarError] = useState<string | null>(null);
     const [eventTitle, setEventTitle] = useState('');
     const [eventLocation, setEventLocation] = useState('');
     const [eventDescription, setEventDescription] = useState('');
-    const [eventStart, setEventStart] = useState(() => toDatetimeLocal(nextRoundedHour()));
-    const [eventEnd, setEventEnd] = useState(() => toDatetimeLocal(addHours(nextRoundedHour(), 1)));
+    const [eventStartDate, setEventStartDate] = useState(() => toDateInputValue(nextRoundedHour()));
+    const [eventStartTime, setEventStartTime] = useState(() => toTimeInputValue(nextRoundedHour()));
+    const [eventEndDate, setEventEndDate] = useState(() => toDateInputValue(addHours(nextRoundedHour(), 1)));
+    const [eventEndTime, setEventEndTime] = useState(() => toTimeInputValue(addHours(nextRoundedHour(), 1)));
     const {sidebarWidth, onResizeStart} = useResizableSidebar();
 
     useEffect(() => {
@@ -1112,6 +1171,11 @@ function CalendarRoute({
             gridEnd: endOfWeekMonday(monthEnd),
         };
     }, [visibleMonth]);
+
+    const inputLocale = useMemo(() => {
+        const normalized = String(systemLocale || '').trim();
+        return normalized || 'en-US';
+    }, [systemLocale]);
 
     const calendarDays = useMemo(() => {
         const days: Date[] = [];
@@ -1200,17 +1264,71 @@ function CalendarRoute({
         return byDay;
     }, [events]);
 
+    const openDayContextMenu = useCallback((x: number, y: number, dayKey: string) => {
+        const maxX = Math.max(DAY_CONTEXT_MENU_MARGIN, window.innerWidth - DAY_CONTEXT_MENU_WIDTH - DAY_CONTEXT_MENU_MARGIN);
+        const maxY = Math.max(DAY_CONTEXT_MENU_MARGIN, window.innerHeight - DAY_CONTEXT_MENU_HEIGHT - DAY_CONTEXT_MENU_MARGIN);
+        const clampedX = Math.min(Math.max(DAY_CONTEXT_MENU_MARGIN, x), maxX);
+        const clampedY = Math.min(Math.max(DAY_CONTEXT_MENU_MARGIN, y), maxY);
+        setDayContextMenu({x: clampedX, y: clampedY, dayKey});
+    }, []);
+
+    useEffect(() => {
+        if (!dayContextMenu) return;
+
+        const closeOnOutsidePointer = (event: PointerEvent) => {
+            const target = event.target as Node | null;
+            if (target && dayContextMenuRef.current?.contains(target)) return;
+            setDayContextMenu(null);
+        };
+
+        const handleContextMenuWhileOpen = (event: MouseEvent) => {
+            const target = event.target as HTMLElement | null;
+            const dayCell = target?.closest('[data-calendar-day-key]') as HTMLElement | null;
+            if (dayCell?.dataset.calendarDayKey) {
+                event.preventDefault();
+                openDayContextMenu(event.clientX, event.clientY, dayCell.dataset.calendarDayKey);
+                return;
+            }
+            if (target && dayContextMenuRef.current?.contains(target)) {
+                event.preventDefault();
+                return;
+            }
+            event.preventDefault();
+            setDayContextMenu(null);
+        };
+
+        const closeDayContextMenu = () => {
+            setDayContextMenu(null);
+        };
+
+        window.addEventListener('pointerdown', closeOnOutsidePointer);
+        window.addEventListener('contextmenu', handleContextMenuWhileOpen);
+        window.addEventListener('resize', closeDayContextMenu);
+        window.addEventListener('scroll', closeDayContextMenu, true);
+        return () => {
+            window.removeEventListener('pointerdown', closeOnOutsidePointer);
+            window.removeEventListener('contextmenu', handleContextMenuWhileOpen);
+            window.removeEventListener('resize', closeDayContextMenu);
+            window.removeEventListener('scroll', closeDayContextMenu, true);
+        };
+    }, [dayContextMenu, openDayContextMenu]);
+
     async function onCreateEvent() {
         if (!accountId) return;
         setCalendarError(null);
         setSavingEvent(true);
         try {
+            const startDate = composeLocalDateTime(eventStartDate, eventStartTime);
+            const endDate = composeLocalDateTime(eventEndDate, eventEndTime);
+            if (!startDate || !endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+                throw new Error('Please provide a valid start and end date/time.');
+            }
             const created = await window.electronAPI.addCalendarEvent(accountId, {
                 summary: eventTitle.trim() || null,
                 location: eventLocation.trim() || null,
                 description: eventDescription.trim() || null,
-                startsAt: new Date(eventStart).toISOString(),
-                endsAt: new Date(eventEnd).toISOString(),
+                startsAt: startDate.toISOString(),
+                endsAt: endDate.toISOString(),
             });
             setEvents((prev) => [...prev, created].sort((a, b) => (Date.parse(a.starts_at || '') || 0) - (Date.parse(b.starts_at || '') || 0)));
             setShowAddEventModal(false);
@@ -1218,8 +1336,11 @@ function CalendarRoute({
             setEventLocation('');
             setEventDescription('');
             const rounded = nextRoundedHour();
-            setEventStart(toDatetimeLocal(rounded));
-            setEventEnd(toDatetimeLocal(addHours(rounded, 1)));
+            const roundedEnd = addHours(rounded, 1);
+            setEventStartDate(toDateInputValue(rounded));
+            setEventStartTime(toTimeInputValue(rounded));
+            setEventEndDate(toDateInputValue(roundedEnd));
+            setEventEndTime(toTimeInputValue(roundedEnd));
         } catch (error: any) {
             setCalendarError(error?.message || String(error));
         } finally {
@@ -1256,8 +1377,10 @@ function CalendarRoute({
         start.setHours(9, 0, 0, 0);
         const end = new Date(start);
         end.setHours(end.getHours() + 1);
-        setEventStart(toDatetimeLocal(start));
-        setEventEnd(toDatetimeLocal(end));
+        setEventStartDate(toDateInputValue(start));
+        setEventStartTime(toTimeInputValue(start));
+        setEventEndDate(toDateInputValue(end));
+        setEventEndTime(toTimeInputValue(end));
         setShowAddEventModal(true);
     }
 
@@ -1397,6 +1520,7 @@ function CalendarRoute({
                                 return (
                                     <div
                                         key={key}
+                                        data-calendar-day-key={key}
                                         className={cn(
                                             'min-h-36 border-r border-b border-slate-200 p-2 last:border-r-0 dark:border-[#3a3d44]',
                                             !isCurrentMonth && 'bg-slate-50 dark:bg-[#26292f]',
@@ -1404,7 +1528,7 @@ function CalendarRoute({
                                         onContextMenu={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
-                                            setDayContextMenu({x: event.clientX, y: event.clientY, dayKey: key});
+                                            openDayContextMenu(event.clientX, event.clientY, key);
                                         }}
                                     >
                                         <div className="mb-2 flex items-center justify-between">
@@ -1455,35 +1579,31 @@ function CalendarRoute({
 
             {dayContextMenu && (
                 <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setDayContextMenu(null)}
+                    ref={dayContextMenuRef}
+                    className="fixed z-50 min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#2b2d31]"
+                    style={{left: dayContextMenu.x, top: dayContextMenu.y}}
+                    onContextMenu={(event) => event.preventDefault()}
                 >
-                    <div
-                        className="absolute z-50 min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#2b2d31]"
-                        style={{left: dayContextMenu.x, top: dayContextMenu.y}}
-                        onClick={(event) => event.stopPropagation()}
+                    <button
+                        type="button"
+                        className="block w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#35373c]"
+                        onClick={() => {
+                            setSelectedDayForModal(dayContextMenu.dayKey);
+                            setDayContextMenu(null);
+                        }}
                     >
-                        <button
-                            type="button"
-                            className="block w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#35373c]"
-                            onClick={() => {
-                                setSelectedDayForModal(dayContextMenu.dayKey);
-                                setDayContextMenu(null);
-                            }}
-                        >
-                            View all events ({(eventsByDay.get(dayContextMenu.dayKey) ?? []).length})
-                        </button>
-                        <button
-                            type="button"
-                            className="block w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#35373c]"
-                            onClick={() => {
-                                openNewEventForDay(dayContextMenu.dayKey);
-                                setDayContextMenu(null);
-                            }}
-                        >
-                            New event on this day
-                        </button>
-                    </div>
+                        View all events ({(eventsByDay.get(dayContextMenu.dayKey) ?? []).length})
+                    </button>
+                    <button
+                        type="button"
+                        className="block w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#35373c]"
+                        onClick={() => {
+                            openNewEventForDay(dayContextMenu.dayKey);
+                            setDayContextMenu(null);
+                        }}
+                    >
+                        New event on this day
+                    </button>
                 </div>
             )}
 
@@ -1610,28 +1730,56 @@ function CalendarRoute({
                                         className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
                                     />
                                 </label>
-                                <label className="block text-sm">
+                                <div className="block text-sm">
                                     <span
                                         className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Start</span>
-                                    <input
-                                        type="datetime-local"
-                                        value={eventStart}
-                                        onChange={(event) => setEventStart(event.target.value)}
-                                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
-                                        required
-                                    />
-                                </label>
-                                <label className="block text-sm">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="date"
+                                            lang={inputLocale}
+                                            value={eventStartDate}
+                                            onChange={(event) => setEventStartDate(event.target.value)}
+                                            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                            required
+                                        />
+                                        <input
+                                            type="time"
+                                            lang={inputLocale}
+                                            value={eventStartTime}
+                                            onChange={(event) => setEventStartTime(event.target.value)}
+                                            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                            required
+                                        />
+                                    </div>
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        {formatLocalDateTimePreview(eventStartDate, eventStartTime, systemLocale)}
+                                    </p>
+                                </div>
+                                <div className="block text-sm">
                                     <span
                                         className="mb-1 block font-medium text-slate-700 dark:text-slate-200">End</span>
-                                    <input
-                                        type="datetime-local"
-                                        value={eventEnd}
-                                        onChange={(event) => setEventEnd(event.target.value)}
-                                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
-                                        required
-                                    />
-                                </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="date"
+                                            lang={inputLocale}
+                                            value={eventEndDate}
+                                            onChange={(event) => setEventEndDate(event.target.value)}
+                                            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                            required
+                                        />
+                                        <input
+                                            type="time"
+                                            lang={inputLocale}
+                                            value={eventEndTime}
+                                            onChange={(event) => setEventEndTime(event.target.value)}
+                                            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                            required
+                                        />
+                                    </div>
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        {formatLocalDateTimePreview(eventEndDate, eventEndTime, systemLocale)}
+                                    </p>
+                                </div>
                                 <label className="block text-sm md:col-span-2">
                                     <span
                                         className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Location</span>
@@ -1723,13 +1871,31 @@ function addHours(date: Date, hours: number): Date {
     return out;
 }
 
-function toDatetimeLocal(date: Date): string {
+function toDateInputValue(date: Date): string {
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
     const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function toTimeInputValue(date: Date): string {
     const hour = `${date.getHours()}`.padStart(2, '0');
     const minute = `${date.getMinutes()}`.padStart(2, '0');
-    return `${year}-${month}-${day}T${hour}:${minute}`;
+    return `${hour}:${minute}`;
+}
+
+function composeLocalDateTime(dateValue: string, timeValue: string): Date | null {
+    const date = String(dateValue || '').trim();
+    const time = String(timeValue || '').trim();
+    if (!date || !time) return null;
+    const composed = new Date(`${date}T${time}`);
+    return Number.isNaN(composed.getTime()) ? null : composed;
+}
+
+function formatLocalDateTimePreview(dateValue: string, timeValue: string, locale: string): string {
+    const composed = composeLocalDateTime(dateValue, timeValue);
+    if (!composed) return 'Invalid date/time';
+    return formatSystemDateTime(composed.toISOString(), locale);
 }
 
 function formatEventTime(iso: string | null): string {

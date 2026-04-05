@@ -10,12 +10,15 @@ import WorkspaceLayout from '../layouts/WorkspaceLayout';
 type AppSettingsPageProps = {
     embedded?: boolean;
     targetAccountId?: number | null;
+    initialPanel?: 'app' | 'developer';
+    openUpdaterToken?: string | null;
 };
 
 type AccountEditor = UpdateAccountPayload & { id: number };
 
 type SettingsPanel =
     | { kind: 'app' }
+    | { kind: 'developer' }
     | { kind: 'account'; id: number };
 
 const defaultSettings: AppSettings = {
@@ -39,19 +42,28 @@ const defaultAutoUpdateState: AutoUpdateState = {
     message: null,
 };
 
-export default function AppSettingsPage({embedded = false, targetAccountId = null}: AppSettingsPageProps) {
+export default function AppSettingsPage({
+                                            embedded = false,
+                                            targetAccountId = null,
+                                            initialPanel = 'app',
+                                            openUpdaterToken = null,
+                                        }: AppSettingsPageProps) {
     const [settings, setSettings] = useState<AppSettings>(defaultSettings);
     const [autoUpdateState, setAutoUpdateState] = useState<AutoUpdateState>(defaultAutoUpdateState);
     const [updateActionBusy, setUpdateActionBusy] = useState(false);
     const [appStatus, setAppStatus] = useState<string | null>(null);
     const [accounts, setAccounts] = useState<PublicAccount[]>([]);
     const [panel, setPanel] = useState<SettingsPanel>(
-        typeof targetAccountId === 'number' ? {kind: 'account', id: targetAccountId} : {kind: 'app'},
+        typeof targetAccountId === 'number'
+            ? {kind: 'account', id: targetAccountId}
+            : (initialPanel === 'developer' ? {kind: 'developer'} : {kind: 'app'}),
     );
     const [editor, setEditor] = useState<AccountEditor | null>(null);
     const [savingAccount, setSavingAccount] = useState(false);
     const [deletingAccount, setDeletingAccount] = useState(false);
     const [accountStatus, setAccountStatus] = useState<string | null>(null);
+    const [developerStatus, setDeveloperStatus] = useState<string | null>(null);
+    const [showUpdaterModal, setShowUpdaterModal] = useState(false);
 
     const saveRequestSeqRef = useRef(0);
 
@@ -114,6 +126,21 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
         if (!accounts.some((account) => account.id === targetAccountId)) return;
         setPanel({kind: 'account', id: targetAccountId});
     }, [accounts, targetAccountId]);
+
+    useEffect(() => {
+        if (typeof targetAccountId === 'number') return;
+        if (initialPanel === 'developer') {
+            setPanel({kind: 'developer'});
+            return;
+        }
+        setPanel((prev) => (prev.kind === 'account' ? prev : {kind: 'app'}));
+    }, [initialPanel, targetAccountId]);
+
+    useEffect(() => {
+        if (!openUpdaterToken) return;
+        setPanel({kind: 'developer'});
+        setShowUpdaterModal(true);
+    }, [openUpdaterToken]);
 
     const selectedAccount = useMemo(
         () => (panel.kind === 'account' ? accounts.find((account) => account.id === panel.id) ?? null : null),
@@ -242,16 +269,60 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
         await window.electronAPI.quitAndInstallUpdate();
     }
 
+    async function onTriggerTestNotification() {
+        setDeveloperStatus('Sending test notification...');
+        try {
+            const result = await window.electronAPI.devShowNotification();
+            if (!result.supported) {
+                setDeveloperStatus('System notifications are not supported in this environment.');
+                return;
+            }
+            setDeveloperStatus(result.hasTarget
+                ? 'Test notification sent for first account/folder/message.'
+                : 'Notification sent, but no message exists in first account/folder.');
+        } catch (e: any) {
+            setDeveloperStatus(`Notification failed: ${e?.message || String(e)}`);
+        }
+    }
+
+    async function onPlayNotificationSound() {
+        setDeveloperStatus('Playing notification sound...');
+        try {
+            const result = await window.electronAPI.devPlayNotificationSound();
+            setDeveloperStatus(result.played ? 'Notification sound played.' : 'Could not play notification sound.');
+        } catch (e: any) {
+            setDeveloperStatus(`Sound failed: ${e?.message || String(e)}`);
+        }
+    }
+
+    async function onShowUpdaterWindow() {
+        setDeveloperStatus('Opening updater window in first app window...');
+        try {
+            const result = await window.electronAPI.devOpenUpdaterWindow();
+            if (result.opened) {
+                setDeveloperStatus('Updater window opened in first app window.');
+                return;
+            }
+            setDeveloperStatus('No app window available to open updater window.');
+        } catch (e: any) {
+            setDeveloperStatus(`Failed to open updater window: ${e?.message || String(e)}`);
+        }
+    }
+
     const isAccountPanel = panel.kind === 'account';
-    const activeStatus = isAccountPanel ? accountStatus : appStatus;
+    const isDeveloperPanel = panel.kind === 'developer';
+    const activeStatus = isAccountPanel ? accountStatus : (isDeveloperPanel ? developerStatus : appStatus);
     const hasStatusText = Boolean((activeStatus || '').trim());
     const shouldShowFooter = isAccountPanel || !embedded || hasStatusText;
-    const selectedSidebarItemId = panel.kind === 'account' ? `account:${panel.id}` : 'app';
+    const selectedSidebarItemId = panel.kind === 'account' ? `account:${panel.id}` : panel.kind;
     const sidebarSections: DynamicSidebarSection[] = useMemo(
         () => [
             {
                 id: 'primary',
-                items: [{id: 'app', label: 'Application'}],
+                items: [
+                    {id: 'app', label: 'Application', to: '/settings/application'},
+                    {id: 'developer', label: 'Developer', to: '/settings/developer'},
+                ],
             },
             {
                 id: 'accounts',
@@ -262,6 +333,7 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
                         id: `account:${account.id}`,
                         label: account.display_name?.trim() || account.email,
                         description: account.display_name?.trim() ? account.email : null,
+                        to: `/settings/account?accountId=${account.id}`,
                     })),
                     {
                         id: 'account:add',
@@ -275,18 +347,9 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
     );
 
     function onSidebarSelect(itemId: string): void {
-        if (itemId === 'app') {
-            setPanel({kind: 'app'});
-            return;
-        }
         if (itemId === 'account:add') {
             void window.electronAPI.openAddAccountWindow();
-            return;
         }
-        if (!itemId.startsWith('account:')) return;
-        const accountId = Number(itemId.slice('account:'.length));
-        if (!Number.isFinite(accountId)) return;
-        setPanel({kind: 'account', id: accountId});
     }
 
     const footerActions = (
@@ -332,7 +395,11 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
         <div>
             <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">App Settings</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isAccountPanel ? 'Manage account configuration and credentials' : 'Application preferences and updates'}
+                {isAccountPanel
+                    ? 'Manage account configuration and credentials'
+                    : isDeveloperPanel
+                        ? 'Developer testing tools and diagnostics'
+                        : 'Application preferences and updates'}
             </p>
         </div>
     );
@@ -357,7 +424,7 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
                     showStatusBar={false}
                     contentClassName="min-h-0 flex-1 overflow-auto p-5"
                 >
-                    {!isAccountPanel && (
+                    {panel.kind === 'app' && (
                         <div
                             className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]/70">
                             <div
@@ -449,17 +516,6 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
                                     />
                                 </label>
 
-                                <label
-                                    className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2.5 text-sm dark:border-[#3a3d44]">
-                                    <span className="text-slate-700 dark:text-slate-200">Developer mode</span>
-                                    <input
-                                        type="checkbox"
-                                        className="h-4 w-4 accent-sky-600 dark:accent-[#5865f2]"
-                                        checked={settings.developerMode}
-                                        onChange={(e) => void applySettingsPatch({developerMode: e.target.checked})}
-                                    />
-                                </label>
-
                                 <section className="rounded-md border border-slate-200 p-3 dark:border-[#3a3d44]">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
@@ -504,26 +560,128 @@ export default function AppSettingsPage({embedded = false, targetAccountId = nul
                                         </div>
                                     </div>
                                 </section>
-
-                                <section className="rounded-md border border-slate-200 p-3 dark:border-[#3a3d44]">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Developer
-                                                Tools</p>
-                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                                Open Chromium DevTools. Shortcut: Ctrl+Shift+I
-                                            </p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
-                                            onClick={() => void window.electronAPI.openDevTools()}
-                                        >
-                                            Open DevTools
-                                        </button>
-                                    </div>
-                                </section>
                             </div>
+                        </div>
+                    )}
+
+                    {panel.kind === 'developer' && (
+                        <div className="mx-auto w-full max-w-5xl space-y-4">
+                            <section
+                                className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Developer
+                                    Settings</h2>
+                                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                    Enable runtime diagnostics for in-app overlays and debug features.
+                                </p>
+                                <label
+                                    className="mt-3 flex items-center justify-between rounded-md border border-slate-200 px-3 py-2.5 text-sm dark:border-[#3a3d44]">
+                                    <span className="text-slate-700 dark:text-slate-200">Developer mode</span>
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 accent-sky-600 dark:accent-[#5865f2]"
+                                        checked={settings.developerMode}
+                                        onChange={(e) => void applySettingsPatch({developerMode: e.target.checked})}
+                                    />
+                                </label>
+                            </section>
+
+                            <section
+                                className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Test
+                                    Actions</h2>
+                                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                    Trigger desktop notifications, updater UI, and debugging tools.
+                                </p>
+                                <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                        onClick={() => void onTriggerTestNotification()}
+                                    >
+                                        Send Test Notification
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                        onClick={() => void onPlayNotificationSound()}
+                                    >
+                                        Play Notification Sound
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                        onClick={() => void onShowUpdaterWindow()}
+                                    >
+                                        Show Updater Window
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                        onClick={() => void window.electronAPI.openDevTools()}
+                                    >
+                                        Open DevTools
+                                    </button>
+                                </div>
+                            </section>
+
+                            {showUpdaterModal && (
+                                <div
+                                    className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 p-4">
+                                    <div
+                                        className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-[#3a3d44] dark:bg-[#1e1f22]">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Updater
+                                                    Window</h3>
+                                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                    Current version: {autoUpdateState.currentVersion}
+                                                </p>
+                                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                    {autoUpdateState.message || describeUpdatePhase(autoUpdateState)}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                onClick={() => setShowUpdaterModal(false)}
+                                            >
+                                                Close
+                                            </button>
+                                        </div>
+                                        <div className="mt-4 flex items-center gap-2">
+                                            {autoUpdateState.phase === 'downloaded' ? (
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                                                    onClick={() => void onInstallUpdate()}
+                                                >
+                                                    Restart to Update
+                                                </button>
+                                            ) : autoUpdateState.phase === 'available' || autoUpdateState.phase === 'downloading' ? (
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
+                                                    onClick={() => void onDownloadUpdate()}
+                                                    disabled={updateActionBusy || autoUpdateState.phase === 'downloading'}
+                                                >
+                                                    {autoUpdateState.phase === 'downloading'
+                                                        ? `Downloading${autoUpdateState.percent !== null ? ` ${Math.round(autoUpdateState.percent)}%` : '...'}`
+                                                        : 'Download Update'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={() => void onCheckForUpdates()}
+                                                    disabled={updateActionBusy || !autoUpdateState.enabled}
+                                                >
+                                                    Check for Updates
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

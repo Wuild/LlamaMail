@@ -605,7 +605,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                 variant="ghost"
                                 className="mr-1 h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white"
                                 onClick={() => {
-                                    window.location.hash = '/settings';
+                                    window.location.hash = '/settings/application';
                                 }}
                                 title="App settings"
                                 aria-label="App settings"
@@ -750,7 +750,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                         className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-[#454850] dark:hover:text-slate-100"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            window.location.hash = `/settings?accountId=${account.id}`;
+                                                            window.location.hash = `/settings/account?accountId=${account.id}`;
                                                         }}
                                                         title="Edit account"
                                                         aria-label="Edit account"
@@ -1527,7 +1527,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         label="Edit Account Settings"
                         icon={<Settings size={14}/>}
                         onClick={() => {
-                            window.location.hash = `/settings?accountId=${accountMenu.account.id}`;
+                            window.location.hash = `/settings/account?accountId=${accountMenu.account.id}`;
                             setAccountMenu(null);
                         }}
                     />

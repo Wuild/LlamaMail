@@ -125,6 +125,118 @@ Examples:
 - getMessage(messageId)
 - sendEmail(payload)
 
+### Renderer Routing and `window.electronAPI`
+
+Renderer uses React Router (`HashRouter`) and preload is the only bridge to main process functionality.
+
+Routing:
+
+- Main shell routes:
+    - `/email`
+    - `/contacts`
+    - `/calendar`
+    - `/settings/:tab`
+    - `/debug`
+    - `/help`
+- Settings tabs:
+    - `/settings` redirects to `/settings/application` (`replace`)
+    - `/settings/application`
+    - `/settings/developer`
+    - `/settings/account?accountId=<id>`
+- Invalid settings tabs must redirect to `/settings/application`.
+
+Update UX (main window):
+
+- Automatically check for updates after main window creation:
+    - once after ~15 seconds
+    - then every 6 hours
+- Show a titlebar update indicator when phase is:
+    - `available`
+    - `downloading`
+    - `downloaded`
+- Clicking indicator navigates to `/settings/application`.
+
+`window.electronAPI` surface (source: `src/preload/index.ts`):
+
+- Account/settings:
+    - `getAccounts()`
+    - `addAccount(payload)`
+    - `updateAccount(accountId, payload)`
+    - `deleteAccount(accountId)`
+    - `getAppSettings()`
+    - `updateAppSettings(patch)`
+    - `getSystemLocale()`
+- Mail/folders:
+    - `getUnreadCount()`
+    - `syncAccount(accountId)`
+    - `getFolders(accountId)`
+    - `createFolder(accountId, folderPath)`
+    - `deleteFolder(accountId, folderPath)`
+    - `updateFolderSettings(accountId, folderPath, payload)`
+    - `reorderCustomFolders(accountId, orderedFolderPaths)`
+    - `getFolderMessages(accountId, folderPath, limit?)`
+    - `searchMessages(accountId, query, folderPath?, limit?)`
+    - `getMessage(messageId)`
+    - `getMessageBody(messageId, requestId?)`
+    - `cancelMessageBody(requestId)`
+    - `setMessageRead(messageId, isRead)`
+    - `setMessageFlagged(messageId, isFlagged)`
+    - `moveMessage(messageId, targetFolderPath)`
+    - `deleteMessage(messageId)`
+    - `openMessageAttachment(messageId, attachmentIndex, action?)`
+- Compose/windows:
+    - `sendEmail(payload)`
+    - `saveDraft(payload)`
+    - `openAddAccountWindow()`
+    - `openComposeWindow(draft?)`
+    - `openMessageWindow(messageId?)`
+    - `getComposeDraft()`
+    - `getMessageWindowTarget()`
+- Contacts/calendar (DAV):
+    - `discoverDav(accountId)`
+    - `syncDav(accountId)`
+    - `getContacts(accountId, query?, limit?, addressBookId?)`
+    - `getRecentRecipients(accountId, query?, limit?)`
+    - `getAddressBooks(accountId)`
+    - `addAddressBook(accountId, name)`
+    - `deleteAddressBook(accountId, addressBookId)`
+    - `addContact(accountId, payload)`
+    - `updateContact(contactId, payload)`
+    - `deleteContact(contactId)`
+    - `exportContacts(accountId, payload)`
+    - `getCalendarEvents(accountId, startIso?, endIso?, limit?)`
+    - `addCalendarEvent(accountId, payload)`
+- Update:
+    - `getAutoUpdateState()`
+    - `checkForUpdates()`
+    - `downloadUpdate()`
+    - `quitAndInstallUpdate()`
+- Window/diagnostics:
+    - `minimizeWindow()`
+    - `toggleMaximizeWindow()`
+    - `closeWindow()`
+    - `isWindowMaximized()`
+    - `openDevTools()`
+    - `getDebugLogs(limit?)`
+    - `clearDebugLogs()`
+    - `pickComposeAttachments()`
+- Developer test actions:
+    - `devShowNotification(payload?)`
+    - `devPlayNotificationSound()`
+    - `devOpenUpdaterWindow()`
+- Event subscriptions:
+    - `onAccountAdded(cb)`
+    - `onAccountUpdated(cb)`
+    - `onAccountDeleted(cb)`
+    - `onUnreadCountUpdated(cb)`
+    - `onAccountSyncStatus(cb)`
+    - `onComposeDraft(cb)`
+    - `onAppSettingsUpdated(cb)`
+    - `onOpenMessageTarget(cb)`
+    - `onMessageWindowTarget(cb)`
+    - `onDebugLog(cb)`
+    - `onAutoUpdateStatus(cb)`
+
 ---
 
 ## 📦 Core Features (MVP)

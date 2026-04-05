@@ -30,7 +30,7 @@ import {registerSettingsIpc} from './ipc/settings.js';
 import {broadcastAutoUpdateState, registerUpdaterIpc} from './ipc/updater.js';
 import {registerWindowIpc} from './ipc/windows.js';
 import {getAppSettings, getAppSettingsSync, getSpellCheckerLanguages} from './settings/store.js';
-import {initAutoUpdater, runStartupUpdateFlow, setAutoUpdateEnabled} from './updater/autoUpdate.js';
+import {checkForUpdates, initAutoUpdater, runStartupUpdateFlow, setAutoUpdateEnabled} from './updater/autoUpdate.js';
 import type {ComposeDraftPayload} from './windows/composeWindow.js';
 import {openComposeWindow} from './windows/composeWindow.js';
 import {getAddAccountWindow, openAddAccountWindow} from './windows/addAccountWindow.js';
@@ -46,6 +46,8 @@ let isQuitting = false;
 let currentUnreadCount = 0;
 const pendingMailtoUrls: string[] = [];
 let stopDebugForwarding: (() => void) | null = null;
+let backgroundUpdateCheckTimer: ReturnType<typeof setInterval> | null = null;
+let initialBackgroundUpdateCheckTimer: ReturnType<typeof setTimeout> | null = null;
 const appIconPath = resolveAppIconPath();
 const trayIconPath = resolveTrayIconPath();
 const appIconPngBase64 = appIconPath && fs.existsSync(appIconPath) ? fs.readFileSync(appIconPath).toString('base64') : null;
@@ -128,6 +130,7 @@ function createWindow() {
         }
     });
     mainWindow = win;
+    ensureBackgroundUpdateChecks();
     win.webContents.on('before-input-event', (event, input) => {
         if (input.type !== 'keyDown') return;
         const key = String(input.key || '').toLowerCase();
@@ -162,6 +165,23 @@ function createWindow() {
             console.error('Failed to load main window (prod):', error);
         });
     }
+}
+
+function triggerBackgroundUpdateCheck(reason: string): void {
+    void checkForUpdates().catch((error) => {
+        console.warn(`Background update check failed (${reason}):`, error);
+    });
+}
+
+function ensureBackgroundUpdateChecks(): void {
+    if (initialBackgroundUpdateCheckTimer || backgroundUpdateCheckTimer) return;
+    initialBackgroundUpdateCheckTimer = setTimeout(() => {
+        initialBackgroundUpdateCheckTimer = null;
+        triggerBackgroundUpdateCheck('initial-main-window');
+    }, 15000);
+    backgroundUpdateCheckTimer = setInterval(() => {
+        triggerBackgroundUpdateCheck('interval-main-window');
+    }, 6 * 60 * 60 * 1000);
 }
 
 function loadMainWindowState(): MainWindowState | null {
@@ -232,6 +252,16 @@ function rectsIntersect(
 }
 
 function buildTrayIcon(unreadCount: number) {
+    if (process.platform === 'win32') {
+        const trayPath = resolveWindowsTrayIconPath() || trayIconPath || appIconPath;
+        if (trayPath) {
+            const image = nativeImage.createFromPath(trayPath);
+            if (!image.isEmpty()) {
+                return image.resize({width: 16, height: 16});
+            }
+        }
+    }
+
     if (process.platform === 'linux') {
         const trayPath = trayIconPath || appIconPath || path.join(app.getAppPath(), 'build/icons/64x64.png');
         const image = nativeImage.createFromPath(trayPath);
@@ -315,20 +345,42 @@ function focusMainWindowAndOpenMessage(target: {
     folderPath: string;
     messageId: number
 } | null): void {
+    showMainWindow();
     if (!target) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
     const sendTarget = () => {
         if (!mainWindow || mainWindow.isDestroyed()) return;
-        mainWindow.webContents.send('open-message-target', target);
+        try {
+            mainWindow.webContents.send('open-message-target', target);
+        } catch {
+            // ignore renderer messaging failures from notification click handlers
+        }
     };
 
-    if (!mainWindow || mainWindow.isDestroyed()) {
-        createWindow();
+    const navigateToMailThenSendTarget = () => {
         if (!mainWindow || mainWindow.isDestroyed()) return;
-        mainWindow.webContents.once('did-finish-load', sendTarget);
-    } else {
-        sendTarget();
+        const wc = mainWindow.webContents;
+        void wc.executeJavaScript(`
+            try {
+                if (!window.location.hash.startsWith('#/email')) {
+                    window.location.hash = '/email';
+                }
+            } catch {
+                // ignore route adjustment failures
+            }
+        `).catch(() => undefined).finally(() => {
+            setTimeout(sendTarget, 120);
+        });
+    };
+
+    if (mainWindow.webContents.isLoadingMainFrame()) {
+        mainWindow.webContents.once('did-finish-load', () => {
+            navigateToMailThenSendTarget();
+        });
+        return;
     }
-    showMainWindow();
+    navigateToMailThenSendTarget();
 }
 
 function showMainWindow(): void {
@@ -347,12 +399,17 @@ function showMainWindow(): void {
 
 function resolveAppIconPath(): string | null {
     const candidates = [
+        path.join(app.getAppPath(), 'build/icon.ico'),
         path.join(app.getAppPath(), 'build/icons/512x512.png'),
         path.join(app.getAppPath(), 'build/icon.png'),
+        path.join(app.getAppPath(), 'src/resources/luna.ico'),
         path.join(app.getAppPath(), 'src/resources/luna.png'),
+        path.join(__dirname, '../resources/luna.ico'),
         path.join(__dirname, '../resources/luna.png'),
+        path.join(process.cwd(), 'build/icon.ico'),
         path.join(process.cwd(), 'build/icons/512x512.png'),
         path.join(process.cwd(), 'build/icon.png'),
+        path.join(process.cwd(), 'src/resources/luna.ico'),
         path.join(process.cwd(), 'src/resources/luna.png'),
     ];
     for (const candidate of candidates) {
@@ -363,11 +420,35 @@ function resolveAppIconPath(): string | null {
 
 function resolveTrayIconPath(): string | null {
     const candidates = [
+        path.join(app.getAppPath(), 'build/lunatray.ico'),
         path.join(app.getAppPath(), 'build/lunatray.png'),
+        path.join(app.getAppPath(), 'src/resources/lunatray.ico'),
         path.join(app.getAppPath(), 'src/resources/lunatray.png'),
+        path.join(__dirname, '../resources/lunatray.ico'),
         path.join(__dirname, '../resources/lunatray.png'),
+        path.join(process.cwd(), 'build/lunatray.ico'),
         path.join(process.cwd(), 'build/lunatray.png'),
+        path.join(process.cwd(), 'src/resources/lunatray.ico'),
         path.join(process.cwd(), 'src/resources/lunatray.png'),
+    ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) return candidate;
+    }
+    return null;
+}
+
+function resolveWindowsTrayIconPath(): string | null {
+    const candidates = [
+        path.join(app.getAppPath(), 'build/lunatray.ico'),
+        path.join(app.getAppPath(), 'build/icon.ico'),
+        path.join(app.getAppPath(), 'src/resources/lunatray.ico'),
+        path.join(app.getAppPath(), 'src/resources/luna.ico'),
+        path.join(__dirname, '../resources/lunatray.ico'),
+        path.join(__dirname, '../resources/luna.ico'),
+        path.join(process.cwd(), 'build/lunatray.ico'),
+        path.join(process.cwd(), 'build/icon.ico'),
+        path.join(process.cwd(), 'src/resources/lunatray.ico'),
+        path.join(process.cwd(), 'src/resources/luna.ico'),
     ];
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) return candidate;
@@ -721,6 +802,14 @@ if (!gotSingleInstanceLock) {
 
     app.on('before-quit', () => {
         isQuitting = true;
+        if (initialBackgroundUpdateCheckTimer) {
+            clearTimeout(initialBackgroundUpdateCheckTimer);
+            initialBackgroundUpdateCheckTimer = null;
+        }
+        if (backgroundUpdateCheckTimer) {
+            clearInterval(backgroundUpdateCheckTimer);
+            backgroundUpdateCheckTimer = null;
+        }
         if (stopDebugForwarding) {
             stopDebugForwarding();
             stopDebugForwarding = null;

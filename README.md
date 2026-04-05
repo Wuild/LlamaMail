@@ -81,6 +81,13 @@ src/
     pages/
 ```
 
+## Renderer IPC and Routing
+
+See [AGENTS.md](AGENTS.md) for:
+
+- current `window.electronAPI` functions exposed by preload
+- route structure and settings tab navigation (`/settings/:tab`)
+
 ## License
 
 ISC. See [LICENSE](LICENSE).

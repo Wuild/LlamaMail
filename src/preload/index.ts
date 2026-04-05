@@ -403,6 +403,18 @@ export interface AutoUpdateState {
     message: string | null;
 }
 
+export interface DevNotificationPayload {
+    title?: string;
+    body?: string;
+    route?: string | null;
+}
+
+export interface DevShowNotificationResult {
+    ok: true;
+    supported: boolean;
+    hasTarget: boolean;
+}
+
 const api = {
     getAccounts: (): Promise<PublicAccount[]> => ipcRenderer.invoke('get-accounts'),
     addAccount: (account: AddAccountPayload): Promise<{ id: number; email: string }> =>
@@ -549,6 +561,12 @@ const api = {
         ipcRenderer.invoke('download-update'),
     quitAndInstallUpdate: (): Promise<{ ok: true }> =>
         ipcRenderer.invoke('quit-and-install-update'),
+    devShowNotification: (payload?: DevNotificationPayload): Promise<DevShowNotificationResult> =>
+        ipcRenderer.invoke('dev-show-notification', payload ?? null),
+    devPlayNotificationSound: (): Promise<{ ok: true; played: boolean }> =>
+        ipcRenderer.invoke('dev-play-notification-sound'),
+    devOpenUpdaterWindow: (): Promise<{ ok: true; opened: boolean }> =>
+        ipcRenderer.invoke('dev-open-updater-window'),
     onAccountAdded: (callback: (payload: { id: number; email: string }) => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent, payload: {
             id: number;
