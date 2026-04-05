@@ -145,10 +145,14 @@
       "baseVersion": "24.08"
     },
     "win": {
+      "artifactName": "${productName}.Setup.${version}.${ext}",
       "icon": "build/icon.ico",
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "differentialPackage": true
     }
   }
 }

@@ -41,6 +41,7 @@ const updateState: AutoUpdateState = {
 let initialized = false;
 let notifyRenderer: ((state: AutoUpdateState) => void) | null = null;
 let autoUpdateEnabledByUser = true;
+const TRANSIENT_RETRY_DELAY_MS = 1500;
 
 function setState(patch: Partial<AutoUpdateState>): void {
     Object.assign(updateState, patch);
@@ -66,6 +67,7 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
 
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.disableDifferentialDownload = false;
 
     autoUpdater.on('checking-for-update', () => {
         setState({
@@ -181,11 +183,11 @@ export async function checkForUpdates(): Promise<AutoUpdateState> {
     }
 
     try {
-        await autoUpdater.checkForUpdates();
+        await runWithTransientRetry('check', () => autoUpdater.checkForUpdates());
     } catch (error: any) {
         setState({
             phase: 'error',
-            message: error?.message || String(error),
+            message: getUpdateErrorMessage(error, 'check'),
         });
     }
 
@@ -215,11 +217,11 @@ export async function downloadUpdate(): Promise<AutoUpdateState> {
             phase: 'downloading',
             message: 'Starting update download...',
         });
-        await autoUpdater.downloadUpdate();
+        await runWithTransientRetry('download', () => autoUpdater.downloadUpdate());
     } catch (error: any) {
         setState({
             phase: 'error',
-            message: error?.message || String(error),
+            message: getUpdateErrorMessage(error, 'download'),
         });
     }
     return getAutoUpdateState();
@@ -265,4 +267,44 @@ export async function runStartupUpdateFlow(): Promise<'proceed' | 'installing'> 
     }
 
     return 'proceed';
+}
+
+async function runWithTransientRetry<T>(
+    operation: 'check' | 'download',
+    fn: () => Promise<T>,
+): Promise<T> {
+    try {
+        return await fn();
+    } catch (error) {
+        if (!isTransientGatewayError(error)) throw error;
+        setState({
+            message: `Update ${operation} failed with 502. Retrying...`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
+        return await fn();
+    }
+}
+
+function isTransientGatewayError(error: unknown): boolean {
+    const message = String((error as any)?.message || error || '').toLowerCase();
+    return message.includes('status code 502')
+        || message.includes('status 502')
+        || message.includes('bad gateway');
+}
+
+function getUpdateErrorMessage(error: unknown, operation: 'check' | 'download'): string {
+    const base = String((error as any)?.message || error || `Update ${operation} failed.`);
+    if (isNotFoundAssetError(error)) {
+        return 'Update asset not found (404). Release files and latest.yml filename do not match.';
+    }
+    if (!isTransientGatewayError(error)) return base;
+    if (operation === 'download') {
+        return 'Update server returned 502 (Bad Gateway). Please retry in a moment.';
+    }
+    return 'Update check failed with 502 (Bad Gateway). Please try again shortly.';
+}
+
+function isNotFoundAssetError(error: unknown): boolean {
+    const message = String((error as any)?.message || error || '').toLowerCase();
+    return message.includes('status code 404') || message.includes('status 404');
 }
