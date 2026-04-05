@@ -765,7 +765,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                         className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-[#454850] dark:hover:text-slate-100"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            window.location.hash = `/settings/account?accountId=${account.id}`;
+                                                            window.location.hash = `/settings/account/${account.id}`;
                                                         }}
                                                         title="Edit account"
                                                         aria-label="Edit account"
@@ -1575,7 +1575,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         label="Edit Account Settings"
                         icon={<Settings size={14}/>}
                         onClick={() => {
-                            window.location.hash = `/settings/account?accountId=${accountMenu.account.id}`;
+                            window.location.hash = `/settings/account/${accountMenu.account.id}`;
                             setAccountMenu(null);
                         }}
                     />

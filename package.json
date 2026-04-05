@@ -113,15 +113,6 @@
         "repo": "LunaMail"
       }
     ],
-    "extraResources": [
-      {
-        "from": "node_modules",
-        "to": "node_modules",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
     "linux": {
       "target": [
         "AppImage",

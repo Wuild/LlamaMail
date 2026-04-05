@@ -53,6 +53,33 @@ const defaultAutoUpdateState: AutoUpdateState = {
     message: null,
 };
 
+type MailFilterConditionDraft = {
+    field: MailFilterField;
+    operator: MailFilterOperator;
+    value: string;
+};
+
+type MailFilterActionDraft = {
+    type: MailFilterActionType;
+    value: string;
+};
+
+type MailFilterDraft = {
+    id: number | null;
+    name: string;
+    enabled: boolean;
+    run_on_incoming: boolean;
+    match_mode: MailFilterMatchMode;
+    stop_processing: boolean;
+    conditions: MailFilterConditionDraft[];
+    actions: MailFilterActionDraft[];
+};
+
+type MailFilterModalState = {
+    mode: 'create' | 'edit';
+    draft: MailFilterDraft;
+} | null;
+
 export default function AppSettingsPage({
                                             embedded = false,
                                             targetAccountId = null,
@@ -79,6 +106,7 @@ export default function AppSettingsPage({
     const [runningFilterId, setRunningFilterId] = useState<number | null>(null);
     const [developerStatus, setDeveloperStatus] = useState<string | null>(null);
     const [showUpdaterModal, setShowUpdaterModal] = useState(false);
+    const [mailFilterModal, setMailFilterModal] = useState<MailFilterModalState>(null);
 
     const saveRequestSeqRef = useRef(0);
 
@@ -148,8 +176,12 @@ export default function AppSettingsPage({
             setPanel({kind: 'developer'});
             return;
         }
+        if (embedded) {
+            setPanel({kind: 'app'});
+            return;
+        }
         setPanel((prev) => (prev.kind === 'account' ? prev : {kind: 'app'}));
-    }, [initialPanel, targetAccountId]);
+    }, [embedded, initialPanel, targetAccountId]);
 
     useEffect(() => {
         if (!openUpdaterToken) return;
@@ -196,6 +228,7 @@ export default function AppSettingsPage({
         if (!selectedAccount) {
             setMailFilters([]);
             setAccountFolders([]);
+            setMailFilterModal(null);
             return;
         }
         let active = true;
@@ -279,57 +312,77 @@ export default function AppSettingsPage({
         }
     }
 
-    function updateFilterLocal(filterId: number, updater: (prev: MailFilter) => MailFilter): void {
-        setMailFilters((prev) => prev.map((filter) => (filter.id === filterId ? updater(filter) : filter)));
+    function onOpenCreateMailFilter() {
+        setMailFilterModal({
+            mode: 'create',
+            draft: createDefaultMailFilterDraft(mailFilters.length + 1),
+        });
     }
 
-    async function onAddMailFilter() {
-        if (!selectedAccount || mailFilterBusy) return;
-        setMailFilterBusy(true);
-        setAccountStatus('Creating filter...');
-        try {
-            const created = await window.electronAPI.saveMailFilter(selectedAccount.id, {
-                name: `New filter ${mailFilters.length + 1}`,
-                enabled: 1,
-                run_on_incoming: 1,
-                match_mode: 'all',
-                stop_processing: 1,
-                conditions: [{field: 'subject', operator: 'contains', value: ''}],
-                actions: [{type: 'move_to_folder', value: ''}],
-            });
-            setMailFilters((prev) => [...prev, created]);
-            setAccountStatus('Filter created.');
-        } catch (e: any) {
-            setAccountStatus(`Filter create failed: ${e?.message || String(e)}`);
-        } finally {
-            setMailFilterBusy(false);
+    function onOpenEditMailFilter(filter: MailFilter) {
+        setMailFilterModal({
+            mode: 'edit',
+            draft: mapMailFilterToDraft(filter),
+        });
+    }
+
+    function updateMailFilterDraft(updater: (prev: MailFilterDraft) => MailFilterDraft) {
+        setMailFilterModal((prev) => {
+            if (!prev) return prev;
+            return {...prev, draft: updater(prev.draft)};
+        });
+    }
+
+    async function onSaveMailFilterModal() {
+        if (!selectedAccount || !mailFilterModal || mailFilterBusy) return;
+        const {mode, draft} = mailFilterModal;
+        const name = draft.name.trim();
+        if (!name) {
+            setAccountStatus('Filter name is required.');
+            return;
         }
-    }
+        if (draft.match_mode !== 'all_messages' && draft.conditions.length === 0) {
+            setAccountStatus('Add at least one condition, or use "Match all messages".');
+            return;
+        }
+        if (draft.actions.length === 0) {
+            setAccountStatus('Add at least one action.');
+            return;
+        }
+        const invalidMoveAction = draft.actions.some((action) => action.type === 'move_to_folder' && !action.value.trim());
+        if (invalidMoveAction) {
+            setAccountStatus('Select a folder for every "Move to folder" action.');
+            return;
+        }
 
-    async function onSaveMailFilter(filter: MailFilter) {
-        if (!selectedAccount || mailFilterBusy) return;
         setMailFilterBusy(true);
-        setAccountStatus('Saving filter...');
+        setAccountStatus(mode === 'create' ? 'Creating filter...' : 'Saving filter...');
         try {
             const saved = await window.electronAPI.saveMailFilter(selectedAccount.id, {
-                id: filter.id,
-                name: filter.name,
-                enabled: filter.enabled,
-                run_on_incoming: filter.run_on_incoming,
-                match_mode: filter.match_mode,
-                stop_processing: filter.stop_processing,
-                conditions: filter.conditions.map((condition) => ({
+                id: draft.id ?? undefined,
+                name,
+                enabled: draft.enabled ? 1 : 0,
+                run_on_incoming: draft.run_on_incoming ? 1 : 0,
+                match_mode: draft.match_mode,
+                stop_processing: draft.stop_processing ? 1 : 0,
+                conditions: draft.conditions.map((condition) => ({
                     field: condition.field,
                     operator: condition.operator,
                     value: condition.value,
                 })),
-                actions: filter.actions.map((action) => ({
+                actions: draft.actions.map((action) => ({
                     type: action.type,
                     value: action.value,
                 })),
             });
-            setMailFilters((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
-            setAccountStatus('Filter saved.');
+            setMailFilters((prev) => {
+                if (mode === 'create') return [...prev, saved];
+                const found = prev.some((row) => row.id === saved.id);
+                if (!found) return [...prev, saved];
+                return prev.map((row) => (row.id === saved.id ? saved : row));
+            });
+            setMailFilterModal(null);
+            setAccountStatus(mode === 'create' ? 'Filter created.' : 'Filter saved.');
         } catch (e: any) {
             setAccountStatus(`Filter save failed: ${e?.message || String(e)}`);
         } finally {
@@ -358,6 +411,14 @@ export default function AppSettingsPage({
 
     async function onRunMailFilter(filterId?: number) {
         if (!selectedAccount) return;
+        if (mailFilterModal) {
+            setAccountStatus('Save the open filter first before running filters.');
+            return;
+        }
+        if (typeof filterId === 'number' && (!Number.isFinite(filterId) || filterId <= 0)) {
+            setAccountStatus('Save this filter before running it.');
+            return;
+        }
         setRunningFilterId(filterId ?? -1);
         setAccountStatus('Running filter...');
         try {
@@ -462,7 +523,7 @@ export default function AppSettingsPage({
                         id: `account:${account.id}`,
                         label: account.display_name?.trim() || account.email,
                         description: account.display_name?.trim() ? account.email : null,
-                        to: `/settings/account?accountId=${account.id}`,
+                        to: `/settings/account/${account.id}`,
                     })),
                     {
                         id: 'account:add',
@@ -484,16 +545,6 @@ export default function AppSettingsPage({
     const footerActions = (
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-                {isAccountPanel && (
-                    <button
-                        type="button"
-                        onClick={() => void onDeleteAccount()}
-                        disabled={!editor || deletingAccount}
-                        className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/30"
-                    >
-                        {deletingAccount ? 'Deleting...' : 'Delete Account'}
-                    </button>
-                )}
                 {hasStatusText && <span className="text-xs text-slate-500 dark:text-slate-400">{activeStatus}</span>}
             </div>
             <div className="flex items-center gap-2">
@@ -521,15 +572,27 @@ export default function AppSettingsPage({
     );
 
     const menubar = (
-        <div>
-            <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">App Settings</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isAccountPanel
-                    ? 'Manage account configuration and credentials'
-                    : isDeveloperPanel
-                        ? 'Developer testing tools and diagnostics'
-                        : 'Application preferences and updates'}
-            </p>
+        <div className="flex items-start gap-3">
+            {isAccountPanel && (
+                <button
+                    type="button"
+                    onClick={() => void onDeleteAccount()}
+                    disabled={!editor || deletingAccount}
+                    className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/30"
+                >
+                    {deletingAccount ? 'Deleting...' : 'Delete Account'}
+                </button>
+            )}
+            <div>
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">App Settings</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {isAccountPanel
+                        ? 'Manage account configuration and credentials'
+                        : isDeveloperPanel
+                            ? 'Developer testing tools and diagnostics'
+                            : 'Application preferences and updates'}
+                </p>
+            </div>
         </div>
     );
 
@@ -955,15 +1018,15 @@ export default function AppSettingsPage({
                                                 <button
                                                     type="button"
                                                     onClick={() => void onRunMailFilter()}
-                                                    disabled={runningFilterId !== null}
+                                                    disabled={runningFilterId !== null || mailFilterBusy || !!mailFilterModal}
                                                     className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
                                                 >
                                                     {runningFilterId === -1 ? 'Running...' : 'Run All'}
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => void onAddMailFilter()}
-                                                    disabled={mailFilterBusy}
+                                                    onClick={onOpenCreateMailFilter}
+                                                    disabled={mailFilterBusy || !!mailFilterModal}
                                                     className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
                                                 >
                                                     Add Filter
@@ -983,49 +1046,139 @@ export default function AppSettingsPage({
                                                     key={filter.id}
                                                     className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#3a3d44] dark:bg-[#1e1f22]"
                                                 >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <div
+                                                                className="text-sm font-semibold text-slate-900 dark:text-slate-100">{filter.name}</div>
+                                                            <div
+                                                                className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                                                <span
+                                                                    className={cn(
+                                                                        'rounded px-2 py-0.5',
+                                                                        filter.enabled
+                                                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                            : 'bg-slate-200 text-slate-700 dark:bg-[#3a3d44] dark:text-slate-300',
+                                                                    )}
+                                                                >
+                                                                    {filter.enabled ? 'Enabled' : 'Disabled'}
+                                                                </span>
+                                                                <span
+                                                                    className="rounded bg-slate-200 px-2 py-0.5 text-slate-700 dark:bg-[#3a3d44] dark:text-slate-300">
+                                                                    {filter.run_on_incoming ? 'Runs on new mail' : 'Manual only'}
+                                                                </span>
+                                                                <span
+                                                                    className="rounded bg-slate-200 px-2 py-0.5 text-slate-700 dark:bg-[#3a3d44] dark:text-slate-300">
+                                                                    Match: {filter.match_mode.replace('_', ' ')}
+                                                                </span>
+                                                            </div>
+                                                            <div
+                                                                className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                                                {filter.match_mode === 'all_messages'
+                                                                    ? 'Applies to all messages.'
+                                                                    : `${filter.conditions.length} condition${filter.conditions.length === 1 ? '' : 's'}`}
+                                                                {' · '}
+                                                                {filter.actions.length} action{filter.actions.length === 1 ? '' : 's'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-3 flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onOpenEditMailFilter(filter)}
+                                                            disabled={mailFilterBusy || !!mailFilterModal}
+                                                            className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void onRunMailFilter(filter.id)}
+                                                            disabled={runningFilterId !== null || mailFilterBusy || !!mailFilterModal}
+                                                            className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                        >
+                                                            {runningFilterId === filter.id ? 'Running...' : 'Run Filter'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void onDeleteMailFilter(filter.id)}
+                                                            disabled={mailFilterBusy}
+                                                            className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/30"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                    {mailFilterModal && (
+                                        <div
+                                            className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 p-4">
+                                            <div
+                                                className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-[#3a3d44] dark:bg-[#1e1f22]">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                                                            {mailFilterModal.mode === 'create' ? 'Create Filter' : 'Edit Filter'}
+                                                        </h3>
+                                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                            Save the filter before running it.
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                        onClick={() => setMailFilterModal(null)}
+                                                        disabled={mailFilterBusy}
+                                                    >
+                                                        Close
+                                                    </button>
+                                                </div>
+
+                                                <div className="mt-4 space-y-3">
                                                     <div
-                                                        className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+                                                        className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
                                                         <Field
                                                             label="Filter name"
-                                                            value={filter.name}
-                                                            onChange={(next) => updateFilterLocal(filter.id, (prev) => ({
+                                                            value={mailFilterModal.draft.name}
+                                                            onChange={(next) => updateMailFilterDraft((prev) => ({
                                                                 ...prev,
                                                                 name: next,
                                                             }))}
                                                         />
                                                         <label
-                                                            className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                                                            className="inline-flex h-10 items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={!!filter.enabled}
-                                                                onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                checked={mailFilterModal.draft.enabled}
+                                                                onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                     ...prev,
-                                                                    enabled: e.target.checked ? 1 : 0,
+                                                                    enabled: e.target.checked,
                                                                 }))}
                                                             />
                                                             Enabled
                                                         </label>
                                                         <label
-                                                            className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                                                            className="inline-flex h-10 items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={!!filter.run_on_incoming}
-                                                                onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                checked={mailFilterModal.draft.run_on_incoming}
+                                                                onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                     ...prev,
-                                                                    run_on_incoming: e.target.checked ? 1 : 0,
+                                                                    run_on_incoming: e.target.checked,
                                                                 }))}
                                                             />
                                                             Getting new mail
                                                         </label>
                                                     </div>
 
-                                                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                                         <label className="block text-sm">
                                                             <span
                                                                 className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Match mode</span>
                                                             <select
-                                                                value={filter.match_mode}
-                                                                onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                value={mailFilterModal.draft.match_mode}
+                                                                onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                     ...prev,
                                                                     match_mode: e.target.value as MailFilterMatchMode,
                                                                 }))}
@@ -1040,25 +1193,25 @@ export default function AppSettingsPage({
                                                             className="inline-flex items-end gap-2 text-sm text-slate-700 dark:text-slate-200">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={!!filter.stop_processing}
-                                                                onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                checked={mailFilterModal.draft.stop_processing}
+                                                                onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                     ...prev,
-                                                                    stop_processing: e.target.checked ? 1 : 0,
+                                                                    stop_processing: e.target.checked,
                                                                 }))}
                                                             />
                                                             Stop processing after this filter
                                                         </label>
                                                     </div>
 
-                                                    {filter.match_mode !== 'all_messages' && (
-                                                        <div className="mt-3 space-y-2">
+                                                    {mailFilterModal.draft.match_mode !== 'all_messages' && (
+                                                        <div className="space-y-2">
                                                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Conditions</p>
-                                                            {filter.conditions.map((condition, index) => (
-                                                                <div key={condition.id || index}
+                                                            {mailFilterModal.draft.conditions.map((condition, index) => (
+                                                                <div key={index}
                                                                      className="grid grid-cols-[140px_140px_1fr_auto] gap-2">
                                                                     <select
                                                                         value={condition.field}
-                                                                        onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                        onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                             ...prev,
                                                                             conditions: prev.conditions.map((row, rowIndex) => rowIndex === index ? {
                                                                                 ...row,
@@ -1074,7 +1227,7 @@ export default function AppSettingsPage({
                                                                     </select>
                                                                     <select
                                                                         value={condition.operator}
-                                                                        onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                        onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                             ...prev,
                                                                             conditions: prev.conditions.map((row, rowIndex) => rowIndex === index ? {
                                                                                 ...row,
@@ -1093,7 +1246,7 @@ export default function AppSettingsPage({
                                                                     <input
                                                                         type="text"
                                                                         value={condition.value || ''}
-                                                                        onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                        onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                             ...prev,
                                                                             conditions: prev.conditions.map((row, rowIndex) => rowIndex === index ? {
                                                                                 ...row,
@@ -1104,7 +1257,7 @@ export default function AppSettingsPage({
                                                                     />
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => updateFilterLocal(filter.id, (prev) => ({
+                                                                        onClick={() => updateMailFilterDraft((prev) => ({
                                                                             ...prev,
                                                                             conditions: prev.conditions.filter((_, rowIndex) => rowIndex !== index),
                                                                         }))}
@@ -1116,17 +1269,14 @@ export default function AppSettingsPage({
                                                             ))}
                                                             <button
                                                                 type="button"
-                                                                onClick={() => updateFilterLocal(filter.id, (prev) => ({
+                                                                onClick={() => updateMailFilterDraft((prev) => ({
                                                                     ...prev,
                                                                     conditions: [
                                                                         ...prev.conditions,
                                                                         {
-                                                                            id: 0,
-                                                                            filter_id: filter.id,
                                                                             field: 'subject',
                                                                             operator: 'contains',
-                                                                            value: '',
-                                                                            sort_order: prev.conditions.length,
+                                                                            value: ''
                                                                         },
                                                                     ],
                                                                 }))}
@@ -1137,14 +1287,14 @@ export default function AppSettingsPage({
                                                         </div>
                                                     )}
 
-                                                    <div className="mt-3 space-y-2">
+                                                    <div className="space-y-2">
                                                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Actions</p>
-                                                        {filter.actions.map((action, index) => (
-                                                            <div key={action.id || index}
+                                                        {mailFilterModal.draft.actions.map((action, index) => (
+                                                            <div key={index}
                                                                  className="grid grid-cols-[180px_1fr_auto] gap-2">
                                                                 <select
                                                                     value={action.type}
-                                                                    onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                    onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                         ...prev,
                                                                         actions: prev.actions.map((row, rowIndex) => rowIndex === index ? {
                                                                             ...row,
@@ -1163,7 +1313,7 @@ export default function AppSettingsPage({
                                                                 {action.type === 'move_to_folder' ? (
                                                                     <select
                                                                         value={action.value || ''}
-                                                                        onChange={(e) => updateFilterLocal(filter.id, (prev) => ({
+                                                                        onChange={(e) => updateMailFilterDraft((prev) => ({
                                                                             ...prev,
                                                                             actions: prev.actions.map((row, rowIndex) => rowIndex === index ? {
                                                                                 ...row,
@@ -1189,7 +1339,7 @@ export default function AppSettingsPage({
                                                                 )}
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => updateFilterLocal(filter.id, (prev) => ({
+                                                                    onClick={() => updateMailFilterDraft((prev) => ({
                                                                         ...prev,
                                                                         actions: prev.actions.filter((_, rowIndex) => rowIndex !== index),
                                                                     }))}
@@ -1201,17 +1351,11 @@ export default function AppSettingsPage({
                                                         ))}
                                                         <button
                                                             type="button"
-                                                            onClick={() => updateFilterLocal(filter.id, (prev) => ({
+                                                            onClick={() => updateMailFilterDraft((prev) => ({
                                                                 ...prev,
                                                                 actions: [
                                                                     ...prev.actions,
-                                                                    {
-                                                                        id: 0,
-                                                                        filter_id: filter.id,
-                                                                        type: 'move_to_folder',
-                                                                        value: '',
-                                                                        sort_order: prev.actions.length,
-                                                                    },
+                                                                    {type: 'move_to_folder', value: ''},
                                                                 ],
                                                             }))}
                                                             className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
@@ -1219,37 +1363,31 @@ export default function AppSettingsPage({
                                                             + Add action
                                                         </button>
                                                     </div>
-
-                                                    <div className="mt-3 flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => void onSaveMailFilter(filter)}
-                                                            disabled={mailFilterBusy}
-                                                            className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
-                                                        >
-                                                            Save Filter
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => void onRunMailFilter(filter.id)}
-                                                            disabled={runningFilterId !== null}
-                                                            className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
-                                                        >
-                                                            {runningFilterId === filter.id ? 'Running...' : 'Run Filter'}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => void onDeleteMailFilter(filter.id)}
-                                                            disabled={mailFilterBusy}
-                                                            className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/30"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
                                                 </div>
-                                            ))}
+
+                                                <div className="mt-4 flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void onSaveMailFilterModal()}
+                                                        disabled={mailFilterBusy}
+                                                        className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
+                                                    >
+                                                        {mailFilterBusy
+                                                            ? 'Saving...'
+                                                            : (mailFilterModal.mode === 'create' ? 'Create Filter' : 'Save Filter')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setMailFilterModal(null)}
+                                                        disabled={mailFilterBusy}
+                                                        className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </section>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -1269,6 +1407,39 @@ function describeUpdatePhase(state: AutoUpdateState): string {
     if (state.phase === 'downloaded') return `Update ${state.downloadedVersion ?? state.latestVersion ?? ''} is ready to install.`;
     if (state.phase === 'error') return 'Update check failed.';
     return 'Ready to check for updates.';
+}
+
+function createDefaultMailFilterDraft(index: number): MailFilterDraft {
+    return {
+        id: null,
+        name: `New filter ${index}`,
+        enabled: true,
+        run_on_incoming: true,
+        match_mode: 'all',
+        stop_processing: true,
+        conditions: [{field: 'subject', operator: 'contains', value: ''}],
+        actions: [{type: 'move_to_folder', value: ''}],
+    };
+}
+
+function mapMailFilterToDraft(filter: MailFilter): MailFilterDraft {
+    return {
+        id: filter.id,
+        name: filter.name,
+        enabled: !!filter.enabled,
+        run_on_incoming: !!filter.run_on_incoming,
+        match_mode: filter.match_mode,
+        stop_processing: !!filter.stop_processing,
+        conditions: filter.conditions.map((condition) => ({
+            field: condition.field,
+            operator: condition.operator,
+            value: condition.value || '',
+        })),
+        actions: filter.actions.map((action) => ({
+            type: action.type,
+            value: action.value || '',
+        })),
+    };
 }
 
 function Field({
