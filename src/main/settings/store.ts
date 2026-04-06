@@ -4,10 +4,14 @@ import path from 'path';
 
 export type AppLanguage = 'system' | 'en-US' | 'sv-SE';
 export type AppTheme = 'system' | 'light' | 'dark';
+export type MailView = 'side-list' | 'top-table';
 
 export interface AppSettings {
     language: AppLanguage;
     theme: AppTheme;
+    mailView: MailView;
+    blockRemoteContent: boolean;
+    remoteContentAllowlist: string[];
     minimizeToTray: boolean;
     syncIntervalMinutes: number;
     autoUpdateEnabled: boolean;
@@ -19,6 +23,9 @@ export type AppSettingsPatch = Partial<AppSettings>;
 const DEFAULT_APP_SETTINGS: AppSettings = {
     language: 'system',
     theme: 'system',
+    mailView: 'side-list',
+    blockRemoteContent: true,
+    remoteContentAllowlist: [],
     minimizeToTray: true,
     syncIntervalMinutes: 2,
     autoUpdateEnabled: true,
@@ -44,6 +51,23 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
         themeRaw === 'light' || themeRaw === 'dark' || themeRaw === 'system'
             ? themeRaw
             : DEFAULT_APP_SETTINGS.theme;
+    const mailViewRaw = input?.mailView;
+    const mailView: MailView =
+        mailViewRaw === 'top-table' || mailViewRaw === 'side-list'
+            ? mailViewRaw
+            : DEFAULT_APP_SETTINGS.mailView;
+    const blockRemoteContent =
+        typeof input?.blockRemoteContent === 'boolean'
+            ? input.blockRemoteContent
+            : DEFAULT_APP_SETTINGS.blockRemoteContent;
+    const remoteContentAllowlist = Array.isArray(input?.remoteContentAllowlist)
+        ? [...new Set(
+            input.remoteContentAllowlist
+                .map((entry) => String(entry || '').trim().toLowerCase())
+                .filter((entry) => entry.length > 0)
+                .slice(0, 500),
+        )]
+        : DEFAULT_APP_SETTINGS.remoteContentAllowlist;
 
     const syncRaw = Number(input?.syncIntervalMinutes);
     const syncIntervalMinutes = Number.isFinite(syncRaw)
@@ -66,6 +90,9 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     return {
         language,
         theme,
+        mailView,
+        blockRemoteContent,
+        remoteContentAllowlist,
         minimizeToTray,
         syncIntervalMinutes,
         autoUpdateEnabled,

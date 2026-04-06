@@ -1,6 +1,7 @@
 import {app} from 'electron';
 import type {ProgressInfo, UpdateDownloadedEvent, UpdateInfo} from 'electron-updater';
 import electronUpdater from 'electron-updater';
+import {createAppLogger} from '../debug/debugLog.js';
 
 const {autoUpdater} = electronUpdater;
 
@@ -42,15 +43,20 @@ let initialized = false;
 let notifyRenderer: ((state: AutoUpdateState) => void) | null = null;
 let autoUpdateEnabledByUser = true;
 const TRANSIENT_RETRY_DELAY_MS = 1500;
+const logger = createAppLogger('updater');
+let lastProgressBucket = -1;
 
 function setState(patch: Partial<AutoUpdateState>): void {
     Object.assign(updateState, patch);
+    logger.debug('State update phase=%s enabled=%s message=%s', updateState.phase, updateState.enabled, updateState.message ?? '');
     notifyRenderer?.({...updateState});
 }
 
 export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void {
+    logger.info('Initializing auto updater packaged=%s', app.isPackaged);
     notifyRenderer = onState;
     if (initialized) {
+        logger.debug('Auto updater already initialized');
         notifyRenderer({...updateState});
         return;
     }
@@ -70,6 +76,7 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
     autoUpdater.disableDifferentialDownload = false;
 
     autoUpdater.on('checking-for-update', () => {
+        logger.info('Checking for updates');
         setState({
             phase: 'checking',
             message: 'Checking for updates...',
@@ -80,6 +87,7 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
+        logger.info('Update available version=%s', info.version);
         setState({
             phase: 'available',
             latestVersion: info.version,
@@ -88,6 +96,7 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
     });
 
     autoUpdater.on('update-not-available', () => {
+        logger.info('Update not available');
         setState({
             phase: 'not-available',
             latestVersion: null,
@@ -96,6 +105,16 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
     });
 
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
+        const bucket = Math.floor((progress.percent || 0) / 5);
+        if (bucket !== lastProgressBucket) {
+            lastProgressBucket = bucket;
+            logger.debug(
+                'Download progress percent=%d transferred=%d total=%d',
+                Math.round(progress.percent || 0),
+                progress.transferred || 0,
+                progress.total || 0,
+            );
+        }
         setState({
             phase: 'downloading',
             percent: progress.percent,
@@ -106,6 +125,7 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
     });
 
     autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
+        logger.info('Update downloaded version=%s', event.version);
         setState({
             phase: 'downloaded',
             downloadedVersion: event.version,
@@ -116,6 +136,7 @@ export function initAutoUpdater(onState: (state: AutoUpdateState) => void): void
     });
 
     autoUpdater.on('error', (error: Error) => {
+        logger.error('Auto updater error: %s', error.message || String(error));
         setState({
             phase: 'error',
             message: error.message || String(error),
@@ -131,6 +152,7 @@ export function getAutoUpdateState(): AutoUpdateState {
 
 export function setAutoUpdateEnabled(enabled: boolean): void {
     autoUpdateEnabledByUser = Boolean(enabled);
+    logger.info('Set auto-update enabled=%s', autoUpdateEnabledByUser);
     if (!app.isPackaged) {
         setState({
             enabled: false,
@@ -165,6 +187,7 @@ export function setAutoUpdateEnabled(enabled: boolean): void {
 }
 
 export async function checkForUpdates(): Promise<AutoUpdateState> {
+    logger.info('checkForUpdates requested');
     if (!app.isPackaged) {
         setState({
             enabled: false,
@@ -184,7 +207,9 @@ export async function checkForUpdates(): Promise<AutoUpdateState> {
 
     try {
         await runWithTransientRetry('check', () => autoUpdater.checkForUpdates());
+        logger.info('checkForUpdates finished phase=%s', updateState.phase);
     } catch (error: any) {
+        logger.error('checkForUpdates failed: %s', (error as any)?.message || String(error));
         setState({
             phase: 'error',
             message: getUpdateErrorMessage(error, 'check'),
@@ -195,6 +220,7 @@ export async function checkForUpdates(): Promise<AutoUpdateState> {
 }
 
 export async function downloadUpdate(): Promise<AutoUpdateState> {
+    logger.info('downloadUpdate requested');
     if (!app.isPackaged) {
         setState({
             enabled: false,
@@ -217,8 +243,11 @@ export async function downloadUpdate(): Promise<AutoUpdateState> {
             phase: 'downloading',
             message: 'Starting update download...',
         });
+        lastProgressBucket = -1;
         await runWithTransientRetry('download', () => autoUpdater.downloadUpdate());
+        logger.info('downloadUpdate finished phase=%s', updateState.phase);
     } catch (error: any) {
+        logger.error('downloadUpdate failed: %s', (error as any)?.message || String(error));
         setState({
             phase: 'error',
             message: getUpdateErrorMessage(error, 'download'),
@@ -229,10 +258,12 @@ export async function downloadUpdate(): Promise<AutoUpdateState> {
 
 export function quitAndInstallUpdate(): void {
     if (!app.isPackaged) return;
+    logger.warn('quitAndInstallUpdate requested');
     autoUpdater.quitAndInstall();
 }
 
 export async function runStartupUpdateFlow(): Promise<'proceed' | 'installing'> {
+    logger.info('runStartupUpdateFlow started');
     if (!app.isPackaged) {
         setState({
             enabled: false,
@@ -253,11 +284,13 @@ export async function runStartupUpdateFlow(): Promise<'proceed' | 'installing'> 
     await checkForUpdates();
     const afterCheck = getAutoUpdateState();
     if (afterCheck.phase === 'available') {
+        logger.info('Startup flow found update version=%s, downloading', afterCheck.latestVersion ?? '');
         await downloadUpdate();
     }
 
     const afterDownload = getAutoUpdateState();
     if (afterDownload.phase === 'downloaded') {
+        logger.warn('Startup flow installing downloaded update version=%s', afterDownload.downloadedVersion ?? '');
         setState({
             message: 'Installing update and restarting...',
         });
@@ -277,6 +310,7 @@ async function runWithTransientRetry<T>(
         return await fn();
     } catch (error) {
         if (!isTransientGatewayError(error)) throw error;
+        logger.warn('Transient update %s error detected, retrying once', operation);
         setState({
             message: `Update ${operation} failed with 502. Retrying...`,
         });

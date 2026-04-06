@@ -1,6 +1,6 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {Forward, Paperclip, Reply, ReplyAll, Trash2} from 'lucide-react';
-import type {MessageBodyResult, MessageDetails} from '../../preload';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {FileText, Forward, Paperclip, Reply, ReplyAll, Trash2} from 'lucide-react';
+import type {AppSettings, MessageBodyResult, MessageDetails} from '../../preload';
 import {formatSystemDateTime} from '../lib/dateTime';
 import {
     buildForwardQuoteHtml,
@@ -17,6 +17,12 @@ import {
 import {clampToViewport, formatBytes} from '../lib/format';
 import WindowTitleBar from '../components/WindowTitleBar';
 import {useAppTheme} from '../hooks/useAppTheme';
+import {
+    buildSourceDocCsp,
+    enrichAnchorTitles,
+    extractEmailAddress,
+    isSenderAllowed
+} from '../features/mail/remoteContent';
 
 export default function MessageWindowPage() {
     useAppTheme();
@@ -27,9 +33,53 @@ export default function MessageWindowPage() {
     const [loading, setLoading] = useState(false);
     const [attachmentMenu, setAttachmentMenu] = useState<{ x: number; y: number; index: number } | null>(null);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
+    const [showSourceModal, setShowSourceModal] = useState(false);
+    const [messageSource, setMessageSource] = useState('');
+    const [sourceLoading, setSourceLoading] = useState(false);
+    const [sourceError, setSourceError] = useState<string | null>(null);
+    const sourceRequestSeqRef = useRef(0);
+    const [sessionRemoteAllowed, setSessionRemoteAllowed] = useState(false);
+    const [hoveredLinkUrl, setHoveredLinkUrl] = useState('');
+    const [isPointerOverMessageFrame, setIsPointerOverMessageFrame] = useState(false);
+    const [appSettings, setAppSettings] = useState<AppSettings>({
+        language: 'system',
+        theme: 'system',
+        mailView: 'side-list',
+        blockRemoteContent: true,
+        remoteContentAllowlist: [],
+        minimizeToTray: true,
+        syncIntervalMinutes: 2,
+        autoUpdateEnabled: true,
+        developerMode: false,
+    });
 
     useEffect(() => {
         window.electronAPI.getSystemLocale().then((locale) => setSystemLocale(locale || 'en-US')).catch(() => undefined);
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        window.electronAPI.getAppSettings().then((settings) => {
+            if (!active) return;
+            setAppSettings(settings);
+        }).catch(() => undefined);
+        const off = window.electronAPI.onAppSettingsUpdated?.((settings) => {
+            if (!active) return;
+            setAppSettings(settings);
+        });
+        return () => {
+            active = false;
+            if (typeof off === 'function') off();
+        };
+    }, []);
+
+    useEffect(() => {
+        const off = window.electronAPI.onLinkHoverUrl?.((url) => {
+            setHoveredLinkUrl(url || '');
+        });
+        return () => {
+            if (typeof off === 'function') off();
+        };
     }, []);
 
     useEffect(() => {
@@ -53,6 +103,13 @@ export default function MessageWindowPage() {
             setMessage(null);
             setBody(null);
             setAttachmentMenu(null);
+            setShowSourceModal(false);
+            setMessageSource('');
+            setSourceLoading(false);
+            setSourceError(null);
+            setSessionRemoteAllowed(false);
+            setHoveredLinkUrl('');
+            setIsPointerOverMessageFrame(false);
             return;
         }
         let active = true;
@@ -81,6 +138,12 @@ export default function MessageWindowPage() {
     }, [messageId]);
 
     useEffect(() => {
+        setSessionRemoteAllowed(false);
+        setHoveredLinkUrl('');
+        setIsPointerOverMessageFrame(false);
+    }, [messageId]);
+
+    useEffect(() => {
         if (!messageId || !message || message.is_read) return;
         let active = true;
         void window.electronAPI.markMessageRead(messageId).then((result) => {
@@ -92,22 +155,28 @@ export default function MessageWindowPage() {
         };
     }, [messageId, message]);
 
+    const senderWhitelisted = isSenderAllowed(message?.from_address, appSettings.remoteContentAllowlist || []);
+    const allowRemoteForMessage = !appSettings.blockRemoteContent || senderWhitelisted || sessionRemoteAllowed;
+
     const iframeSrcDoc = useMemo(() => {
         if (!body?.html) return null;
+        const csp = buildSourceDocCsp(allowRemoteForMessage);
+        const html = enrichAnchorTitles(body.html);
         return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <base target="_blank" />
     <style>
       html, body { width: 100%; margin: 0; box-sizing: border-box; }
       #lunamail-frame-content { box-sizing: border-box; padding: 16px; }
     </style>
   </head>
-  <body><div id="lunamail-frame-content">${body.html}</div></body>
+  <body><div id="lunamail-frame-content">${html}</div></body>
 </html>`;
-    }, [body]);
+    }, [allowRemoteForMessage, body]);
     const attachments = body?.attachments ?? [];
 
     useEffect(() => {
@@ -124,6 +193,20 @@ export default function MessageWindowPage() {
     useEffect(() => {
         setShowMessageDetails(false);
     }, [messageId]);
+
+    useEffect(() => {
+        if (!showSourceModal) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                setShowSourceModal(false);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [showSourceModal]);
 
     function composeWithDraft(draft: {
         to?: string | null;
@@ -199,6 +282,36 @@ export default function MessageWindowPage() {
             .catch(() => undefined);
     }
 
+    function allowRemoteContentForSender(): void {
+        const sender = extractEmailAddress(message?.from_address);
+        if (!sender) return;
+        const nextAllowlist = [...new Set([...(appSettings.remoteContentAllowlist || []), sender])];
+        setAppSettings((prev) => ({...prev, remoteContentAllowlist: nextAllowlist}));
+        void window.electronAPI.updateAppSettings({remoteContentAllowlist: nextAllowlist}).catch(() => undefined);
+    }
+
+    function onViewSource(): void {
+        if (!message) return;
+        const requestSeq = ++sourceRequestSeqRef.current;
+        setShowSourceModal(true);
+        setSourceLoading(true);
+        setSourceError(null);
+        setMessageSource('');
+        void window.electronAPI.getMessageSource(message.id)
+            .then((result) => {
+                if (sourceRequestSeqRef.current !== requestSeq) return;
+                setMessageSource(result.source);
+            })
+            .catch((error: any) => {
+                if (sourceRequestSeqRef.current !== requestSeq) return;
+                setSourceError(error?.message || String(error));
+            })
+            .finally(() => {
+                if (sourceRequestSeqRef.current !== requestSeq) return;
+                setSourceLoading(false);
+            });
+    }
+
     return (
         <div className="h-screen w-screen overflow-hidden bg-slate-100 dark:bg-[#2f3136]">
             <div className="flex h-full flex-col">
@@ -231,6 +344,14 @@ export default function MessageWindowPage() {
                     >
                         <Forward size={14}/>
                         <span>Forward</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3d44]"
+                        onClick={onViewSource}
+                    >
+                        <FileText size={14}/>
+                        <span>View source</span>
                     </button>
                     <span className="mx-1 h-6 w-px bg-slate-300 dark:bg-[#3a3d44]"/>
                     <button
@@ -293,27 +414,56 @@ export default function MessageWindowPage() {
                     )}
                 </header>
 
-                <main className="min-h-0 flex-1 bg-white">
-                    {loading && (
+                <main className="min-h-0 flex flex-1 flex-col bg-white">
+                    {Boolean(iframeSrcDoc && message && appSettings.blockRemoteContent && !allowRemoteForMessage) && (
                         <div
-                            className="flex h-full items-center justify-center text-slate-500 dark:text-slate-400">Loading
-                            message...</div>
+                            className="w-full shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-700/70 dark:bg-amber-900/20 dark:text-amber-300">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span>Remote content blocked for privacy.</span>
+                                <button
+                                    type="button"
+                                    className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200 dark:border-amber-600/70 dark:bg-amber-900/30 dark:hover:bg-amber-900/45"
+                                    onClick={() => setSessionRemoteAllowed(true)}
+                                >
+                                    Load once
+                                </button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200 dark:border-amber-600/70 dark:bg-amber-900/30 dark:hover:bg-amber-900/45"
+                                    onClick={allowRemoteContentForSender}
+                                >
+                                    Always allow sender
+                                </button>
+                            </div>
+                        </div>
                     )}
-                    {!loading && iframeSrcDoc && (
-                        <iframe
-                            title={`message-window-body-${message?.id || 'unknown'}`}
-                            srcDoc={iframeSrcDoc}
-                            sandbox="allow-popups allow-popups-to-escape-sandbox"
-                            className="h-full w-full border-0 bg-white"
-                        />
-                    )}
-                    {!loading && !iframeSrcDoc && (
-                        <div className="h-full overflow-auto bg-white p-4 text-slate-900">
+                    <div className="min-h-0 flex-1">
+                        {loading && (
+                            <div
+                                className="flex h-full items-center justify-center text-slate-500 dark:text-slate-400">Loading
+                                message...</div>
+                        )}
+                        {!loading && iframeSrcDoc && (
+                            <iframe
+                                title={`message-window-body-${message?.id || 'unknown'}`}
+                                srcDoc={iframeSrcDoc}
+                                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                className="h-full w-full border-0 bg-white"
+                                onMouseEnter={() => setIsPointerOverMessageFrame(true)}
+                                onMouseLeave={() => {
+                                    setIsPointerOverMessageFrame(false);
+                                    setHoveredLinkUrl('');
+                                }}
+                            />
+                        )}
+                        {!loading && !iframeSrcDoc && (
+                            <div className="h-full overflow-auto bg-white p-4 text-slate-900">
               <pre className="select-text whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
                 {body?.text || 'No body content available for this message.'}
               </pre>
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
                 </main>
                 {!loading && attachments.length > 0 && (
                     <div
@@ -356,6 +506,12 @@ export default function MessageWindowPage() {
                         </div>
                     </div>
                 )}
+                {isPointerOverMessageFrame && Boolean(hoveredLinkUrl) && (
+                    <div
+                        className="pointer-events-none fixed bottom-3 left-3 z-[1210] max-w-[min(60vw,56rem)] rounded-md border border-slate-300 bg-white/95 px-2.5 py-1.5 text-xs text-slate-700 shadow-md backdrop-blur dark:border-[#3a3d44] dark:bg-[#1f2125]/95 dark:text-slate-200">
+                        <span className="block truncate">{hoveredLinkUrl}</span>
+                    </div>
+                )}
                 {attachmentMenu && (
                     <div
                         className="fixed z-[1100] min-w-44 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#313338]"
@@ -385,6 +541,47 @@ export default function MessageWindowPage() {
                         >
                             Save As...
                         </button>
+                    </div>
+                )}
+                {showSourceModal && (
+                    <div
+                        className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 px-4 py-6"
+                        onClick={() => setShowSourceModal(false)}
+                    >
+                        <div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Message source"
+                            className="flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl dark:border-[#3a3d44] dark:bg-[#1f2125]"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <div
+                                className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-[#3a3d44]">
+                                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Message
+                                    source</h2>
+                                <button
+                                    type="button"
+                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
+                                    onClick={() => setShowSourceModal(false)}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                            <div className="min-h-0 flex-1 overflow-auto bg-slate-50 p-3 dark:bg-[#181a1f]">
+                                {sourceLoading && (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">Loading message
+                                        source...</p>
+                                )}
+                                {!sourceLoading && sourceError && (
+                                    <p className="text-sm text-red-700 dark:text-red-300">Failed to load
+                                        source: {sourceError}</p>
+                                )}
+                                {!sourceLoading && !sourceError && (
+                                    <pre
+                                        className="select-text whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-white p-3 font-mono text-xs leading-5 text-slate-900 dark:border-[#3a3d44] dark:bg-[#1f2125] dark:text-slate-100">{messageSource || '(No source available)'}</pre>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

@@ -13,7 +13,7 @@ import {
 import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
-import {onDebugLog} from './debug/debugLog.js';
+import {createAppLogger, onDebugLog} from './debug/debugLog.js';
 import {initDb} from './db/index.js';
 import {getAccounts} from './db/repositories/accountsRepo.js';
 import {
@@ -53,6 +53,7 @@ const linuxTrayIconPath = resolveLinuxTrayIconPath();
 const windowsTrayIconPath = resolveWindowsTrayIconPath();
 const appIconPngBase64 = appIconPath && fs.existsSync(appIconPath) ? fs.readFileSync(appIconPath).toString('base64') : null;
 const mainWindowStatePath = path.join(app.getPath('userData'), 'main-window-state.json');
+const logger = createAppLogger('main');
 
 type MainWindowState = {
     width: number;
@@ -63,9 +64,11 @@ type MainWindowState = {
 };
 
 function createWindow() {
+    logger.info('Creating main window');
     const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
     const restoredState = loadMainWindowState();
     const normalizedState = normalizeWindowState(restoredState);
+    logger.debug('Window state restored=%s normalized=%s', Boolean(restoredState), Boolean(normalizedState));
 
     const win = new BrowserWindow({
         width: normalizedState?.width ?? 1200,
@@ -131,6 +134,7 @@ function createWindow() {
         }
     });
     mainWindow = win;
+    logger.info('Main window created id=%d', win.id);
     ensureBackgroundUpdateChecks();
     win.webContents.on('before-input-event', (event, input) => {
         if (input.type !== 'keyDown') return;
@@ -169,13 +173,16 @@ function createWindow() {
 }
 
 function triggerBackgroundUpdateCheck(reason: string): void {
+    logger.info('Triggering background update check reason=%s', reason);
     void checkForUpdates().catch((error) => {
+        logger.warn('Background update check failed reason=%s error=%s', reason, (error as any)?.message || String(error));
         console.warn(`Background update check failed (${reason}):`, error);
     });
 }
 
 function ensureBackgroundUpdateChecks(): void {
     if (initialBackgroundUpdateCheckTimer || backgroundUpdateCheckTimer) return;
+    logger.info('Scheduling background update checks');
     initialBackgroundUpdateCheckTimer = setTimeout(() => {
         initialBackgroundUpdateCheckTimer = null;
         triggerBackgroundUpdateCheck('initial-main-window');
@@ -486,6 +493,12 @@ function playNotificationSound(): void {
 
 function applyRuntimeSettings(): void {
     const settings = getAppSettingsSync();
+    logger.info(
+        'Applying runtime settings theme=%s syncInterval=%d autoUpdate=%s',
+        settings.theme,
+        settings.syncIntervalMinutes,
+        settings.autoUpdateEnabled,
+    );
     nativeTheme.themeSource = settings.theme === 'system' ? 'system' : settings.theme;
     setAutoSyncIntervalMinutes(settings.syncIntervalMinutes);
     setAutoUpdateEnabled(settings.autoUpdateEnabled);
@@ -498,10 +511,12 @@ function applyRuntimeSettings(): void {
 function registerProtocolHandlers(): void {
     app.on('open-url', (event, url) => {
         event.preventDefault();
+        logger.info('Received open-url event url=%s', url);
         queueMailtoUrl(url);
     });
 
     app.on('second-instance', (_event, argv) => {
+        logger.info('Received second-instance event args=%d', argv.length);
         const mailtoUrl = findMailtoArg(argv);
         if (mailtoUrl) {
             queueMailtoUrl(mailtoUrl);
@@ -513,6 +528,7 @@ function registerProtocolHandlers(): void {
 
 function installExternalNavigationPolicy(): void {
     app.on('web-contents-created', (_event, contents) => {
+        logger.debug('web-contents-created id=%d', contents.id);
         contents.on('context-menu', (_menuEvent, params) => {
             const template: Electron.MenuItemConstructorOptions[] = [];
             const hasSelection = Boolean((params.selectionText || '').trim());
@@ -559,6 +575,10 @@ function installExternalNavigationPolicy(): void {
         });
 
         contents.setWindowOpenHandler(({url}) => {
+            if (isInternalAppUrl(url)) {
+                return {action: 'deny'};
+            }
+            logger.info('Blocked external window open and delegated to external handler url=%s', url);
             handleExternalUrl(url);
             return {action: 'deny'};
         });
@@ -566,7 +586,12 @@ function installExternalNavigationPolicy(): void {
         contents.on('will-navigate', (event, url) => {
             if (isInternalAppUrl(url)) return;
             event.preventDefault();
+            logger.info('Blocked navigation and delegated to external handler url=%s', url);
             handleExternalUrl(url);
+        });
+
+        contents.on('update-target-url', (_event, url) => {
+            contents.send('link-hover-url', url || '');
         });
     });
 }
@@ -587,6 +612,7 @@ function isInternalAppUrl(url: string): boolean {
 
 function handleExternalUrl(url: string): void {
     if (!url) return;
+    logger.debug('Handling external url=%s', url);
     if (/^mailto:/i.test(url)) {
         queueMailtoUrl(url);
         return;
@@ -598,6 +624,7 @@ function handleExternalUrl(url: string): void {
 
 function registerMailtoProtocolClient(): void {
     try {
+        logger.info('Registering mailto protocol client');
         if (process.defaultApp) {
             if (process.argv.length >= 2) {
                 app.setAsDefaultProtocolClient('mailto', process.execPath, [path.resolve(process.argv[1])]);
@@ -606,12 +633,14 @@ function registerMailtoProtocolClient(): void {
         }
         app.setAsDefaultProtocolClient('mailto');
     } catch (error) {
+        logger.warn('Failed to register mailto protocol: %s', (error as any)?.message || String(error));
         console.warn('Failed to register mailto protocol:', error);
     }
 }
 
 function queueMailtoUrl(url: string): void {
     if (!/^mailto:/i.test(url)) return;
+    logger.info('Queueing mailto url=%s', url);
     pendingMailtoUrls.push(url);
     flushPendingMailtoUrls();
 }
@@ -626,6 +655,7 @@ function flushPendingMailtoUrls(): void {
 }
 
 function openComposeFromMailto(url: string): void {
+    logger.info('Opening compose from mailto');
     const draft = parseComposeDraftFromMailto(url);
     if (!draft) return;
     void getAccounts().then((accounts) => {
@@ -728,6 +758,7 @@ function closeMainWindowForNoAccounts(): void {
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
+    logger.warn('Single instance lock unavailable, quitting');
     app.quit();
 } else {
     if (process.platform === 'linux') {
@@ -738,8 +769,10 @@ if (!gotSingleInstanceLock) {
     installExternalNavigationPolicy();
 
     app.whenReady().then(async () => {
+        logger.info('App ready start');
         // Initialize database and IPC handlers
         initDb();
+        logger.info('Database initialized');
         await getAppSettings();
         applyRuntimeSettings();
         setUnreadCountListener((count) => {
@@ -776,24 +809,29 @@ if (!gotSingleInstanceLock) {
         });
         registerUpdaterIpc();
         registerWindowIpc();
+        logger.info('IPC handlers registered');
         registerMailtoProtocolClient();
         initAutoUpdater((state) => {
             broadcastAutoUpdateState(state);
         });
+        logger.info('Auto updater initialized');
         stopDebugForwarding = onDebugLog((entry) => {
             for (const win of BrowserWindow.getAllWindows()) {
                 win.webContents.send('debug-log', entry);
             }
         });
+        logger.info('Debug forwarding active');
 
         openSplashWindow();
         const startupUpdateResult = await runStartupUpdateFlow();
+        logger.info('Startup update flow result=%s', startupUpdateResult);
         if (startupUpdateResult === 'installing') {
             return;
         }
         closeSplashWindow();
 
         const accounts = await getAccounts();
+        logger.info('Loaded accounts count=%d', accounts.length);
         if (accounts.length === 0) {
             openAddAccountWindow(undefined);
             attachAddAccountWindowCloseBehavior();
@@ -807,6 +845,7 @@ if (!gotSingleInstanceLock) {
         flushPendingMailtoUrls();
         updateUnreadIndicators(getCurrentUnreadCount());
         startAccountAutoSync();
+        logger.info('Auto sync started');
 
         app.on('activate', () => {
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -825,6 +864,7 @@ if (!gotSingleInstanceLock) {
     });
 
     app.on('before-quit', () => {
+        logger.info('App before-quit');
         isQuitting = true;
         if (initialBackgroundUpdateCheckTimer) {
             clearTimeout(initialBackgroundUpdateCheckTimer);
@@ -839,9 +879,11 @@ if (!gotSingleInstanceLock) {
             stopDebugForwarding = null;
         }
         stopAccountAutoSync();
+        logger.info('Auto sync stopped');
     });
 
     app.on('window-all-closed', () => {
+        logger.info('window-all-closed platform=%s', process.platform);
         if (process.platform !== 'darwin') app.quit();
     });
 }

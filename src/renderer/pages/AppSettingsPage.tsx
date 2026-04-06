@@ -17,11 +17,12 @@ import {useThemePreference} from '../hooks/useAppTheme';
 import ServiceSettingsCard from '../components/settings/ServiceSettingsCard';
 import DynamicSidebar, {type DynamicSidebarSection} from '../components/navigation/DynamicSidebar';
 import WorkspaceLayout from '../layouts/WorkspaceLayout';
+import {normalizeAllowlistEntry} from '../features/mail/remoteContent';
 
 type AppSettingsPageProps = {
     embedded?: boolean;
     targetAccountId?: number | null;
-    initialPanel?: 'app' | 'developer';
+    initialPanel?: 'app' | 'layout' | 'developer';
     openUpdaterToken?: string | null;
 };
 
@@ -29,12 +30,16 @@ type AccountEditor = UpdateAccountPayload & { id: number };
 
 type SettingsPanel =
     | { kind: 'app' }
+    | { kind: 'layout' }
     | { kind: 'developer' }
     | { kind: 'account'; id: number };
 
 const defaultSettings: AppSettings = {
     language: 'system',
     theme: 'system',
+    mailView: 'side-list',
+    blockRemoteContent: true,
+    remoteContentAllowlist: [],
     minimizeToTray: true,
     syncIntervalMinutes: 2,
     autoUpdateEnabled: true,
@@ -94,7 +99,7 @@ export default function AppSettingsPage({
     const [panel, setPanel] = useState<SettingsPanel>(
         typeof targetAccountId === 'number'
             ? {kind: 'account', id: targetAccountId}
-            : (initialPanel === 'developer' ? {kind: 'developer'} : {kind: 'app'}),
+            : (initialPanel === 'developer' ? {kind: 'developer'} : initialPanel === 'layout' ? {kind: 'layout'} : {kind: 'app'}),
     );
     const [editor, setEditor] = useState<AccountEditor | null>(null);
     const [savingAccount, setSavingAccount] = useState(false);
@@ -107,6 +112,7 @@ export default function AppSettingsPage({
     const [developerStatus, setDeveloperStatus] = useState<string | null>(null);
     const [showUpdaterModal, setShowUpdaterModal] = useState(false);
     const [mailFilterModal, setMailFilterModal] = useState<MailFilterModalState>(null);
+    const [remoteAllowlistInput, setRemoteAllowlistInput] = useState('');
 
     const saveRequestSeqRef = useRef(0);
 
@@ -176,11 +182,15 @@ export default function AppSettingsPage({
             setPanel({kind: 'developer'});
             return;
         }
+        if (initialPanel === 'layout') {
+            setPanel({kind: 'layout'});
+            return;
+        }
         if (embedded) {
             setPanel({kind: 'app'});
             return;
         }
-        setPanel((prev) => (prev.kind === 'account' ? prev : {kind: 'app'}));
+        setPanel((prev) => (prev.kind === 'account' ? prev : (prev.kind === 'layout' ? prev : {kind: 'app'})));
     }, [embedded, initialPanel, targetAccountId]);
 
     useEffect(() => {
@@ -261,6 +271,22 @@ export default function AppSettingsPage({
             if (requestSeq !== saveRequestSeqRef.current) return;
             setAppStatus(`Save failed: ${e?.message || String(e)}`);
         }
+    }
+
+    async function addRemoteAllowlistEntry(): Promise<void> {
+        const normalized = normalizeAllowlistEntry(remoteAllowlistInput);
+        if (!normalized) {
+            setAppStatus('Enter a valid sender email or domain.');
+            return;
+        }
+        const merged = [...new Set([...(settings.remoteContentAllowlist || []), normalized])];
+        setRemoteAllowlistInput('');
+        await applySettingsPatch({remoteContentAllowlist: merged});
+    }
+
+    async function removeRemoteAllowlistEntry(entry: string): Promise<void> {
+        const next = (settings.remoteContentAllowlist || []).filter((item) => item !== entry);
+        await applySettingsPatch({remoteContentAllowlist: next});
     }
 
     async function onSaveAccount() {
@@ -500,6 +526,7 @@ export default function AppSettingsPage({
     }
 
     const isAccountPanel = panel.kind === 'account';
+    const isLayoutPanel = panel.kind === 'layout';
     const isDeveloperPanel = panel.kind === 'developer';
     const activeStatus = isAccountPanel ? accountStatus : (isDeveloperPanel ? developerStatus : appStatus);
     const hasStatusText = Boolean((activeStatus || '').trim());
@@ -511,6 +538,7 @@ export default function AppSettingsPage({
                 id: 'primary',
                 items: [
                     {id: 'app', label: 'Application', to: '/settings/application'},
+                    {id: 'layout', label: 'Layout', to: '/settings/layout'},
                     {id: 'developer', label: 'Developer', to: '/settings/developer'},
                 ],
             },
@@ -588,6 +616,8 @@ export default function AppSettingsPage({
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                     {isAccountPanel
                         ? 'Manage account configuration and credentials'
+                        : isLayoutPanel
+                            ? 'Theme and mail view layout preferences'
                         : isDeveloperPanel
                             ? 'Developer testing tools and diagnostics'
                             : 'Application preferences and updates'}
@@ -621,37 +651,6 @@ export default function AppSettingsPage({
                             className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]/70">
                             <div
                                 className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
-                                <div className="block text-sm">
-                                    <span
-                                        className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Theme</span>
-                                    <div
-                                        className="inline-flex w-full overflow-hidden rounded-md border border-slate-300 dark:border-[#3a3d44]">
-                                        {[
-                                            {value: 'light', label: 'Light'},
-                                            {value: 'dark', label: 'Dark'},
-                                            {value: 'system', label: 'System'},
-                                        ].map((option) => {
-                                            const active = settings.theme === option.value;
-                                            return (
-                                                <button
-                                                    key={option.value}
-                                                    type="button"
-                                                    className={cn(
-                                                        'h-10 flex-1 border-r border-slate-300 text-sm transition-colors last:border-r-0 dark:border-[#3a3d44]',
-                                                        active
-                                                            ? 'bg-sky-600 text-white dark:bg-[#5865f2]'
-                                                            : 'bg-white text-slate-700 hover:bg-slate-100 dark:bg-[#1e1f22] dark:text-slate-200 dark:hover:bg-[#35373c]',
-                                                    )}
-                                                    onClick={() => void applySettingsPatch({
-                                                        theme: option.value as AppSettings['theme'],
-                                                    })}
-                                                >
-                                                    {option.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
 
                                 <label className="block text-sm">
                                     <span
@@ -752,6 +751,152 @@ export default function AppSettingsPage({
                                         </div>
                                     </div>
                                 </section>
+                            </div>
+                        </div>
+                    )}
+
+                    {panel.kind === 'layout' && (
+                        <div className="mx-auto w-full max-w-5xl space-y-4">
+                            <div
+                                className="rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]/70">
+                                <div
+                                    className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                    <div className="block text-sm">
+                                        <span
+                                            className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Theme</span>
+                                        <div
+                                            className="inline-flex w-full overflow-hidden rounded-md border border-slate-300 dark:border-[#3a3d44]">
+                                            {[
+                                                {value: 'light', label: 'Light'},
+                                                {value: 'dark', label: 'Dark'},
+                                                {value: 'system', label: 'System'},
+                                            ].map((option) => {
+                                                const active = settings.theme === option.value;
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        className={cn(
+                                                            'h-10 flex-1 border-r border-slate-300 text-sm transition-colors last:border-r-0 dark:border-[#3a3d44]',
+                                                            active
+                                                                ? 'bg-sky-600 text-white dark:bg-[#5865f2]'
+                                                                : 'bg-white text-slate-700 hover:bg-slate-100 dark:bg-[#1e1f22] dark:text-slate-200 dark:hover:bg-[#35373c]',
+                                                        )}
+                                                        onClick={() => void applySettingsPatch({
+                                                            theme: option.value as AppSettings['theme'],
+                                                        })}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div
+                                className="rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]/70">
+                                <div
+                                    className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                    <div className="block text-sm">
+                                        <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">Mail view</span>
+                                        <div
+                                            className="inline-flex w-full overflow-hidden rounded-md border border-slate-300 dark:border-[#3a3d44]">
+                                            {[
+                                                {value: 'side-list', label: 'Side List'},
+                                                {value: 'top-table', label: 'Top Table'},
+                                            ].map((option) => {
+                                                const active = settings.mailView === option.value;
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        className={cn(
+                                                            'h-10 flex-1 border-r border-slate-300 text-sm transition-colors last:border-r-0 dark:border-[#3a3d44]',
+                                                            active
+                                                                ? 'bg-sky-600 text-white dark:bg-[#5865f2]'
+                                                                : 'bg-white text-slate-700 hover:bg-slate-100 dark:bg-[#1e1f22] dark:text-slate-200 dark:hover:bg-[#35373c]',
+                                                        )}
+                                                        onClick={() => void applySettingsPatch({
+                                                            mailView: option.value as AppSettings['mailView'],
+                                                        })}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                            Side List keeps folders and message list side-by-side. Top Table places a
+                                            compact table above message preview.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div
+                                className="rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]/70">
+                                <div
+                                    className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#2b2d31]">
+                                    <label
+                                        className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2.5 text-sm dark:border-[#3a3d44]">
+                                        <span className="text-slate-700 dark:text-slate-200">Block remote content in emails</span>
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 accent-sky-600 dark:accent-[#5865f2]"
+                                            checked={settings.blockRemoteContent}
+                                            onChange={(event) => void applySettingsPatch({
+                                                blockRemoteContent: event.target.checked,
+                                            })}
+                                        />
+                                    </label>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Enabled by default to prevent remote image and media tracking pixels from
+                                        leaking open/read timing and network details.
+                                    </p>
+                                    <div className="pt-1">
+                                        <span
+                                            className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Allowlist senders/domains</span>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={remoteAllowlistInput}
+                                                onChange={(event) => setRemoteAllowlistInput(event.target.value)}
+                                                placeholder="sender@example.com or example.com"
+                                                className="h-9 min-w-[16rem] flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                                onKeyDown={(event) => {
+                                                    if (event.key !== 'Enter') return;
+                                                    event.preventDefault();
+                                                    void addRemoteAllowlistEntry();
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                onClick={() => void addRemoteAllowlistEntry()}
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {(settings.remoteContentAllowlist || []).length === 0 && (
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">No allowlist
+                                                    entries yet.</p>
+                                            )}
+                                            {(settings.remoteContentAllowlist || []).map((entry) => (
+                                                <button
+                                                    key={entry}
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200 dark:border-[#3a3d44] dark:bg-[#1f2125] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={() => void removeRemoteAllowlistEntry(entry)}
+                                                    title="Remove from allowlist"
+                                                >
+                                                    <span>{entry}</span>
+                                                    <span aria-hidden>×</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

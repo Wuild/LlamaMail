@@ -150,6 +150,11 @@ export interface MessageBodyResult {
     cached: boolean;
 }
 
+export interface MessageSourceResult {
+    messageId: number;
+    source: string;
+}
+
 export interface DavDiscoveryResult {
     accountId: number;
     carddavUrl: string | null;
@@ -349,10 +354,14 @@ export interface ComposeDraftPayload {
 
 export type AppLanguage = 'system' | 'en-US' | 'sv-SE';
 export type AppTheme = 'system' | 'light' | 'dark';
+export type MailView = 'side-list' | 'top-table';
 
 export interface AppSettings {
     language: AppLanguage;
     theme: AppTheme;
+    mailView: MailView;
+    blockRemoteContent: boolean;
+    remoteContentAllowlist: string[];
     minimizeToTray: boolean;
     syncIntervalMinutes: number;
     autoUpdateEnabled: boolean;
@@ -571,6 +580,8 @@ const api = {
         ipcRenderer.invoke('get-message', messageId),
     getMessageBody: (messageId: number, requestId?: string): Promise<MessageBodyResult> =>
         ipcRenderer.invoke('get-message-body', messageId, requestId),
+    getMessageSource: (messageId: number): Promise<MessageSourceResult> =>
+        ipcRenderer.invoke('get-message-source', messageId),
     openMessageAttachment: (
         messageId: number,
         attachmentIndex: number,
@@ -707,6 +718,11 @@ const api = {
         const listener = (_event: Electron.IpcRendererEvent, payload: AutoUpdateState) => callback(payload);
         ipcRenderer.on('auto-update-status', listener);
         return () => ipcRenderer.removeListener('auto-update-status', listener);
+    },
+    onLinkHoverUrl: (callback: (payload: string) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, payload: string) => callback(payload || '');
+        ipcRenderer.on('link-hover-url', listener);
+        return () => ipcRenderer.removeListener('link-hover-url', listener);
     },
 };
 

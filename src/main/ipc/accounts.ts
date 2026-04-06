@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {ImapFlow} from 'imapflow';
-import {createMailDebugLogger} from '../debug/debugLog.js';
+import {createAppLogger, createMailDebugLogger} from '../debug/debugLog.js';
 import {
     addAccount,
     type AddAccountPayload,
@@ -38,7 +38,13 @@ import {
     setServerMessageRead
 } from '../mail/actions.js';
 import {saveDraftEmail, type SaveDraftPayload, sendEmail, type SendEmailPayload} from '../mail/send.js';
-import {downloadMessageAttachment, syncAccountMailbox, syncMessageBody, type SyncSummary} from '../mail/sync.js';
+import {
+    downloadMessageAttachment,
+    syncAccountMailbox,
+    syncMessageBody,
+    syncMessageSource,
+    type SyncSummary
+} from '../mail/sync.js';
 import {verifyConnection, type VerifyPayload} from '../mail/verify.js';
 import {
     addAddressBook,
@@ -109,6 +115,7 @@ type FolderIdleState = {
 };
 
 const IDLE_RECONNECT_MAX_MS = 60000;
+const appLogger = createAppLogger('ipc:accounts');
 
 const idleWatchers = new Map<number, IdleWatcherState>();
 
@@ -182,15 +189,18 @@ function toVcf(contacts: Array<{
 export function registerAccountIpc(): void {
     // Get all accounts (without passwords)
     ipcMain.handle('get-accounts', async () => {
+        appLogger.debug('IPC get-accounts');
         return await getAccounts();
     });
 
     ipcMain.handle('get-unread-count', async () => {
+        appLogger.debug('IPC get-unread-count');
         return getTotalUnreadCount();
     });
 
     // Add account: persist metadata in DB, secret in keytar (via repo)
     ipcMain.handle('add-account', async (_event, account: AddAccountPayload) => {
+        appLogger.info('IPC add-account email=%s', account?.email ?? '');
         const created = await addAccount(account);
         blockedSyncAccounts.delete(created.id);
         for (const win of BrowserWindow.getAllWindows()) {
@@ -205,6 +215,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('update-account', async (_event, accountId: number, payload: UpdateAccountPayload) => {
+        appLogger.info('IPC update-account accountId=%d', accountId);
         const updated = await updateAccount(accountId, payload);
         blockedSyncAccounts.delete(accountId);
         for (const win of BrowserWindow.getAllWindows()) {
@@ -215,6 +226,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('delete-account', async (_event, accountId: number) => {
+        appLogger.warn('IPC delete-account accountId=%d', accountId);
         const deleted = await deleteAccount(accountId);
         blockedSyncAccounts.delete(accountId);
         for (const win of BrowserWindow.getAllWindows()) {
@@ -242,6 +254,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('send-email', async (_event, payload: SendEmailPayload) => {
+        appLogger.info('IPC send-email accountId=%d toLen=%d', payload.accountId, String(payload.to || '').length);
         const result = await sendEmail(payload);
         void runSyncAndBroadcast(payload.accountId, 'send').catch((error) => {
             console.warn('Post-send sync failed:', (error as any)?.message || String(error));
@@ -250,24 +263,29 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('save-draft', async (_event, payload: SaveDraftPayload) => {
+        appLogger.debug('IPC save-draft accountId=%d', payload.accountId);
         return await saveDraftEmail(payload);
     });
 
     ipcMain.handle('sync-account', async (_event, accountId: number) => {
+        appLogger.info('IPC sync-account accountId=%d', accountId);
         return await runSyncAndBroadcast(accountId, 'manual');
     });
 
     ipcMain.handle('get-folders', async (_event, accountId: number) => {
+        appLogger.debug('IPC get-folders accountId=%d', accountId);
         return listFoldersByAccount(accountId);
     });
 
     ipcMain.handle('create-folder', async (_event, accountId: number, folderPath: string) => {
+        appLogger.info('IPC create-folder accountId=%d folderPath=%s', accountId, folderPath);
         const created = await createServerFolder(accountId, folderPath);
         await runSyncAndBroadcast(accountId, 'create-folder');
         return created;
     });
 
     ipcMain.handle('delete-folder', async (_event, accountId: number, folderPath: string) => {
+        appLogger.warn('IPC delete-folder accountId=%d folderPath=%s', accountId, folderPath);
         const deleted = await deleteServerFolder(accountId, folderPath);
         const local = deleteFolderByPath(accountId, folderPath);
         await runSyncAndBroadcast(accountId, 'delete-folder');
@@ -281,6 +299,7 @@ export function registerAccountIpc(): void {
             color?: string | null;
             type?: string | null
         }) => {
+            appLogger.info('IPC update-folder-settings accountId=%d folderPath=%s', accountId, folderPath);
             return updateFolderSettings({
                 accountId,
                 folderPath,
@@ -292,14 +311,17 @@ export function registerAccountIpc(): void {
     );
 
     ipcMain.handle('reorder-custom-folders', async (_event, accountId: number, orderedFolderPaths: string[]) => {
+        appLogger.info('IPC reorder-custom-folders accountId=%d count=%d', accountId, orderedFolderPaths?.length ?? 0);
         return reorderCustomFolders(accountId, Array.isArray(orderedFolderPaths) ? orderedFolderPaths : []);
     });
 
     ipcMain.handle('get-folder-messages', async (_event, accountId: number, folderPath: string, limit?: number) => {
+        appLogger.debug('IPC get-folder-messages accountId=%d folderPath=%s limit=%s', accountId, folderPath, limit ?? '');
         return listMessagesByFolder(accountId, folderPath, limit ?? 100);
     });
 
     ipcMain.handle('get-mail-filters', async (_event, accountId: number) => {
+        appLogger.debug('IPC get-mail-filters accountId=%d', accountId);
         return listMailFilters(accountId);
     });
 
@@ -361,12 +383,20 @@ export function registerAccountIpc(): void {
     );
 
     ipcMain.handle('get-message', async (_event, messageId: number) => {
+        appLogger.debug('IPC get-message messageId=%d', messageId);
         return getMessageById(messageId);
     });
 
     ipcMain.handle(
         'search-messages',
         async (_event, accountId: number, query: string, folderPath?: string | null, limit?: number) => {
+            appLogger.debug(
+                'IPC search-messages accountId=%d folderPath=%s queryLen=%d limit=%s',
+                accountId,
+                folderPath ?? '',
+                (query || '').length,
+                limit ?? '',
+            );
             return searchMessages(accountId, query, folderPath ?? null, limit ?? 200);
         },
     );
@@ -495,6 +525,7 @@ export function registerAccountIpc(): void {
     );
 
     ipcMain.handle('get-message-body', async (event, messageId: number, requestId?: string) => {
+        appLogger.debug('IPC get-message-body messageId=%d requestId=%s', messageId, requestId ?? '');
         const key = `${event.sender.id}:${requestId ?? `msg-${messageId}`}`;
         let cancelled = false;
         let clientRef: any = null;
@@ -526,7 +557,13 @@ export function registerAccountIpc(): void {
         }
     });
 
+    ipcMain.handle('get-message-source', async (_event, messageId: number) => {
+        appLogger.debug('IPC get-message-source messageId=%d', messageId);
+        return syncMessageSource(messageId);
+    });
+
     ipcMain.handle('cancel-message-body', async (event, requestId: string) => {
+        appLogger.debug('IPC cancel-message-body requestId=%s', requestId);
         const key = `${event.sender.id}:${requestId}`;
         const req = bodyRequests.get(key);
         if (req) {
@@ -539,6 +576,12 @@ export function registerAccountIpc(): void {
     ipcMain.handle(
         'open-message-attachment',
         async (event, messageId: number, attachmentIndex: number, action?: 'open' | 'save' | 'prompt') => {
+            appLogger.info(
+                'IPC open-message-attachment messageId=%d attachmentIndex=%d action=%s',
+                messageId,
+                attachmentIndex,
+                action ?? 'prompt',
+            );
             const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
             const attachment = await downloadMessageAttachment(messageId, attachmentIndex);
             const safeName = sanitizeAttachmentFilename(attachment.filename);
@@ -607,6 +650,7 @@ export function registerAccountIpc(): void {
     );
 
     ipcMain.handle('set-message-read', async (_event, messageId: number, isRead: number) => {
+        appLogger.debug('IPC set-message-read messageId=%d isRead=%d', messageId, isRead);
         const result = await setServerMessageRead(messageId, isRead);
         notifyUnreadCountChanged();
         broadcastMessageReadUpdated(result);
@@ -614,6 +658,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('mark-message-read', async (_event, messageId: number) => {
+        appLogger.debug('IPC mark-message-read messageId=%d', messageId);
         const result = await setServerMessageRead(messageId, 1);
         notifyUnreadCountChanged();
         broadcastMessageReadUpdated(result);
@@ -621,6 +666,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('mark-message-unread', async (_event, messageId: number) => {
+        appLogger.debug('IPC mark-message-unread messageId=%d', messageId);
         const result = await setServerMessageRead(messageId, 0);
         notifyUnreadCountChanged();
         broadcastMessageReadUpdated(result);
@@ -628,6 +674,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('set-message-flagged', async (_event, messageId: number, isFlagged: number) => {
+        appLogger.debug('IPC set-message-flagged messageId=%d isFlagged=%d', messageId, isFlagged);
         const result = await setServerMessageFlagged(messageId, isFlagged);
         void runSyncAndBroadcast(result.accountId, 'flag-change').catch((error) => {
             console.warn('Post-flag sync failed:', (error as any)?.message || String(error));
@@ -636,10 +683,12 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('move-message', async (_event, messageId: number, targetFolderPath: string) => {
+        appLogger.info('IPC move-message messageId=%d targetFolderPath=%s', messageId, targetFolderPath);
         return await moveServerMessage(messageId, targetFolderPath);
     });
 
     ipcMain.handle('archive-message', async (_event, messageId: number) => {
+        appLogger.info('IPC archive-message messageId=%d', messageId);
         const ctx = getMessageContext(messageId);
         if (!ctx) throw new Error(`Message ${messageId} not found`);
         const archivePath = resolveArchiveFolderPath(ctx.accountId, ctx.folderPath);
@@ -648,6 +697,7 @@ export function registerAccountIpc(): void {
     });
 
     ipcMain.handle('delete-message', async (_event, messageId: number) => {
+        appLogger.warn('IPC delete-message messageId=%d', messageId);
         const ctx = getMessageContext(messageId);
         if (!ctx) throw new Error(`Message ${messageId} not found`);
         const {accountId} = deleteMessageLocally(messageId);
@@ -675,6 +725,7 @@ export function registerAccountIpc(): void {
 
 export function startAccountAutoSync(): void {
     if (autoSyncTimer) return;
+    appLogger.info('Starting account auto sync intervalMs=%d', autoSyncIntervalMs);
     void runAutoSyncCycle('startup');
     void ensureIdleWatchersForAllAccounts();
     autoSyncTimer = setInterval(() => {
@@ -697,6 +748,7 @@ function resolveArchiveFolderPath(accountId: number, currentFolderPath: string |
 
 export function stopAccountAutoSync(): void {
     if (!autoSyncTimer) return;
+    appLogger.info('Stopping account auto sync');
     clearInterval(autoSyncTimer);
     autoSyncTimer = null;
     stopAllIdleWatchers();
@@ -705,6 +757,7 @@ export function stopAccountAutoSync(): void {
 export function setAutoSyncIntervalMinutes(minutes: number): void {
     const normalized = Math.min(120, Math.max(1, Math.round(Number(minutes) || 2)));
     autoSyncIntervalMs = normalized * 60 * 1000;
+    appLogger.info('Set auto sync interval minutes=%d', normalized);
     if (!autoSyncTimer) return;
     clearInterval(autoSyncTimer);
     autoSyncTimer = setInterval(() => {
@@ -739,6 +792,7 @@ export function getCurrentUnreadCount(): number {
 
 async function runAutoSyncCycle(source: 'startup' | 'interval'): Promise<void> {
     if (autoSyncRunning) return;
+    appLogger.debug('runAutoSyncCycle source=%s', source);
     autoSyncRunning = true;
     try {
         const accounts = await getAccounts();
@@ -757,6 +811,7 @@ async function runAutoSyncCycle(source: 'startup' | 'interval'): Promise<void> {
 }
 
 async function runSyncAndBroadcast(accountId: number, source: string): Promise<AccountSyncSummary> {
+    appLogger.debug('runSyncAndBroadcast accountId=%d source=%s', accountId, source);
     const blockedReason = blockedSyncAccounts.get(accountId);
     if (blockedReason) {
         const error = `Sync paused for this account: ${blockedReason}. Update account settings or restart app.`;
@@ -814,6 +869,7 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
         };
 
         broadcastSync({accountId, status: 'syncing', source});
+        appLogger.info('Sync started accountId=%d source=%s', accountId, source);
 
         try {
             const mailSummary = await syncAccountMailbox(accountId, {
@@ -867,6 +923,13 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
                 });
             }
             broadcastSync({accountId, status: 'done', summary, source});
+            appLogger.info(
+                'Sync done accountId=%d source=%s messages=%d newMessages=%d',
+                accountId,
+                source,
+                summary.messages ?? 0,
+                summary.newMessages ?? 0,
+            );
             state.pending?.resolve(summary);
             state.pending = null;
             return;
@@ -886,8 +949,10 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
                         error: `Sync paused: ${message}. Password or authentication may have changed. Update account settings or restart app.`,
                         source,
                     });
+                    appLogger.warn('Sync paused accountId=%d source=%s error=%s', accountId, source, message);
                 } else {
                     broadcastSync({accountId, status: 'error', error: message, source});
+                    appLogger.warn('Sync error accountId=%d source=%s error=%s', accountId, source, message);
                 }
             }
             state.pending?.reject(error);
@@ -934,6 +999,7 @@ function broadcastSync(payload: any) {
 
 function notifyUnreadCountChanged(): void {
     const count = getTotalUnreadCount();
+    appLogger.debug('Broadcast unread-count-updated count=%d', count);
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('unread-count-updated', count);
     }

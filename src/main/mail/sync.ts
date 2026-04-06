@@ -38,6 +38,11 @@ export interface MessageBodyResult {
     cached: boolean;
 }
 
+export interface MessageSourceResult {
+    messageId: number;
+    source: string;
+}
+
 export interface MessageBodySyncOptions {
     isCancelled?: () => boolean;
     onClient?: (client: ImapFlow) => void;
@@ -225,6 +230,48 @@ export async function syncMessageBody(messageId: number, options?: MessageBodySy
             replaceMessageAttachments(messageId, attachments);
 
             return {messageId, text, html, attachments, cached: false};
+        } finally {
+            lock.release();
+        }
+    } finally {
+        try {
+            await client.logout();
+        } catch {
+            // ignore close errors
+        }
+    }
+}
+
+export async function syncMessageSource(
+    messageId: number,
+    options?: MessageBodySyncOptions,
+): Promise<MessageSourceResult> {
+    const ctx = getMessageContext(messageId);
+    if (!ctx) throw new Error(`Message ${messageId} not found`);
+
+    const account = await getAccountSyncCredentials(ctx.accountId);
+    const client = new ImapFlow({
+        host: account.imap_host,
+        port: account.imap_port,
+        ...resolveImapSecurity(account.imap_secure),
+        auth: {user: account.user, pass: account.password},
+        logger: createMailDebugLogger('imap', `source:message:${messageId}`),
+    });
+    options?.onClient?.(client);
+
+    try {
+        if (options?.isCancelled?.()) throw new Error('Message source request cancelled');
+        await client.connect();
+        if (options?.isCancelled?.()) throw new Error('Message source request cancelled');
+        const lock = await client.getMailboxLock(ctx.folderPath);
+        try {
+            if (options?.isCancelled?.()) throw new Error('Message source request cancelled');
+            const fetched = await client.fetchOne(ctx.uid, {source: true}, {uid: true});
+            if (options?.isCancelled?.()) throw new Error('Message source request cancelled');
+            const src = fetched && typeof fetched === 'object' ? (fetched as any).source : null;
+            if (!src) throw new Error('Could not fetch message source from server');
+            const source = Buffer.isBuffer(src) ? src.toString('utf8') : String(src);
+            return {messageId, source};
         } finally {
             lock.release();
         }

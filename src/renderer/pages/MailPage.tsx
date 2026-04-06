@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Forward, Paperclip, Reply, ReplyAll, SquareArrowOutUpRight, Trash2} from 'lucide-react';
+import {FileText, Forward, Paperclip, Reply, ReplyAll, SquareArrowOutUpRight, Trash2} from 'lucide-react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import {formatSystemDateTime} from '../lib/dateTime';
@@ -18,6 +18,12 @@ import {
 import {isProtectedFolder} from '../features/mail/folders';
 import {buildSpoofHints} from '../features/mail/spoof';
 import ToolboxButton from '../features/mail/ToolboxButton';
+import {
+    buildSourceDocCsp,
+    enrichAnchorTitles,
+    extractEmailAddress,
+    isSenderAllowed
+} from '../features/mail/remoteContent';
 import {isEditableTarget} from '../lib/dom';
 import {clampToViewport, formatBytes} from '../lib/format';
 import type {
@@ -56,13 +62,23 @@ function MailPage() {
     const [pendingAutoReadMessageId, setPendingAutoReadMessageId] = useState<number | null>(null);
     const [selectedMessageBody, setSelectedMessageBody] = useState<MessageBodyResult | null>(null);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
+    const [showSourceModal, setShowSourceModal] = useState(false);
+    const [messageSource, setMessageSource] = useState('');
+    const [sourceLoading, setSourceLoading] = useState(false);
+    const [sourceError, setSourceError] = useState<string | null>(null);
     const [bodyLoading, setBodyLoading] = useState(false);
     const [syncStatusText, setSyncStatusText] = useState<string | null>(null);
     const [syncingAccountIds, setSyncingAccountIds] = useState<Set<number>>(new Set());
     const [attachmentMenu, setAttachmentMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+    const [sessionRemoteAllowedMessageIds, setSessionRemoteAllowedMessageIds] = useState<number[]>([]);
+    const [hoveredLinkUrl, setHoveredLinkUrl] = useState('');
+    const [isPointerOverMessageFrame, setIsPointerOverMessageFrame] = useState(false);
     const [appSettings, setAppSettings] = useState<AppSettings>({
         language: 'system',
         theme: 'system',
+        mailView: 'side-list',
+        blockRemoteContent: true,
+        remoteContentAllowlist: [],
         minimizeToTray: true,
         syncIntervalMinutes: 2,
         autoUpdateEnabled: true,
@@ -73,8 +89,12 @@ function MailPage() {
     const selectedFolderPathRef = useRef<string | null>(null);
     const selectedMessageIdRef = useRef<number | null>(null);
     const pendingDeleteMessageIdsRef = useRef<Set<number>>(new Set());
+    const pendingReadStateRef = useRef<Map<number, { desiredRead: number; accountId: number }>>(new Map());
+    const pendingReadTimeoutsRef = useRef<Map<number, number>>(new Map());
+    const lastLocalReadMutationAtByAccountRef = useRef<Map<number, number>>(new Map());
     const pendingOpenMessageTargetRef = useRef<OpenMessageTargetEvent | null>(null);
     const selectionAnchorIndexRef = useRef<number | null>(null);
+    const sourceRequestSeqRef = useRef(0);
     const [systemLocale, setSystemLocale] = useState<string>('en-US');
     const [workspace, setWorkspace] = useState<Workspace>('mail');
     const [contacts, setContacts] = useState<ContactItem[]>([]);
@@ -99,6 +119,31 @@ function MailPage() {
         [messages, selectedMessageId],
     );
     const messageAttachments = selectedMessageBody?.attachments ?? [];
+    const senderWhitelisted = isSenderAllowed(selectedMessage?.from_address, appSettings.remoteContentAllowlist || []);
+    const sessionAllowed = selectedMessageId ? sessionRemoteAllowedMessageIds.includes(selectedMessageId) : false;
+    const allowRemoteForSelectedMessage = !appSettings.blockRemoteContent || senderWhitelisted || sessionAllowed;
+
+    function hasPendingReadForAccount(accountId: number): boolean {
+        for (const pending of pendingReadStateRef.current.values()) {
+            if (pending.accountId === accountId) return true;
+        }
+        return false;
+    }
+
+    function hasRecentLocalReadMutation(accountId: number, withinMs = 10000): boolean {
+        const lastAt = lastLocalReadMutationAtByAccountRef.current.get(accountId);
+        if (!lastAt) return false;
+        return Date.now() - lastAt < withinMs;
+    }
+
+    function applyPendingReadOverrides(rows: MessageItem[]): MessageItem[] {
+        if (pendingReadStateRef.current.size === 0) return rows;
+        return rows.map((row) => {
+            const pending = pendingReadStateRef.current.get(row.id);
+            if (!pending) return row;
+            return {...row, is_read: pending.desiredRead};
+        });
+    }
 
     const renderedBodyHtml = useMemo(() => {
         if (!selectedMessageBody) return null;
@@ -109,8 +154,9 @@ function MailPage() {
     const iframeSrcDoc = useMemo(() => {
         if (!selectedMessageBody) return null;
         if (!renderedBodyHtml) return null;
-        const rawHtml = renderedBodyHtml;
+        const rawHtml = enrichAnchorTitles(renderedBodyHtml);
         const hasExplicitStyles = /<style[\s>]|font-family\s*:/i.test(rawHtml);
+        const csp = buildSourceDocCsp(allowRemoteForSelectedMessage);
         const defaultReadableCss = hasExplicitStyles
             ? ''
             : `
@@ -129,6 +175,7 @@ function MailPage() {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <base target="_blank" />
     <style>
       html, body { width: 100%; margin: 0; }
@@ -139,7 +186,7 @@ function MailPage() {
   </head>
   <body><div id="lunamail-frame-content">${rawHtml}</div></body>
 </html>`;
-    }, [selectedMessageBody, renderedBodyHtml]);
+    }, [allowRemoteForSelectedMessage, selectedMessageBody, renderedBodyHtml]);
 
     useEffect(() => {
         const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -166,9 +213,9 @@ function MailPage() {
         }
         if (pendingAutoReadMessageId !== selectedMessage.id) return;
         if (!selectedAccountId || !selectedFolderPath) return;
-        applyReadOptimistic(selectedMessage.id, 1, selectedFolderPath);
+        applyReadOptimistic(selectedMessage, 1, selectedFolderPath);
         setPendingAutoReadMessageId(null);
-        void syncReadState(selectedMessage.id, 1, selectedFolderPath);
+        void syncReadState(selectedMessage, 1, selectedFolderPath);
     }, [selectedMessage, pendingAutoReadMessageId, selectedAccountId, selectedFolderPath]);
 
     useEffect(() => {
@@ -250,6 +297,7 @@ function MailPage() {
                     setSyncStatusText(`Synced ${evt.summary?.messages ?? 0} messages`);
                 }
                 if (evt.accountId === selectedAccountId) {
+                    if (hasPendingReadForAccount(evt.accountId) || hasRecentLocalReadMutation(evt.accountId)) return;
                     void loadFoldersAndMessages(evt.accountId);
                 }
             } else if (evt.status === 'error') {
@@ -265,9 +313,22 @@ function MailPage() {
             }
         });
         const offReadUpdated = window.electronAPI.onMessageReadUpdated?.((evt) => {
+            const pending = pendingReadStateRef.current.get(evt.messageId);
+            const wasPendingLocalRead = Boolean(pending);
+            if (pending) {
+                const desired = Boolean(pending.desiredRead);
+                if (Boolean(evt.isRead) !== desired) {
+                    return;
+                }
+                clearPendingReadState(evt.messageId);
+            }
             setMessages((prev) =>
                 prev.map((message) => (message.id === evt.messageId ? {...message, is_read: evt.isRead} : message)),
             );
+            if (wasPendingLocalRead) {
+                // Keep optimistic folder counters stable; server totals can lag behind read mutation events.
+                return;
+            }
             setFolders((prev) =>
                 prev.map((folder) =>
                     folder.id === evt.folderId
@@ -356,7 +417,7 @@ function MailPage() {
             try {
                 const rowsRaw = await window.electronAPI.getFolderMessages(selectedAccountId, selectedFolderPath, messageFetchLimit);
                 setHasMoreMessages(rowsRaw.length >= messageFetchLimit);
-                setMessages(filterOutPendingDeletes(rowsRaw));
+                setMessages(applyPendingReadOverrides(filterOutPendingDeletes(rowsRaw)));
             } finally {
                 setLoadingMoreMessages(false);
             }
@@ -378,8 +439,11 @@ function MailPage() {
         }
 
         let active = true;
+        const loadingDelayMs = 120;
         const run = async () => {
-            setSearchLoading(true);
+            const loadingTimer = window.setTimeout(() => {
+                if (active) setSearchLoading(true);
+            }, loadingDelayMs);
             try {
                 const perAccountLimit = 120;
                 const rowsByAccount = await Promise.all(
@@ -395,6 +459,7 @@ function MailPage() {
                     });
                 setSearchResults(merged);
             } finally {
+                window.clearTimeout(loadingTimer);
                 if (active) setSearchLoading(false);
             }
         };
@@ -522,6 +587,12 @@ function MailPage() {
 
     useEffect(() => {
         setShowMessageDetails(false);
+        setShowSourceModal(false);
+        setMessageSource('');
+        setSourceLoading(false);
+        setSourceError(null);
+        setHoveredLinkUrl('');
+        setIsPointerOverMessageFrame(false);
     }, [selectedMessageId]);
 
     useEffect(() => {
@@ -559,7 +630,7 @@ function MailPage() {
         if (routeEmailId) {
             if (selectedMessageId !== routeEmailId) {
                 setSelectedMessageId(routeEmailId);
-                setSelectedMessageIds([routeEmailId]);
+                setSelectedMessageIds((prev) => (prev.includes(routeEmailId) ? prev : [routeEmailId]));
             }
         } else if (selectedMessageId !== null) {
             setSelectedMessageId(null);
@@ -573,7 +644,6 @@ function MailPage() {
         routeFolderId,
         selectedAccountId,
         selectedFolderPath,
-        selectedMessageId,
     ]);
 
     useEffect(() => {
@@ -632,6 +702,15 @@ function MailPage() {
     }, [attachmentMenu]);
 
     useEffect(() => {
+        const off = window.electronAPI.onLinkHoverUrl?.((url) => {
+            setHoveredLinkUrl(url || '');
+        });
+        return () => {
+            if (typeof off === 'function') off();
+        };
+    }, []);
+
+    useEffect(() => {
         const existing = new Set(accounts.map((a) => a.id));
         setSyncingAccountIds((prev) => {
             let changed = false;
@@ -648,6 +727,15 @@ function MailPage() {
         const pending = pendingDeleteMessageIdsRef.current;
         if (pending.size === 0) return rows;
         return rows.filter((m) => !pending.has(m.id));
+    }
+
+    function clearPendingReadState(messageId: number): void {
+        pendingReadStateRef.current.delete(messageId);
+        const timeoutId = pendingReadTimeoutsRef.current.get(messageId);
+        if (timeoutId !== undefined) {
+            window.clearTimeout(timeoutId);
+            pendingReadTimeoutsRef.current.delete(messageId);
+        }
     }
 
     async function loadFoldersAndMessages(accountId: number, preferredFolderId?: number | null, preferredMessageId?: number | null) {
@@ -705,7 +793,7 @@ function MailPage() {
         }
 
         const msgRowsRaw = await window.electronAPI.getFolderMessages(accountId, chosenFolder, messageFetchLimit);
-        const msgRows = filterOutPendingDeletes(msgRowsRaw);
+        const msgRows = applyPendingReadOverrides(filterOutPendingDeletes(msgRowsRaw));
         setHasMoreMessages(msgRowsRaw.length >= messageFetchLimit);
         setMessages(msgRows);
         if (preferredMessageId) {
@@ -736,62 +824,57 @@ function MailPage() {
         }
     }
 
-    async function syncReadState(messageId: number, nextRead: number, folderPath: string | null) {
-        setSyncStatusText('Syncing read state...');
+    async function syncReadState(message: MessageItem, nextRead: number, folderPath: string | null) {
+        lastLocalReadMutationAtByAccountRef.current.set(message.account_id, Date.now());
+        pendingReadStateRef.current.set(message.id, {
+            desiredRead: nextRead,
+            accountId: message.account_id,
+        });
+        const existingTimeoutId = pendingReadTimeoutsRef.current.get(message.id);
+        if (existingTimeoutId !== undefined) {
+            window.clearTimeout(existingTimeoutId);
+        }
+        const timeoutId = window.setTimeout(() => {
+            clearPendingReadState(message.id);
+        }, 15000);
+        pendingReadTimeoutsRef.current.set(message.id, timeoutId);
         try {
-            const res = await window.electronAPI.setMessageRead(messageId, nextRead);
+            const res = await window.electronAPI.setMessageRead(message.id, nextRead);
             setMessages((prev) =>
-                prev.map((m) => (m.id === messageId ? {...m, is_read: res.isRead} : m)),
+                prev.map((m) => (m.id === message.id ? {...m, is_read: res.isRead} : m)),
             );
-            setFolders((prev) =>
-                prev.map((f) =>
-                    f.id === res.folderId
-                        ? {...f, unread_count: res.unreadCount, total_count: res.totalCount}
-                        : f,
-                ),
-            );
-            setAccountFoldersById((prev) => {
-                const accountFolders = prev[res.accountId] ?? [];
-                return {
-                    ...prev,
-                    [res.accountId]: accountFolders.map((f) =>
-                        f.id === res.folderId
-                            ? {...f, unread_count: res.unreadCount, total_count: res.totalCount}
-                            : f,
-                    ),
-                };
-            });
-            setSyncStatusText('Read state synced');
+            if (Number(res.isRead) !== nextRead) {
+                clearPendingReadState(message.id);
+            }
         } catch (e: any) {
-            applyReadOptimistic(messageId, nextRead ? 0 : 1, folderPath);
+            clearPendingReadState(message.id);
+            applyReadOptimistic({...message, is_read: nextRead}, nextRead ? 0 : 1, folderPath);
             setSyncStatusText(`Read sync failed: ${e?.message || String(e)}`);
         }
     }
 
-    function applyReadOptimistic(messageId: number, nextRead: number, folderPath: string | null) {
-        const msg = messages.find((m) => m.id === messageId);
-        if (!msg || msg.is_read === nextRead) return;
+    function applyReadOptimistic(message: MessageItem, nextRead: number, folderPath: string | null) {
+        if (message.is_read === nextRead) return;
 
         setMessages((prev) =>
-            prev.map((m) => (m.id === messageId ? {...m, is_read: nextRead} : m)),
+            prev.map((m) => (m.id === message.id ? {...m, is_read: nextRead} : m)),
         );
 
         if (!folderPath) return;
+        const delta = nextRead ? -1 : 1;
         setFolders((prev) =>
             prev.map((f) => {
                 if (f.path !== folderPath) return f;
-                const delta = nextRead ? -1 : 1;
                 return {...f, unread_count: Math.max(0, f.unread_count + delta)};
             }),
         );
         setAccountFoldersById((prev) => {
-            const accountId = msg.account_id;
+            const accountId = message.account_id;
             const accountFolders = prev[accountId] ?? [];
             return {
                 ...prev,
                 [accountId]: accountFolders.map((f) => {
                     if (f.path !== folderPath) return f;
-                    const delta = nextRead ? -1 : 1;
                     return {...f, unread_count: Math.max(0, f.unread_count + delta)};
                 }),
             };
@@ -963,31 +1046,103 @@ function MailPage() {
             const end = Math.max(anchor, index);
             const rangeIds = messages.slice(start, end + 1).map((m) => m.id);
             setSelectedMessageIds(rangeIds);
+            setSelectedMessageId(id);
             setPendingAutoReadMessageId(id);
             setWorkspace('mail');
             return;
         }
 
         if (toggleKey) {
-            setSelectedMessageIds((prev) => {
-                const exists = prev.includes(id);
-                return exists ? prev.filter((x) => x !== id) : [...prev, id];
-            });
-            setPendingAutoReadMessageId(id);
+            const exists = selectedMessageIds.includes(id);
+            const nextIds = exists
+                ? selectedMessageIds.filter((x) => x !== id)
+                : [...selectedMessageIds, id];
+            setSelectedMessageIds(nextIds);
+
+            if (exists) {
+                if (selectedMessageId === id) {
+                    const fallbackId = nextIds[nextIds.length - 1] ?? null;
+                    setSelectedMessageId(fallbackId);
+                    setPendingAutoReadMessageId(fallbackId);
+                } else {
+                    setPendingAutoReadMessageId(null);
+                }
+            } else {
+                setSelectedMessageId(id);
+                setPendingAutoReadMessageId(id);
+            }
             setWorkspace('mail');
             selectionAnchorIndexRef.current = index;
             return;
         }
 
         setSelectedMessageIds([id]);
+        setSelectedMessageId(id);
         setPendingAutoReadMessageId(id);
         selectionAnchorIndexRef.current = index;
         setWorkspace('mail');
     }
 
+    function openMessageInCurrentRoute(message: MessageItem): void {
+        const targetPath = `/email/${message.account_id}/${message.folder_id}/${message.id}`;
+        if (location.pathname !== targetPath) {
+            navigate(targetPath);
+        }
+    }
+
+    function navigateMessageSelection(direction: 1 | -1, extendSelection = false): void {
+        if (messages.length === 0) return;
+        const currentIndex = selectedMessageId
+            ? messages.findIndex((message) => message.id === selectedMessageId)
+            : -1;
+        const fallbackIndex = direction > 0 ? 0 : messages.length - 1;
+        const baseIndex = currentIndex >= 0 ? currentIndex : fallbackIndex;
+        const nextIndex = Math.min(messages.length - 1, Math.max(0, baseIndex + (currentIndex >= 0 ? direction : 0)));
+        const nextMessage = messages[nextIndex];
+        if (!nextMessage) return;
+
+        if (extendSelection) {
+            const anchor = selectionAnchorIndexRef.current ?? (currentIndex >= 0 ? currentIndex : nextIndex);
+            const start = Math.min(anchor, nextIndex);
+            const end = Math.max(anchor, nextIndex);
+            const rangeIds = messages.slice(start, end + 1).map((message) => message.id);
+            setSelectedMessageIds(rangeIds);
+        } else {
+            setSelectedMessageIds([nextMessage.id]);
+            selectionAnchorIndexRef.current = nextIndex;
+        }
+
+        setSelectedMessageId(nextMessage.id);
+        setPendingAutoReadMessageId(nextMessage.id);
+        setWorkspace('mail');
+        openMessageInCurrentRoute(nextMessage);
+    }
+
     function onOpenInNewWindow(): void {
         if (!selectedMessageId) return;
         void window.electronAPI.openMessageWindow(selectedMessageId);
+    }
+
+    function onViewSource(): void {
+        if (!selectedMessageId) return;
+        const requestSeq = ++sourceRequestSeqRef.current;
+        setShowSourceModal(true);
+        setSourceLoading(true);
+        setSourceError(null);
+        setMessageSource('');
+        void window.electronAPI.getMessageSource(selectedMessageId)
+            .then((result) => {
+                if (sourceRequestSeqRef.current !== requestSeq) return;
+                setMessageSource(result.source);
+            })
+            .catch((error: any) => {
+                if (sourceRequestSeqRef.current !== requestSeq) return;
+                setSourceError(error?.message || String(error));
+            })
+            .finally(() => {
+                if (sourceRequestSeqRef.current !== requestSeq) return;
+                setSourceLoading(false);
+            });
     }
 
     function runAttachmentAction(index: number, action: 'open' | 'save') {
@@ -999,12 +1154,36 @@ function MailPage() {
             });
     }
 
+    function allowRemoteContentOnceForSelected(): void {
+        if (!selectedMessageId) return;
+        setSessionRemoteAllowedMessageIds((prev) => (prev.includes(selectedMessageId) ? prev : [...prev, selectedMessageId]));
+    }
+
+    function allowRemoteContentForSender(): void {
+        const sender = extractEmailAddress(selectedMessage?.from_address);
+        if (!sender) {
+            setSyncStatusText('Could not determine sender address for allowlist.');
+            return;
+        }
+        const nextAllowlist = [...new Set([...(appSettings.remoteContentAllowlist || []), sender])];
+        setAppSettings((prev) => ({...prev, remoteContentAllowlist: nextAllowlist}));
+        void window.electronAPI.updateAppSettings({remoteContentAllowlist: nextAllowlist}).catch((error: any) => {
+            setSyncStatusText(`Failed to update allowlist: ${error?.message || String(error)}`);
+        });
+    }
+
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
             if (isEditableTarget(target)) return;
 
             const key = event.key.toLowerCase();
+            if (key === 'escape' && showSourceModal) {
+                event.preventDefault();
+                setShowSourceModal(false);
+                return;
+            }
+            if (showSourceModal) return;
             if (key === 'delete' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
                 if (!selectedMessage) return;
                 event.preventDefault();
@@ -1013,6 +1192,16 @@ function MailPage() {
             }
 
             const mod = event.ctrlKey || event.metaKey;
+            if (!mod && !event.altKey && key === 'arrowdown') {
+                event.preventDefault();
+                navigateMessageSelection(1, event.shiftKey);
+                return;
+            }
+            if (!mod && !event.altKey && key === 'arrowup') {
+                event.preventDefault();
+                navigateMessageSelection(-1, event.shiftKey);
+                return;
+            }
             if (!mod && event.altKey && key === 'arrowleft') {
                 event.preventDefault();
                 navigate(-1);
@@ -1024,6 +1213,28 @@ function MailPage() {
                 return;
             }
             if (!mod) return;
+            if (key === 'a' && !event.shiftKey && !event.altKey) {
+                event.preventDefault();
+                const allIds = messages.map((message) => message.id);
+                setSelectedMessageIds(allIds);
+                if (messages.length > 0) {
+                    const selectedIndex = selectedMessageId
+                        ? messages.findIndex((message) => message.id === selectedMessageId)
+                        : -1;
+                    if (selectedIndex >= 0) {
+                        selectionAnchorIndexRef.current = selectedIndex;
+                    } else {
+                        setSelectedMessageId(messages[0].id);
+                        selectionAnchorIndexRef.current = 0;
+                    }
+                } else {
+                    setSelectedMessageId(null);
+                    selectionAnchorIndexRef.current = null;
+                }
+                setPendingAutoReadMessageId(null);
+                setWorkspace('mail');
+                return;
+            }
 
             if (key === 'n' && !event.shiftKey && !event.altKey) {
                 event.preventDefault();
@@ -1055,7 +1266,17 @@ function MailPage() {
         return () => {
             window.removeEventListener('keydown', onKeyDown);
         };
-    }, [selectedAccountId, selectedMessageId, selectedFolderPath, selectedMessage, selectedMessageBody, systemLocale]);
+    }, [
+        messages,
+        navigate,
+        selectedAccountId,
+        selectedMessageId,
+        selectedFolderPath,
+        selectedMessage,
+        selectedMessageBody,
+        showSourceModal,
+        systemLocale
+    ]);
 
     return (
         <MainLayout
@@ -1141,10 +1362,16 @@ function MailPage() {
                     return 'contacts';
                 });
             }}
+            mailView={appSettings.mailView}
+            onMailViewChange={(view) => {
+                setAppSettings((prev) => ({...prev, mailView: view}));
+                void window.electronAPI.updateAppSettings({mailView: view}).catch(() => undefined);
+            }}
             activeWorkspace={workspace}
             hideFolderSidebar={workspace === 'calendar' || workspace === 'contacts'}
             syncStatusText={syncStatusText}
             syncInProgress={Boolean(syncStatusText && syncStatusText.toLowerCase().startsWith('syncing'))}
+            statusHintText={isPointerOverMessageFrame && hoveredLinkUrl ? hoveredLinkUrl : null}
             syncingAccountIds={syncingAccountIds}
             onCreateFolder={async ({accountId, folderPath, type, color}) => {
                 const targetAccountId = accountId;
@@ -1258,19 +1485,25 @@ function MailPage() {
             onMessageMarkReadToggle={(message) =>
                 void (() => {
                     const nextRead = message.is_read ? 0 : 1;
-                    applyReadOptimistic(message.id, nextRead, selectedFolderPath);
-                    return syncReadState(message.id, nextRead, selectedFolderPath);
+                    if (nextRead === 0 && selectedMessageId === message.id) {
+                        // Prevent selection auto-read from immediately undoing an explicit "mark unread".
+                        setPendingAutoReadMessageId(null);
+                    }
+                    applyReadOptimistic(message, nextRead, selectedFolderPath);
+                    void syncReadState(message, nextRead, selectedFolderPath);
                 })()
             }
             onBulkMarkRead={(messageIds, nextRead) =>
-                void (async () => {
+                void (() => {
+                    if (nextRead === 0 && selectedMessageId && messageIds.includes(selectedMessageId)) {
+                        // Prevent explicit bulk "mark unread" on the active message from being auto-undone.
+                        setPendingAutoReadMessageId(null);
+                    }
                     const selectedSet = new Set(messageIds);
                     const targets = messages.filter((message) => selectedSet.has(message.id) && message.is_read !== nextRead);
                     for (const message of targets) {
-                        applyReadOptimistic(message.id, nextRead, selectedFolderPath);
-                    }
-                    for (const message of targets) {
-                        await syncReadState(message.id, nextRead, selectedFolderPath);
+                        applyReadOptimistic(message, nextRead, selectedFolderPath);
+                        void syncReadState(message, nextRead, selectedFolderPath);
                     }
                 })()
             }
@@ -1369,6 +1602,44 @@ function MailPage() {
                             await reloadAccountData(selectedAccountId, selectedFolderPath, message.id);
                         }
                     })();
+                })()
+            }
+            onBulkMove={(messageIds, targetFolderPath) =>
+                void (() => {
+                    const selectedSet = new Set(messageIds);
+                    const targets = messages.filter((message) => selectedSet.has(message.id));
+                    if (targets.length === 0) return;
+                    targets.forEach((message) => {
+                        applyMoveOptimistic(message, selectedFolderPath, targetFolderPath);
+                    });
+                    setSyncStatusText(`Moved ${targets.length} locally. Syncing server in background...`);
+                    for (const message of targets) {
+                        void window.electronAPI.moveMessage(message.id, targetFolderPath)
+                            .then((res) => {
+                                setFolders((prev) =>
+                                    prev.map((folder) => {
+                                        if (folder.id === res.sourceFolderId) {
+                                            return {
+                                                ...folder,
+                                                unread_count: res.sourceUnreadCount,
+                                                total_count: res.sourceTotalCount
+                                            };
+                                        }
+                                        if (folder.id === res.targetFolderId) {
+                                            return {
+                                                ...folder,
+                                                unread_count: res.targetUnreadCount,
+                                                total_count: res.targetTotalCount
+                                            };
+                                        }
+                                        return folder;
+                                    }),
+                                );
+                            })
+                            .catch((error: any) => {
+                                setSyncStatusText(`Move sync failed: ${error?.message || String(error)}`);
+                            });
+                    }
                 })()
             }
             onMessageDelete={(message) => confirmAndDeleteMessage(message)}
@@ -1554,6 +1825,11 @@ function MailPage() {
                                 onClick={onOpenInNewWindow}
                             />
                             <ToolboxButton
+                                label="View source"
+                                icon={<FileText size={14}/>}
+                                onClick={onViewSource}
+                            />
+                            <ToolboxButton
                                 label="Delete"
                                 icon={<Trash2 size={14}/>}
                                 onClick={onDeleteSelected}
@@ -1633,27 +1909,56 @@ function MailPage() {
                                 </div>
                             )}
                         </div>
-                        <div className="min-h-0 flex-1 bg-white">
-                            {bodyLoading && (
+                        <div className="min-h-0 flex flex-1 flex-col bg-white">
+                            {Boolean(renderedBodyHtml && selectedMessage && appSettings.blockRemoteContent && !allowRemoteForSelectedMessage) && (
                                 <div
-                                    className="flex h-full items-center justify-center text-slate-500 dark:text-slate-400">Loading
-                                    message body...</div>
+                                    className="w-full shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-700/70 dark:bg-amber-900/20 dark:text-amber-300">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span>Remote content blocked for privacy.</span>
+                                        <button
+                                            type="button"
+                                            className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200 dark:border-amber-600/70 dark:bg-amber-900/30 dark:hover:bg-amber-900/45"
+                                            onClick={allowRemoteContentOnceForSelected}
+                                        >
+                                            Load once
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200 dark:border-amber-600/70 dark:bg-amber-900/30 dark:hover:bg-amber-900/45"
+                                            onClick={allowRemoteContentForSender}
+                                        >
+                                            Always allow sender
+                                        </button>
+                                    </div>
+                                </div>
                             )}
-                            {!bodyLoading && iframeSrcDoc && (
-                                <iframe
-                                    title={`message-body-${selectedMessage.id}`}
-                                    srcDoc={iframeSrcDoc}
-                                    sandbox="allow-popups allow-popups-to-escape-sandbox"
-                                    className="h-full w-full border-0 bg-white"
-                                />
-                            )}
-                            {!bodyLoading && !iframeSrcDoc && (
-                                <div className="h-full overflow-auto bg-white p-4 text-slate-900">
+                            <div className="min-h-0 flex-1">
+                                {bodyLoading && (
+                                    <div
+                                        className="flex h-full items-center justify-center text-slate-500 dark:text-slate-400">Loading
+                                        message body...</div>
+                                )}
+                                {!bodyLoading && iframeSrcDoc && (
+                                    <iframe
+                                        title={`message-body-${selectedMessage.id}`}
+                                        srcDoc={iframeSrcDoc}
+                                        sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                        className="h-full w-full border-0 bg-white"
+                                        onMouseEnter={() => setIsPointerOverMessageFrame(true)}
+                                        onMouseLeave={() => {
+                                            setIsPointerOverMessageFrame(false);
+                                            setHoveredLinkUrl('');
+                                        }}
+                                    />
+                                )}
+                                {!bodyLoading && !iframeSrcDoc && (
+                                    <div className="h-full overflow-auto bg-white p-4 text-slate-900">
                   <pre className="select-text whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
                     {selectedMessageBody?.text || 'No body content available for this message.'}
                   </pre>
-                                </div>
-                            )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         {messageAttachments.length > 0 && (
                             <div
@@ -1707,6 +2012,45 @@ function MailPage() {
                     </article>
                 )}
             </div>
+            {showSourceModal && (
+                <div
+                    className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 px-4 py-6"
+                    onClick={() => setShowSourceModal(false)}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Message source"
+                        className="flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl dark:border-[#3a3d44] dark:bg-[#1f2125]"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div
+                            className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-[#3a3d44]">
+                            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Message source</h2>
+                            <button
+                                type="button"
+                                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#3a3d44]"
+                                onClick={() => setShowSourceModal(false)}
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 p-3 dark:bg-[#181a1f]">
+                            {sourceLoading && (
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Loading message source...</p>
+                            )}
+                            {!sourceLoading && sourceError && (
+                                <p className="text-sm text-red-700 dark:text-red-300">Failed to load
+                                    source: {sourceError}</p>
+                            )}
+                            {!sourceLoading && !sourceError && (
+                                <pre
+                                    className="select-text whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-white p-3 font-mono text-xs leading-5 text-slate-900 dark:border-[#3a3d44] dark:bg-[#1f2125] dark:text-slate-100">{messageSource || '(No source available)'}</pre>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
             {attachmentMenu && (
                 <div
                     className="fixed z-[1100] min-w-44 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#313338]"

@@ -34,6 +34,7 @@ const api = {
     searchMessages: (accountId, query, folderPath, limit) => ipcRenderer.invoke('search-messages', accountId, query, folderPath ?? null, limit),
     getMessage: (messageId) => ipcRenderer.invoke('get-message', messageId),
     getMessageBody: (messageId, requestId) => ipcRenderer.invoke('get-message-body', messageId, requestId),
+    getMessageSource: (messageId) => ipcRenderer.invoke('get-message-source', messageId),
     openMessageAttachment: (messageId, attachmentIndex, action) => ipcRenderer.invoke('open-message-attachment', messageId, attachmentIndex, action ?? 'prompt'),
     cancelMessageBody: (requestId) => ipcRenderer.invoke('cancel-message-body', requestId),
     setMessageRead: (messageId, isRead) => ipcRenderer.invoke('set-message-read', messageId, isRead),
@@ -127,6 +128,11 @@ const api = {
         const listener = (_event, payload) => callback(payload);
         ipcRenderer.on('auto-update-status', listener);
         return () => ipcRenderer.removeListener('auto-update-status', listener);
+    },
+    onLinkHoverUrl: (callback) => {
+        const listener = (_event, payload) => callback(payload || '');
+        ipcRenderer.on('link-hover-url', listener);
+        return () => ipcRenderer.removeListener('link-hover-url', listener);
     },
 };
 contextBridge.exposeInMainWorld('electronAPI', api);

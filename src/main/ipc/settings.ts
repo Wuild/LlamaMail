@@ -1,15 +1,20 @@
 import {app, BrowserWindow, ipcMain, Notification, shell} from 'electron';
 import {getAccounts} from '../db/repositories/accountsRepo.js';
 import {listFoldersByAccount, listMessagesByFolder} from '../db/repositories/mailRepo.js';
+import {createAppLogger} from '../debug/debugLog.js';
 import {type AppSettingsPatch, getAppSettings, updateAppSettings} from '../settings/store.js';
 import {openSplashWindow} from '../windows/splashWindow.js';
 
+const logger = createAppLogger('ipc:settings');
+
 export function registerSettingsIpc(onSettingsUpdated: (settings: Awaited<ReturnType<typeof getAppSettings>>) => void): void {
     ipcMain.handle('get-app-settings', async () => {
+        logger.debug('IPC get-app-settings');
         return await getAppSettings();
     });
 
     ipcMain.handle('update-app-settings', async (_event, patch: AppSettingsPatch) => {
+        logger.info('IPC update-app-settings keys=%s', Object.keys(patch || {}).join(','));
         const settings = await updateAppSettings(patch);
         onSettingsUpdated(settings);
         for (const win of BrowserWindow.getAllWindows()) {
@@ -19,6 +24,7 @@ export function registerSettingsIpc(onSettingsUpdated: (settings: Awaited<Return
     });
 
     ipcMain.handle('get-system-locale', async () => {
+        logger.debug('IPC get-system-locale');
         return resolveSystemLocale();
     });
 
@@ -27,6 +33,7 @@ export function registerSettingsIpc(onSettingsUpdated: (settings: Awaited<Return
         body?: string;
         route?: string | null;
     } | null) => {
+        logger.info('IPC dev-show-notification');
         if (!Notification.isSupported()) {
             return {ok: true, supported: false, hasTarget: false} as const;
         }
@@ -62,6 +69,7 @@ export function registerSettingsIpc(onSettingsUpdated: (settings: Awaited<Return
     });
 
     ipcMain.handle('dev-play-notification-sound', async () => {
+        logger.info('IPC dev-play-notification-sound');
         let played = false;
         try {
             if (Notification.isSupported()) {
@@ -84,6 +92,7 @@ export function registerSettingsIpc(onSettingsUpdated: (settings: Awaited<Return
     });
 
     ipcMain.handle('dev-open-updater-window', async () => {
+        logger.info('IPC dev-open-updater-window');
         const updaterWin = openSplashWindow({forceTitleBar: true});
         focusWindow(updaterWin);
         return {ok: true, opened: true} as const;

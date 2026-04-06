@@ -11,6 +11,7 @@ type WorkspaceLayoutProps = {
     footer?: React.ReactNode;
     showFooter?: boolean;
     statusText?: string | null;
+    statusHintText?: string | null;
     statusBusy?: boolean;
     showStatusBar?: boolean;
     contentClassName?: string;
@@ -27,6 +28,7 @@ export default function WorkspaceLayout({
                                             footer,
                                             showFooter = false,
                                             statusText,
+                                            statusHintText,
                                             statusBusy = false,
                                             showStatusBar = true,
                                             contentClassName,
@@ -34,6 +36,71 @@ export default function WorkspaceLayout({
                                         }: WorkspaceLayoutProps) {
     const hasFooterContent = React.Children.count(footer) > 0;
     const shouldShowFooter = showFooter && hasFooterContent;
+    const effectiveStatusText = statusHintText || statusText || 'Ready';
+    const effectiveStatusBusy = statusHintText ? false : statusBusy;
+    const statusTextViewportRef = React.useRef<HTMLSpanElement | null>(null);
+    const statusTextContentRef = React.useRef<HTMLSpanElement | null>(null);
+    const statusTextAnimationRef = React.useRef<Animation | null>(null);
+    const [statusScrollDistance, setStatusScrollDistance] = React.useState(0);
+
+    React.useEffect(() => {
+        const viewport = statusTextViewportRef.current;
+        const content = statusTextContentRef.current;
+        if (!viewport || !content || !statusHintText) {
+            setStatusScrollDistance(0);
+            if (statusTextAnimationRef.current) {
+                statusTextAnimationRef.current.cancel();
+                statusTextAnimationRef.current = null;
+            }
+            if (content) content.style.transform = '';
+            return;
+        }
+
+        const measure = () => {
+            const nextDistance = Math.max(0, content.scrollWidth - viewport.clientWidth);
+            setStatusScrollDistance(nextDistance > 12 ? nextDistance : 0);
+        };
+
+        measure();
+        window.addEventListener('resize', measure);
+        return () => {
+            window.removeEventListener('resize', measure);
+        };
+    }, [statusHintText, effectiveStatusText]);
+
+    React.useEffect(() => {
+        const content = statusTextContentRef.current;
+        if (!content) return;
+        if (statusTextAnimationRef.current) {
+            statusTextAnimationRef.current.cancel();
+            statusTextAnimationRef.current = null;
+        }
+        if (!statusHintText || statusScrollDistance <= 0) {
+            content.style.transform = '';
+            return;
+        }
+        const travelMs = Math.max(3500, statusScrollDistance * 22);
+        statusTextAnimationRef.current = content.animate(
+            [
+                {transform: 'translateX(0px)', offset: 0},
+                {transform: 'translateX(0px)', offset: 0.18},
+                {transform: `translateX(-${statusScrollDistance}px)`, offset: 0.62},
+                {transform: `translateX(-${statusScrollDistance}px)`, offset: 0.8},
+                {transform: 'translateX(0px)', offset: 1},
+            ],
+            {
+                duration: travelMs,
+                iterations: Infinity,
+                easing: 'linear',
+            },
+        );
+        return () => {
+            if (statusTextAnimationRef.current) {
+                statusTextAnimationRef.current.cancel();
+                statusTextAnimationRef.current = null;
+            }
+        };
+    }, [statusHintText, statusScrollDistance]);
 
     return (
         <section
@@ -69,17 +136,20 @@ export default function WorkspaceLayout({
             {showStatusBar && (
                 <footer
                     className="h-8 shrink-0 border-t border-slate-200 bg-slate-50 px-3 dark:border-[#2a2d31] dark:bg-[#1b1c20]">
-                    <div className="flex h-full items-center justify-between text-xs">
+                    <div className="flex h-full items-center text-xs">
                         <span className="flex min-w-0 items-center gap-2 truncate text-slate-600 dark:text-slate-300">
                             <span
                                 className={cn(
                                     'inline-flex h-2.5 w-2.5 shrink-0 rounded-full',
-                                    statusBusy ? 'animate-pulse bg-sky-500' : 'bg-slate-300 dark:bg-slate-600',
+                                    effectiveStatusBusy ? 'animate-pulse bg-sky-500' : 'bg-slate-300 dark:bg-slate-600',
                                 )}
                             />
-                            <span className="truncate">{statusText || 'Ready'}</span>
+                            <span ref={statusTextViewportRef} className="min-w-0 flex-1 overflow-hidden">
+                                <span ref={statusTextContentRef} className="block w-max whitespace-nowrap">
+                                    {effectiveStatusText}
+                                </span>
+                            </span>
                         </span>
-                        <span className="ml-3 shrink-0 text-slate-400 dark:text-slate-500">LunaMail</span>
                     </div>
                 </footer>
             )}

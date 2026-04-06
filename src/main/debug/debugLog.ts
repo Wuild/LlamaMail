@@ -72,6 +72,10 @@ export function createMailDebugLogger(source: DebugLogSource, scope: string): St
     return buildStructuredLogger(source, scope, null);
 }
 
+export function createAppLogger(scope: string): StructuredLogger {
+    return createMailDebugLogger('app', scope);
+}
+
 function buildStructuredLogger(
     source: DebugLogSource,
     scope: string,

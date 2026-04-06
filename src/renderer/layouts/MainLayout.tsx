@@ -67,11 +67,14 @@ interface MainLayoutProps {
     onNavigateForward?: () => void;
     onOpenCalendar: () => void;
     onOpenContacts: () => void;
+    mailView: MailPaneLayoutMode;
+    onMailViewChange: (view: MailPaneLayoutMode) => void;
     activeWorkspace?: 'mail' | 'calendar' | 'contacts';
     hideFolderSidebar?: boolean;
     hideHeader?: boolean;
     syncStatusText?: string | null;
     syncInProgress?: boolean;
+    statusHintText?: string | null;
     syncingAccountIds?: ReadonlySet<number>;
     onMessageMarkReadToggle: (message: MessageItem) => void;
     onBulkMarkRead: (messageIds: number[], nextRead: number) => void;
@@ -81,6 +84,7 @@ interface MainLayoutProps {
     onMessageArchive: (message: MessageItem) => void;
     onMessageDelete: (message: MessageItem) => void;
     onMessageMove: (message: MessageItem, targetFolderPath: string) => void;
+    onBulkMove: (messageIds: number[], targetFolderPath: string) => void;
     onFolderSync: () => void;
     onCreateFolder: (payload: {
         accountId: number;
@@ -118,6 +122,18 @@ const FOLDER_TYPE_OPTIONS = [
 ] as const;
 
 const ACCOUNT_COLLAPSE_STORAGE_KEY = 'lunamail.accountCollapseState.v1';
+const MAIL_TABLE_COLUMNS_STORAGE_KEY = 'lunamail.mailTableColumns.v1';
+
+type MailPaneLayoutMode = 'side-list' | 'top-table';
+type MailTableColumnKey = 'subject' | 'from' | 'date' | 'flagged' | 'size';
+const DEFAULT_TABLE_COLUMNS: MailTableColumnKey[] = ['subject', 'from', 'date'];
+const TABLE_COLUMN_OPTIONS: Array<{ key: MailTableColumnKey; label: string }> = [
+    {key: 'subject', label: 'Subject'},
+    {key: 'from', label: 'From'},
+    {key: 'date', label: 'Date'},
+    {key: 'flagged', label: 'Starred'},
+    {key: 'size', label: 'Size'},
+];
 
 const MainLayout: React.FC<MainLayoutProps> = ({
                                                    children,
@@ -146,11 +162,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                    onNavigateForward,
                                                    onOpenCalendar,
                                                    onOpenContacts,
+                                                   mailView,
+                                                   onMailViewChange,
                                                    activeWorkspace = 'mail',
                                                    hideFolderSidebar = false,
                                                    hideHeader = false,
                                                    syncStatusText,
                                                    syncInProgress,
+                                                   statusHintText,
                                                    syncingAccountIds,
                                                    onMessageMarkReadToggle,
                                                    onBulkMarkRead,
@@ -160,6 +179,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                    onMessageArchive,
                                                    onMessageDelete,
                                                    onMessageMove,
+                                                   onBulkMove,
                                                    onFolderSync,
                                                    onCreateFolder,
                                                    onReorderCustomFolders,
@@ -175,10 +195,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     const [accountMenu, setAccountMenu] = React.useState<{ x: number; y: number; account: PublicAccount } | null>(null);
     const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
     const accountMenuRef = React.useRef<HTMLDivElement | null>(null);
+    const tableHeadMenuRef = React.useRef<HTMLDivElement | null>(null);
     const moveToTriggerRef = React.useRef<HTMLButtonElement | null>(null);
     const mailSearchModalInputRef = React.useRef<HTMLInputElement | null>(null);
     const [menuPosition, setMenuPosition] = React.useState<{ left: number; top: number }>({left: 0, top: 0});
     const [accountMenuPosition, setAccountMenuPosition] = React.useState<{ left: number; top: number }>({
+        left: 0,
+        top: 0
+    });
+    const [tableHeadMenu, setTableHeadMenu] = React.useState<{ x: number; y: number } | null>(null);
+    const [tableHeadMenuPosition, setTableHeadMenuPosition] = React.useState<{ left: number; top: number }>({
         left: 0,
         top: 0
     });
@@ -211,6 +237,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     const [fromFilter, setFromFilter] = React.useState('');
     const [subjectFilter, setSubjectFilter] = React.useState('');
     const [toFilter, setToFilter] = React.useState('');
+    const [accountFilter, setAccountFilter] = React.useState<string>('all');
+    const [folderFilter, setFolderFilter] = React.useState<string>('all');
+    const [readFilter, setReadFilter] = React.useState<'all' | 'read' | 'unread'>('all');
+    const [starFilter, setStarFilter] = React.useState<'all' | 'starred' | 'unstarred'>('all');
+    const [dateRangeFilter, setDateRangeFilter] = React.useState<'all' | '7d' | '30d' | '365d'>('all');
+    const [minSizeKbFilter, setMinSizeKbFilter] = React.useState<string>('');
+    const [maxSizeKbFilter, setMaxSizeKbFilter] = React.useState<string>('');
     const [localSyncingAccountIds, setLocalSyncingAccountIds] = React.useState<Set<number>>(new Set());
     const [folderEditor, setFolderEditor] = React.useState<
         | {
@@ -234,6 +267,32 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     >(null);
     const [createFolderSaving, setCreateFolderSaving] = React.useState(false);
     const [createFolderError, setCreateFolderError] = React.useState<string | null>(null);
+    const [tableColumns, setTableColumns] = React.useState<MailTableColumnKey[]>(() => {
+        if (typeof window === 'undefined') return DEFAULT_TABLE_COLUMNS;
+        try {
+            const raw = window.localStorage.getItem(MAIL_TABLE_COLUMNS_STORAGE_KEY);
+            if (!raw) return DEFAULT_TABLE_COLUMNS;
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return DEFAULT_TABLE_COLUMNS;
+            const next = parsed.filter((column) => (
+                column === 'subject'
+                || column === 'from'
+                || column === 'date'
+                || column === 'flagged'
+                || column === 'size'
+            )) as MailTableColumnKey[];
+            return next.length > 0 ? next : DEFAULT_TABLE_COLUMNS;
+        } catch {
+            return DEFAULT_TABLE_COLUMNS;
+        }
+    });
+    const [topListHeight, setTopListHeight] = React.useState<number>(() => {
+        if (typeof window === 'undefined') return 300;
+        const stored = Number(window.localStorage.getItem('lunamail.mailTopList.height') || '');
+        if (!Number.isFinite(stored)) return 300;
+        return Math.max(220, Math.min(640, stored));
+    });
+    const topListResizeRef = React.useRef<{ startY: number; startHeight: number } | null>(null);
     const {sidebarWidth, onResizeStart} = useResizableSidebar();
     const {sidebarWidth: mailListWidth, onResizeStart: onMailListResizeStart} = useResizableSidebar({
         storageKey: 'lunamail.mailList.width',
@@ -270,7 +329,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         const normalizedFrom = fromFilter.trim().toLowerCase();
         const normalizedSubject = subjectFilter.trim().toLowerCase();
         const normalizedTo = toFilter.trim().toLowerCase();
-        if (!normalizedFrom && !normalizedSubject && !normalizedTo) return searchResults;
+        const minSizeKb = Number(minSizeKbFilter);
+        const maxSizeKb = Number(maxSizeKbFilter);
+        const nowMs = Date.now();
+        if (
+            !normalizedFrom
+            && !normalizedSubject
+            && !normalizedTo
+            && accountFilter === 'all'
+            && folderFilter === 'all'
+            && readFilter === 'all'
+            && starFilter === 'all'
+            && dateRangeFilter === 'all'
+            && !Number.isFinite(minSizeKb)
+            && !Number.isFinite(maxSizeKb)
+        ) {
+            return searchResults;
+        }
         return searchResults.filter((message) => {
             if (normalizedFrom) {
                 const fromName = (message.from_name || '').toLowerCase();
@@ -285,9 +360,97 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                 const toAddress = (message.to_address || '').toLowerCase();
                 if (!toAddress.includes(normalizedTo)) return false;
             }
+            if (accountFilter !== 'all' && String(message.account_id) !== accountFilter) return false;
+            if (folderFilter !== 'all' && String(message.folder_id) !== folderFilter) return false;
+            if (readFilter === 'read' && !Boolean(message.is_read)) return false;
+            if (readFilter === 'unread' && Boolean(message.is_read)) return false;
+            if (starFilter === 'starred' && !Boolean(message.is_flagged)) return false;
+            if (starFilter === 'unstarred' && Boolean(message.is_flagged)) return false;
+            if (dateRangeFilter !== 'all') {
+                const messageTime = message.date ? Date.parse(message.date) : 0;
+                if (!messageTime) return false;
+                const dayMs = 24 * 60 * 60 * 1000;
+                const maxAgeMs =
+                    dateRangeFilter === '7d' ? 7 * dayMs
+                        : dateRangeFilter === '30d' ? 30 * dayMs
+                            : 365 * dayMs;
+                if (nowMs - messageTime > maxAgeMs) return false;
+            }
+            const sizeKb = (Number(message.size) || 0) / 1024;
+            if (Number.isFinite(minSizeKb) && sizeKb < minSizeKb) return false;
+            if (Number.isFinite(maxSizeKb) && sizeKb > maxSizeKb) return false;
             return true;
         });
-    }, [searchResults, fromFilter, subjectFilter, toFilter]);
+    }, [
+        searchResults,
+        fromFilter,
+        subjectFilter,
+        toFilter,
+        accountFilter,
+        folderFilter,
+        readFilter,
+        starFilter,
+        dateRangeFilter,
+        minSizeKbFilter,
+        maxSizeKbFilter,
+    ]);
+
+    const searchFoldersForSelectedAccount = React.useMemo(() => {
+        if (accountFilter === 'all') return [];
+        const accountId = Number(accountFilter);
+        if (!Number.isFinite(accountId)) return [];
+        return accountFoldersById[accountId] ?? [];
+    }, [accountFilter, accountFoldersById]);
+
+    const parseDraggedMessageIds = React.useCallback((event: React.DragEvent<HTMLElement>): number[] => {
+        const idsRaw = event.dataTransfer.getData('application/x-lunamail-message-ids');
+        if (idsRaw) {
+            try {
+                const parsed = JSON.parse(idsRaw);
+                if (Array.isArray(parsed)) {
+                    const normalized = parsed
+                        .map((value) => Number(value))
+                        .filter((value) => Number.isFinite(value));
+                    if (normalized.length > 0) return Array.from(new Set(normalized));
+                }
+            } catch {
+                // fall back to single-id payload
+            }
+        }
+
+        const idRaw =
+            event.dataTransfer.getData('application/x-lunamail-message-id') ||
+            event.dataTransfer.getData('text/plain');
+        const parsed = Number(idRaw);
+        return Number.isFinite(parsed) ? [parsed] : [];
+    }, []);
+
+    const handleMessageDropOnFolder = React.useCallback((event: React.DragEvent<HTMLElement>, folder: FolderItem) => {
+        if (!draggingMessage) return;
+        if (draggingMessage.accountId !== folder.account_id) return;
+        if (folder.path === selectedFolderPath) return;
+
+        event.preventDefault();
+        const draggedIds = parseDraggedMessageIds(event);
+        if (draggedIds.length === 0) {
+            setDragTargetFolder(null);
+            setDraggingMessage(null);
+            return;
+        }
+
+        const draggedSet = new Set(draggedIds);
+        const draggedMessages = messages.filter((message) =>
+            draggedSet.has(message.id) && message.account_id === folder.account_id,
+        );
+        if (draggedMessages.length === 1) {
+            onMessageMove(draggedMessages[0], folder.path);
+        } else if (draggedMessages.length > 1) {
+            onBulkMove(draggedMessages.map((message) => message.id), folder.path);
+        }
+
+        setDragTargetFolder(null);
+        setDraggingMessage(null);
+    }, [draggingMessage, messages, onBulkMove, onMessageMove, parseDraggedMessageIds, selectedFolderPath]);
 
     React.useEffect(() => {
         setCollapsedAccountIds((prev) => {
@@ -317,9 +480,46 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     }, [collapsedAccountIds]);
 
     React.useEffect(() => {
+        try {
+            window.localStorage.setItem(MAIL_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(tableColumns));
+        } catch {
+            // ignore storage failures
+        }
+    }, [tableColumns]);
+
+    React.useEffect(() => {
+        try {
+            window.localStorage.setItem('lunamail.mailTopList.height', String(topListHeight));
+        } catch {
+            // ignore storage failures
+        }
+    }, [topListHeight]);
+
+    React.useEffect(() => {
+        const onMouseMove = (event: MouseEvent) => {
+            const drag = topListResizeRef.current;
+            if (!drag) return;
+            const next = drag.startHeight + (event.clientY - drag.startY);
+            setTopListHeight(Math.max(220, Math.min(640, next)));
+        };
+        const onMouseUp = () => {
+            topListResizeRef.current = null;
+            document.body.classList.remove('is-resizing-mail-top-list');
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            document.body.classList.remove('is-resizing-mail-top-list');
+        };
+    }, []);
+
+    React.useEffect(() => {
         const close = () => {
             setMenu(null);
             setAccountMenu(null);
+            setTableHeadMenu(null);
         };
         window.addEventListener('click', close);
         window.addEventListener('keydown', close);
@@ -433,6 +633,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         };
     }, [accountMenu]);
 
+    React.useEffect(() => {
+        if (!tableHeadMenu) return;
+        const updatePosition = () => {
+            const el = tableHeadMenuRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const next = constrainToViewport(tableHeadMenu.x, tableHeadMenu.y, rect.width, rect.height);
+            setTableHeadMenuPosition((prev) => (prev.left === next.left && prev.top === next.top ? prev : next));
+        };
+        const raf = window.requestAnimationFrame(updatePosition);
+        window.addEventListener('resize', updatePosition);
+        return () => {
+            window.cancelAnimationFrame(raf);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [tableHeadMenu]);
+
     async function saveFolderSettings() {
         if (!folderEditor || folderEditorSaving) return;
         setFolderEditorSaving(true);
@@ -515,11 +732,81 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         });
     }
 
-    function syncAllAccountsNow(): void {
-        if (accounts.length === 0) return;
-        for (const account of accounts) {
-            syncAccountNow(account.id);
+    function toggleTableColumn(column: MailTableColumnKey): void {
+        setTableColumns((prev) => {
+            if (prev.includes(column)) {
+                if (prev.length === 1) return prev;
+                return prev.filter((item) => item !== column);
+            }
+            return [...prev, column];
+        });
+    }
+
+    function resetTableColumns(): void {
+        setTableColumns(DEFAULT_TABLE_COLUMNS);
+    }
+
+    function navigateToMessage(message: MessageItem): void {
+        window.location.hash = `#/email/${message.account_id}/${message.folder_id}/${message.id}`;
+    }
+
+    function onMessageRowClick(event: React.MouseEvent, message: MessageItem, messageIndex: number): void {
+        const multiGesture = event.ctrlKey || event.metaKey || event.shiftKey;
+        if (multiGesture) {
+            event.preventDefault();
         }
+        onSelectMessage(message.id, messageIndex, {
+            shiftKey: event.shiftKey,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+        });
+        if (!multiGesture) {
+            navigateToMessage(message);
+        }
+    }
+
+    function onMessageRowDragStart(event: React.DragEvent, message: MessageItem): void {
+        const dragIds = selectedMessageIds.length > 1 && selectedMessageIds.includes(message.id)
+            ? selectedMessageIds
+            : [message.id];
+        setDraggingMessage({id: message.id, accountId: message.account_id});
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('application/x-lunamail-message-id', String(message.id));
+        event.dataTransfer.setData('application/x-lunamail-message-ids', JSON.stringify(dragIds));
+        event.dataTransfer.setData('text/plain', String(message.id));
+
+        const ghost = document.createElement('div');
+        ghost.textContent = dragIds.length > 1
+            ? `Move ${dragIds.length} emails`
+            : `Move: ${message.subject || '(No subject)'}`;
+        ghost.style.position = 'fixed';
+        ghost.style.top = '-1000px';
+        ghost.style.left = '-1000px';
+        ghost.style.padding = '6px 10px';
+        ghost.style.maxWidth = '280px';
+        ghost.style.borderRadius = '8px';
+        ghost.style.background = 'rgba(3, 105, 161, 0.92)';
+        ghost.style.color = '#fff';
+        ghost.style.fontSize = '12px';
+        ghost.style.fontWeight = '600';
+        ghost.style.whiteSpace = 'nowrap';
+        ghost.style.overflow = 'hidden';
+        ghost.style.textOverflow = 'ellipsis';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '9999';
+        document.body.appendChild(ghost);
+        event.dataTransfer.setDragImage(ghost, 12, 12);
+        setTimeout(() => {
+            ghost.remove();
+        }, 0);
+    }
+
+    function onTopListResizeStart(event: React.MouseEvent<HTMLDivElement>): void {
+        topListResizeRef.current = {
+            startY: event.clientY,
+            startHeight: topListHeight,
+        };
+        document.body.classList.add('is-resizing-mail-top-list');
     }
 
     return (
@@ -643,6 +930,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                 showStatusBar
                 statusText={syncStatusText || 'Ready'}
                 statusBusy={Boolean(syncInProgress)}
+                statusHintText={statusHintText || null}
                 contentClassName="min-h-0 flex-1 overflow-hidden p-0"
             >
 
@@ -677,8 +965,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                     const isSyncingAccount = (syncingAccountIds?.has(account.id) ?? false) || localSyncingAccountIds.has(account.id);
                                     const isExpanded = !collapsedAccountIds.has(account.id);
                                     const accountFolders = accountFoldersById[account.id] ?? [];
-                                    const accountInboxUnread = accountFolders
-                                        .filter((folder) => isInboxFolderPath(folder))
+                                    const accountUnread = accountFolders
                                         .reduce((sum, folder) => sum + Math.max(0, Number(folder.unread_count) || 0), 0);
                                     const accountProtectedFolders = accountFolders.filter((folder) => isProtectedFolder(folder));
                                     const accountCustomFolders = accountFolders.filter((folder) => !isProtectedFolder(folder));
@@ -738,14 +1025,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                 </span>
                                                 </Link>
                                                 <div className="flex items-center gap-1 pr-1">
-                                                    {accountInboxUnread > 0 && (
-                                                        <Badge
-                                                            className="h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-red-600 px-2.5 text-xs font-bold leading-none text-white dark:bg-red-500"
-                                                            title={`${accountInboxUnread} unread in inbox`}
-                                                        >
-                                                            {accountInboxUnread}
-                                                        </Badge>
-                                                    )}
                                                     <div
                                                         className={cn('flex items-center gap-1 transition-opacity', isSyncingAccount ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
                                                     <button
@@ -773,6 +1052,19 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                         <Settings size={13}/>
                                                     </button>
                                                     </div>
+                                                    {accountUnread > 0 && (
+                                                        <Badge
+                                                            className={cn(
+                                                                'inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-none',
+                                                                isSelectedAccount
+                                                                    ? 'bg-red-700 text-white dark:bg-red-500 dark:text-white'
+                                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+                                                            )}
+                                                            title={`${accountUnread} unread in account`}
+                                                        >
+                                                            {accountUnread}
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -833,20 +1125,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                                     }}
                                                                     onDrop={(e) => {
                                                                         if (!isSelectedAccount) return;
-                                                                        if (!draggingMessage) return;
-                                                                        if (draggingMessage.accountId !== folder.account_id) return;
-                                                                        if (folder.path === selectedFolderPath) return;
-                                                                        e.preventDefault();
-                                                                        const idRaw =
-                                                                            e.dataTransfer.getData('application/x-lunamail-message-id') ||
-                                                                            e.dataTransfer.getData('text/plain');
-                                                                        const droppedMessageId = Number(idRaw);
-                                                                        const droppedMessage = messages.find((m) => m.id === droppedMessageId);
-                                                                        if (droppedMessage && droppedMessage.account_id === folder.account_id) {
-                                                                            onMessageMove(droppedMessage, folder.path);
-                                                                        }
-                                                                        setDragTargetFolder(null);
-                                                                        setDraggingMessage(null);
+                                                                        handleMessageDropOnFolder(e, folder);
                                                                     }}
                                                                     onContextMenu={(e) => {
                                                                         e.preventDefault();
@@ -974,20 +1253,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                                     }}
                                                                     onDrop={(e) => {
                                                                         if (!isSelectedAccount) return;
-                                                                        if (!draggingMessage) return;
-                                                                        if (draggingMessage.accountId !== folder.account_id) return;
-                                                                        if (folder.path === selectedFolderPath) return;
-                                                                        e.preventDefault();
-                                                                        const idRaw =
-                                                                            e.dataTransfer.getData('application/x-lunamail-message-id') ||
-                                                                            e.dataTransfer.getData('text/plain');
-                                                                        const droppedMessageId = Number(idRaw);
-                                                                        const droppedMessage = messages.find((m) => m.id === droppedMessageId);
-                                                                        if (droppedMessage && droppedMessage.account_id === folder.account_id) {
-                                                                            onMessageMove(droppedMessage, folder.path);
-                                                                        }
-                                                                        setDragTargetFolder(null);
-                                                                        setDraggingMessage(null);
+                                                                        handleMessageDropOnFolder(e, folder);
                                                                     }}
                                                                     onContextMenu={(e) => {
                                                                         e.preventDefault();
@@ -1014,30 +1280,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                 })}
                             </nav>
                         </ScrollArea>
-                        <div className="shrink-0 border-t border-slate-200 px-2 py-3 dark:border-[#3a3d44]">
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-60 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-200 dark:hover:bg-[#35373c]"
-                                    onClick={syncAllAccountsNow}
-                                    title="Sync all accounts"
-                                    aria-label="Sync all accounts"
-                                    disabled={accounts.length === 0}
-                                >
-                                    <RefreshCw size={14}/>
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-sky-600 text-white transition-colors hover:bg-sky-700 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
-                                    onClick={() => window.electronAPI.openAddAccountWindow()}
-                                    title="Add account"
-                                    aria-label="Add account"
-                                >
-                                    <FolderPlus size={14}/>
-                                </button>
-                            </div>
-                        </div>
-
                     </aside>
                         <div
                             role="separator"
@@ -1048,203 +1290,377 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                     </div>
                 )}
 
-                <main
-                    className="relative flex min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]"
-                    style={{width: mailListWidth}}
-                >
-                    <div className="border-b border-slate-200 p-2 dark:border-[#3a3d44]">
-                        <div className="relative">
-                            <Search size={14}
-                                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"/>
-                            <input
-                                type="text"
-                                readOnly
-                                value=""
-                                placeholder="Search mail"
-                                className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-14 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-500 hover:bg-slate-50 focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-200 dark:placeholder:text-slate-400 dark:hover:bg-[#25272c] dark:focus:border-[#5865f2]"
-                                onClick={() => setSearchModalOpen(true)}
-                                onFocus={(event) => {
-                                    setSearchModalOpen(true);
-                                    event.currentTarget.blur();
-                                }}
-                                aria-label="Search mail"
-                            />
-                            <span
-                                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                Ctrl+F
-                            </span>
-                        </div>
-                    </div>
-                    {selectedMessageIds.length > 1 && (
-                        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-20">
-                            <div
-                                className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-[#3a3d44] dark:bg-[#1f2125]/95">
-                                <span
-                                    className="text-xs font-medium text-slate-600 dark:text-slate-300">{selectedMessageIds.length} selected</span>
-                                <button
-                                    type="button"
-                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
-                                    onClick={() => onBulkMarkRead(selectedMessageIds, 1)}
-                                >
-                                    Mark read
-                                </button>
-                                <button
-                                    type="button"
-                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
-                                    onClick={() => onBulkMarkRead(selectedMessageIds, 0)}
-                                >
-                                    Mark unread
-                                </button>
-                                <button
-                                    type="button"
-                                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/25"
-                                    onClick={() => onBulkDelete(selectedMessageIds)}
-                                >
-                                    Delete
-                                </button>
-                                <button
-                                    type="button"
-                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
-                                    onClick={onClearMessageSelection}
-                                >
-                                    Clear
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                    <ScrollArea
-                        className="min-h-0 flex-1"
-                        onScroll={(e) => {
-                            if (!hasMoreMessages || loadingMoreMessages) return;
-                            const el = e.currentTarget;
-                            const threshold = 220;
-                            if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
-                                onLoadMoreMessages();
-                            }
-                        }}
-                    >
-                        {messages.length === 0 && (
-                            <div className="p-5 text-sm text-slate-500 dark:text-slate-400">No messages in this folder
-                                yet.</div>
-                        )}
-                        {messages.map((message, messageIndex) => (
-                            <Link
-                                key={message.id}
-                                to={`/email/${message.account_id}/${message.folder_id}/${message.id}`}
-                                className={cn(
-                                    'block w-full border-b border-slate-100 px-5 py-4 text-left no-underline transition-colors hover:bg-slate-50 dark:border-[#393c41] dark:hover:bg-[#32353b]',
-                                    draggingMessage?.id === message.id && 'opacity-60',
-                                    selectedMessageIds.includes(message.id) && 'bg-sky-50/70 dark:bg-[#3a3e52]',
-                                    selectedMessageId === message.id && 'border-l-4 border-l-sky-600 dark:border-l-[#5865f2]',
-                                )}
-                                style={{color: 'inherit'}}
-                                onClick={(e) =>
-                                    onSelectMessage(message.id, messageIndex, {
-                                        shiftKey: e.shiftKey,
-                                        ctrlKey: e.ctrlKey,
-                                        metaKey: e.metaKey,
-                                    })}
-                                onDoubleClick={() => {
-                                    void window.electronAPI.openMessageWindow(message.id);
-                                }}
-                                draggable
-                                onDragStart={(e) => {
-                                    setDraggingMessage({id: message.id, accountId: message.account_id});
-                                    e.dataTransfer.effectAllowed = 'move';
-                                    e.dataTransfer.setData('application/x-lunamail-message-id', String(message.id));
-                                    e.dataTransfer.setData('text/plain', String(message.id));
-
-                                    const ghost = document.createElement('div');
-                                    ghost.textContent = `Move: ${message.subject || '(No subject)'}`;
-                                    ghost.style.position = 'fixed';
-                                    ghost.style.top = '-1000px';
-                                    ghost.style.left = '-1000px';
-                                    ghost.style.padding = '6px 10px';
-                                    ghost.style.maxWidth = '280px';
-                                    ghost.style.borderRadius = '8px';
-                                    ghost.style.background = 'rgba(3, 105, 161, 0.92)';
-                                    ghost.style.color = '#fff';
-                                    ghost.style.fontSize = '12px';
-                                    ghost.style.fontWeight = '600';
-                                    ghost.style.whiteSpace = 'nowrap';
-                                    ghost.style.overflow = 'hidden';
-                                    ghost.style.textOverflow = 'ellipsis';
-                                    ghost.style.pointerEvents = 'none';
-                                    ghost.style.zIndex = '9999';
-                                    document.body.appendChild(ghost);
-                                    e.dataTransfer.setDragImage(ghost, 12, 12);
-                                    setTimeout(() => {
-                                        ghost.remove();
-                                    }, 0);
-                                }}
-                                onDragEnd={() => {
-                                    setDraggingMessage(null);
-                                    setDragTargetFolder(null);
-                                }}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setMenu({kind: 'message', x: e.clientX, y: e.clientY, message});
-                                }}
+                    {mailView === 'side-list' && (
+                        <>
+                            <main
+                                className="relative flex min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]"
+                                style={{width: mailListWidth}}
                             >
+                                <div className="border-b border-slate-200 p-2 dark:border-[#3a3d44]">
+                                    <div className="relative">
+                                        <Search size={14}
+                                                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"/>
+                                        <input
+                                            type="text"
+                                            readOnly
+                                            value=""
+                                            placeholder="Search mail"
+                                            className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-14 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-500 hover:bg-slate-50 focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-200 dark:placeholder:text-slate-400 dark:hover:bg-[#25272c] dark:focus:border-[#5865f2]"
+                                            onClick={() => setSearchModalOpen(true)}
+                                            onFocus={(event) => {
+                                                setSearchModalOpen(true);
+                                                event.currentTarget.blur();
+                                            }}
+                                            aria-label="Search mail"
+                                        />
+                                        <span
+                                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Ctrl+F
+                                    </span>
+                                    </div>
+                                </div>
+                                {selectedMessageIds.length > 1 && (
+                                    <div className="border-b border-slate-200 px-2 py-2 dark:border-[#3a3d44]">
+                                        <div
+                                            className="flex flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-[#3a3d44] dark:bg-[#26292f]">
+                                        <span
+                                            className="text-xs font-medium text-slate-600 dark:text-slate-300">{selectedMessageIds.length} selected</span>
+                                            <button type="button"
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={() => onBulkMarkRead(selectedMessageIds, 1)}>Mark read
+                                            </button>
+                                            <button type="button"
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={() => onBulkMarkRead(selectedMessageIds, 0)}>Mark unread
+                                            </button>
+                                            <button type="button"
+                                                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/25"
+                                                    onClick={() => onBulkDelete(selectedMessageIds)}>Delete
+                                            </button>
+                                            <button type="button"
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={onClearMessageSelection}>Clear
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                <ScrollArea
+                                    className="min-h-0 flex-1"
+                                    onScroll={(e) => {
+                                        if (!hasMoreMessages || loadingMoreMessages) return;
+                                        const el = e.currentTarget;
+                                        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 220) {
+                                            onLoadMoreMessages();
+                                        }
+                                    }}
+                                >
+                                    {messages.length === 0 && (
+                                        <div className="p-5 text-sm text-slate-500 dark:text-slate-400">No messages in
+                                            this folder yet.</div>
+                                    )}
+                                    {messages.map((message, messageIndex) => (
+                                        <div
+                                            key={message.id}
+                                            className={cn(
+                                                'block w-full border-b border-slate-100 px-5 py-4 text-left transition-colors hover:bg-slate-50 dark:border-[#393c41] dark:hover:bg-[#32353b]',
+                                                draggingMessage?.id === message.id && 'opacity-60',
+                                                selectedMessageIds.includes(message.id) && 'bg-sky-50/70 dark:bg-[#3a3e52]',
+                                                selectedMessageId === message.id && 'border-l-4 border-l-sky-600 dark:border-l-[#5865f2]',
+                                            )}
+                                            onClick={(event) => onMessageRowClick(event, message, messageIndex)}
+                                            onDoubleClick={() => {
+                                                void window.electronAPI.openMessageWindow(message.id);
+                                            }}
+                                            draggable
+                                            onDragStart={(event) => onMessageRowDragStart(event, message)}
+                                            onDragEnd={() => {
+                                                setDraggingMessage(null);
+                                                setDragTargetFolder(null);
+                                            }}
+                                            onContextMenu={(event) => {
+                                                event.preventDefault();
+                                                setMenu({kind: 'message', x: event.clientX, y: event.clientY, message});
+                                            }}
+                                        >
+                                            <div
+                                                className={`truncate text-sm ${message.is_read ? 'font-medium text-slate-700 dark:text-slate-300' : 'font-semibold text-slate-950 dark:text-white'}`}>
+                                                {message.subject || '(No subject)'}
+                                            </div>
+                                            <div className="mt-1.5 flex justify-between">
+                                                <p className="truncate text-xs text-slate-500 dark:text-slate-400">{formatMessageSender(message)}</p>
+                                                <span
+                                                    className="ml-3 inline-flex items-center gap-2 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                                                {Boolean(message.is_flagged) && (
+                                                    <span
+                                                        className="inline-flex items-center text-amber-500 dark:text-amber-300"
+                                                        title="Starred">
+                                                        <Star size={12} className="fill-current"/>
+                                                    </span>
+                                                )}
+                                                    {!message.is_read && <span
+                                                        className="inline-block h-2 w-2 rounded-full bg-sky-600 dark:bg-[#8ea1ff]"/>}
+                                                    <span>{formatSystemDateTime(message.date, dateLocale)}</span>
+                                            </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {loadingMoreMessages && messages.length > 0 && (
+                                        <div
+                                            className="px-5 py-3 text-center text-xs text-slate-500 dark:text-slate-400">Loading
+                                            more messages...</div>
+                                    )}
+                                    {!hasMoreMessages && messages.length > 0 && (
+                                        <div
+                                            className="px-5 py-3 text-center text-xs text-slate-400 dark:text-slate-500">End
+                                            of list</div>
+                                    )}
+                                </ScrollArea>
                                 <div
-                                    className={`truncate text-sm ${message.is_read ? 'font-medium text-slate-800 dark:text-slate-200' : 'font-semibold text-slate-950 dark:text-white'}`}>
-                                    {message.subject || '(No subject)'}
-                                </div>
-                                <div className="mt-1.5 flex justify-between">
-                                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{formatMessageSender(message)}</p>
-                                    <span
-                                        className="ml-3 inline-flex items-center gap-2 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
-                    {Boolean(message.is_flagged) && (
-                        <span className="inline-flex items-center text-amber-500 dark:text-amber-300"
-                              title="Starred">
-                          <Star size={12} className="fill-current"/>
-                        </span>
+                                    role="separator"
+                                    aria-orientation="vertical"
+                                    className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
+                                    onMouseDown={onMailListResizeStart}
+                                />
+                            </main>
+                            <section
+                                className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#34373d]">{children}</section>
+                        </>
                     )}
-                    {!message.is_read &&
-                        <span className="inline-block h-2 w-2 rounded-full bg-sky-600 dark:bg-[#8ea1ff]"/>}
-                                        <span>{formatSystemDateTime(message.date, dateLocale)}</span>
-                  </span>
-                                </div>
-                            </Link>
-                        ))}
-                        {loadingMoreMessages && messages.length > 0 && (
-                            <div className="px-5 py-3 text-center text-xs text-slate-500 dark:text-slate-400">Loading
-                                more messages...</div>
-                        )}
-                        {!hasMoreMessages && messages.length > 0 && (
-                            <div className="px-5 py-3 text-center text-xs text-slate-400 dark:text-slate-500">End of
-                                list</div>
-                        )}
-                    </ScrollArea>
-                    <div
-                        role="separator"
-                        aria-orientation="vertical"
-                        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
-                        onMouseDown={onMailListResizeStart}
-                    />
-                </main>
 
-                <section className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#34373d]">{children}</section>
+                    {mailView === 'top-table' && (
+                        <section className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#34373d]">
+                            <div
+                                className="relative flex shrink-0 min-h-0 flex-col border-b border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]"
+                                style={{height: topListHeight}}>
+                                <div className="border-b border-slate-200 p-2 dark:border-[#3a3d44]">
+                                    <div className="flex items-center gap-2">
+                                        <div className="relative flex-1">
+                                            <Search size={14}
+                                                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"/>
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value=""
+                                                placeholder="Search mail"
+                                                className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-14 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-500 hover:bg-slate-50 focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-200 dark:placeholder:text-slate-400 dark:hover:bg-[#25272c] dark:focus:border-[#5865f2]"
+                                                onClick={() => setSearchModalOpen(true)}
+                                                onFocus={(event) => {
+                                                    setSearchModalOpen(true);
+                                                    event.currentTarget.blur();
+                                                }}
+                                                aria-label="Search mail"
+                                            />
+                                            <span
+                                                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                            Ctrl+F
+                                        </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedMessageIds.length > 1 && (
+                                    <div className="border-b border-slate-200 px-2 py-2 dark:border-[#3a3d44]">
+                                        <div
+                                            className="flex flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-[#3a3d44] dark:bg-[#26292f]">
+                                            <span
+                                                className="text-xs font-medium text-slate-600 dark:text-slate-300">{selectedMessageIds.length} selected</span>
+                                            <button type="button"
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={() => onBulkMarkRead(selectedMessageIds, 1)}>Mark read
+                                            </button>
+                                            <button type="button"
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={() => onBulkMarkRead(selectedMessageIds, 0)}>Mark unread
+                                            </button>
+                                            <button type="button"
+                                                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/25"
+                                                    onClick={() => onBulkDelete(selectedMessageIds)}>Delete
+                                            </button>
+                                            <button type="button"
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                                    onClick={onClearMessageSelection}>Clear
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                <ScrollArea
+                                    className="min-h-0 flex-1"
+                                    onScroll={(e) => {
+                                        if (!hasMoreMessages || loadingMoreMessages) return;
+                                        const el = e.currentTarget;
+                                        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 220) {
+                                            onLoadMoreMessages();
+                                        }
+                                    }}
+                                >
+                                    {messages.length === 0 && (
+                                        <div className="p-5 text-sm text-slate-500 dark:text-slate-400">No messages in
+                                            this folder yet.</div>
+                                    )}
+                                    {messages.length > 0 && (
+                                        <table className="w-full table-fixed border-collapse text-sm">
+                                            <thead
+                                                className="sticky top-0 z-10 bg-slate-100 dark:bg-[#2f3138]"
+                                                onContextMenu={(event) => {
+                                                    event.preventDefault();
+                                                    setTableHeadMenu({x: event.clientX, y: event.clientY});
+                                                }}
+                                            >
+                                            <tr className="text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                                {tableColumns.includes('subject') &&
+                                                    <th className="border-b border-slate-200 px-3 py-2 dark:border-[#3a3d44]">Subject</th>}
+                                                {tableColumns.includes('from') &&
+                                                    <th className="border-b border-slate-200 px-3 py-2 dark:border-[#3a3d44]">From</th>}
+                                                {tableColumns.includes('date') &&
+                                                    <th className="border-b border-slate-200 px-3 py-2 dark:border-[#3a3d44]">Date</th>}
+                                                {tableColumns.includes('flagged') &&
+                                                    <th className="w-16 border-b border-slate-200 px-3 py-2 dark:border-[#3a3d44]">Star</th>}
+                                                {tableColumns.includes('size') &&
+                                                    <th className="w-20 border-b border-slate-200 px-3 py-2 dark:border-[#3a3d44]">Size</th>}
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            {messages.map((message, messageIndex) => (
+                                                <tr
+                                                    key={message.id}
+                                                    className={cn(
+                                                        'cursor-pointer border-b border-slate-100 hover:bg-slate-50 dark:border-[#393c41] dark:hover:bg-[#32353b]',
+                                                        selectedMessageIds.includes(message.id) && 'bg-sky-50/70 dark:bg-[#3a3e52]',
+                                                    )}
+                                                    onClick={(event) => onMessageRowClick(event, message, messageIndex)}
+                                                    onDoubleClick={() => {
+                                                        void window.electronAPI.openMessageWindow(message.id);
+                                                    }}
+                                                    draggable
+                                                    onDragStart={(event) => onMessageRowDragStart(event, message)}
+                                                    onDragEnd={() => {
+                                                        setDraggingMessage(null);
+                                                        setDragTargetFolder(null);
+                                                    }}
+                                                    onContextMenu={(event) => {
+                                                        event.preventDefault();
+                                                        setMenu({
+                                                            kind: 'message',
+                                                            x: event.clientX,
+                                                            y: event.clientY,
+                                                            message
+                                                        });
+                                                    }}
+                                                >
+                                                    {tableColumns.includes('subject') && (
+                                                        <td className={cn('truncate px-3 py-2', message.is_read ? 'font-medium text-slate-700 dark:text-slate-300' : 'font-semibold text-slate-950 dark:text-white')}>
+                                                            {message.subject || '(No subject)'}
+                                                        </td>
+                                                    )}
+                                                    {tableColumns.includes('from') && (
+                                                        <td className="truncate px-3 py-2 text-slate-600 dark:text-slate-300">{formatMessageSender(message)}</td>
+                                                    )}
+                                                    {tableColumns.includes('date') && (
+                                                        <td className="truncate px-3 py-2 text-slate-600 dark:text-slate-300">{formatSystemDateTime(message.date, dateLocale)}</td>
+                                                    )}
+                                                    {tableColumns.includes('flagged') && (
+                                                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                                                            {Boolean(message.is_flagged) ? <Star size={12}
+                                                                                                 className="fill-current text-amber-500 dark:text-amber-300"/> : ''}
+                                                        </td>
+                                                    )}
+                                                    {tableColumns.includes('size') && (
+                                                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{formatMessageSize(message.size)}</td>
+                                                    )}
+                                                </tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                    {loadingMoreMessages && messages.length > 0 && (
+                                        <div
+                                            className="px-5 py-3 text-center text-xs text-slate-500 dark:text-slate-400">Loading
+                                            more messages...</div>
+                                    )}
+                                </ScrollArea>
+                                <div
+                                    role="separator"
+                                    aria-orientation="horizontal"
+                                    className="absolute bottom-0 left-0 right-0 z-10 h-1.5 cursor-row-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
+                                    onMouseDown={onTopListResizeStart}
+                                />
+                            </div>
+                            <div className="min-h-0 flex-1">{children}</div>
+                        </section>
+                    )}
             </div>
             </WorkspaceLayout>
+
+            {tableHeadMenu && (
+                <div
+                    ref={tableHeadMenuRef}
+                    className="fixed z-[1015] min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[#3a3d44] dark:bg-[#313338]"
+                    style={{left: tableHeadMenuPosition.left, top: tableHeadMenuPosition.top}}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div
+                        className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Table Columns
+                    </div>
+                    {TABLE_COLUMN_OPTIONS.map((column) => {
+                        const checked = tableColumns.includes(column.key);
+                        return (
+                            <button
+                                key={column.key}
+                                type="button"
+                                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3e52]"
+                                onClick={() => toggleTableColumn(column.key)}
+                            >
+                                <span>{column.label}</span>
+                                <span
+                                    className={cn('text-xs', checked ? 'text-emerald-600 dark:text-emerald-300' : 'text-slate-400 dark:text-slate-500')}>
+                                    {checked ? 'On' : 'Off'}
+                                </span>
+                            </button>
+                        );
+                    })}
+                    <div className="my-1 h-px bg-slate-200 dark:bg-[#3a3d44]"/>
+                    <button
+                        type="button"
+                        className="flex w-full items-center rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3e52]"
+                        onClick={() => resetTableColumns()}
+                    >
+                        Reset Columns
+                    </button>
+                </div>
+            )}
 
             {searchModalOpen && (
                 <div className="fixed inset-0 z-[1100] flex items-start justify-center bg-slate-950/45 p-4 pt-20"
                      onClick={() => setSearchModalOpen(false)}>
                     <div
-                        className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-[#3a3d44] dark:bg-[#25272c]"
+                        className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-[#3a3d44] dark:bg-[#25272c]"
                         onClick={(e) => e.stopPropagation()}>
                         <div
                             className="group flex h-11 items-center rounded-xl border border-slate-300 bg-white/90 px-3 shadow-sm transition-all focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-100 dark:border-[#40444b] dark:bg-[#1f2125] dark:focus-within:border-[#5865f2] dark:focus-within:ring-[#5865f2]/30">
                             <Search size={16} className="mr-2 shrink-0 text-slate-400 dark:text-slate-500"/>
                             <input
                                 ref={mailSearchModalInputRef}
-                                type="search"
+                                type="text"
                                 value={searchQuery}
                                 onChange={(e) => onSearchQueryChange(e.target.value)}
                                 placeholder="Search sender, subject, or content across all accounts..."
                                 className="h-full w-full border-0 bg-transparent px-0 text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
                             />
+                            <select
+                                value={accountFilter}
+                                onChange={(event) => {
+                                    setAccountFilter(event.target.value);
+                                    setFolderFilter('all');
+                                }}
+                                className="ml-2 h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-700 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-200 dark:focus:border-[#5865f2]"
+                            >
+                                <option value="all">All accounts</option>
+                                {accounts.map((account) => (
+                                    <option key={account.id} value={String(account.id)}>
+                                        {formatAccountSearchLabel(account)}
+                                    </option>
+                                ))}
+                            </select>
                             {searchQuery.trim().length > 0 && (
                                 <button
                                     type="button"
@@ -1259,7 +1675,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         </div>
                         <div
                             className="mt-2 flex items-center justify-between px-1 text-xs text-slate-500 dark:text-slate-400">
-                            <span>Searching all accounts and folders</span>
+                            <span>
+                                {accountFilter === 'all'
+                                    ? 'Searching all accounts and folders'
+                                    : `Searching ${formatAccountSearchLabel(accounts.find((account) => String(account.id) === accountFilter) ?? null)}`}
+                            </span>
                             <div className="flex items-center gap-1">
                                 <button
                                     type="button"
@@ -1279,7 +1699,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         </div>
                         {advancedSearchOpen && (
                             <div
-                                className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-[#3a3d44] dark:bg-[#1f2125] sm:grid-cols-3">
+                                className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-[#3a3d44] dark:bg-[#1f2125] sm:grid-cols-3 lg:grid-cols-4">
                                 <input
                                     type="search"
                                     value={fromFilter}
@@ -1301,6 +1721,85 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                     placeholder="To address"
                                     className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
                                 />
+                                <select
+                                    value={folderFilter}
+                                    onChange={(event) => setFolderFilter(event.target.value)}
+                                    disabled={accountFilter === 'all'}
+                                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 disabled:opacity-60 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                >
+                                    <option value="all">All folders</option>
+                                    {searchFoldersForSelectedAccount.map((folder) => (
+                                        <option key={folder.id} value={String(folder.id)}>
+                                            {folder.custom_name || folder.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={readFilter}
+                                    onChange={(event) => setReadFilter(event.target.value as 'all' | 'read' | 'unread')}
+                                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                >
+                                    <option value="all">Read status: all</option>
+                                    <option value="read">Read only</option>
+                                    <option value="unread">Unread only</option>
+                                </select>
+                                <select
+                                    value={starFilter}
+                                    onChange={(event) => setStarFilter(event.target.value as 'all' | 'starred' | 'unstarred')}
+                                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                >
+                                    <option value="all">Star: all</option>
+                                    <option value="starred">Starred only</option>
+                                    <option value="unstarred">Unstarred only</option>
+                                </select>
+                                <select
+                                    value={dateRangeFilter}
+                                    onChange={(event) => setDateRangeFilter(event.target.value as 'all' | '7d' | '30d' | '365d')}
+                                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                >
+                                    <option value="all">Any date</option>
+                                    <option value="7d">Last 7 days</option>
+                                    <option value="30d">Last 30 days</option>
+                                    <option value="365d">Last 12 months</option>
+                                </select>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={minSizeKbFilter}
+                                    onChange={(event) => setMinSizeKbFilter(event.target.value)}
+                                    placeholder="Min size (KB)"
+                                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                />
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={maxSizeKbFilter}
+                                        onChange={(event) => setMaxSizeKbFilter(event.target.value)}
+                                        placeholder="Max size (KB)"
+                                        className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#40444b] dark:bg-[#25272c] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="h-9 shrink-0 rounded-md border border-slate-300 px-2 text-xs text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:text-slate-200 dark:hover:bg-[#35373c]"
+                                        onClick={() => {
+                                            setFromFilter('');
+                                            setSubjectFilter('');
+                                            setToFilter('');
+                                            setAccountFilter('all');
+                                            setFolderFilter('all');
+                                            setReadFilter('all');
+                                            setStarFilter('all');
+                                            setDateRangeFilter('all');
+                                            setMinSizeKbFilter('');
+                                            setMaxSizeKbFilter('');
+                                        }}
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
                             </div>
                         )}
                         <div className="mt-3 max-h-[56vh] overflow-y-auto">
@@ -1339,7 +1838,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                 }}
                                             >
                                                 <div
-                                                    className={`truncate text-sm ${message.is_read ? 'font-medium text-slate-800 dark:text-slate-200' : 'font-semibold text-slate-950 dark:text-white'}`}>
+                                                    className={`truncate text-sm ${message.is_read ? 'font-medium text-slate-700 dark:text-slate-300' : 'font-semibold text-slate-950 dark:text-white'}`}>
                                                     {message.subject || '(No subject)'}
                                                 </div>
                                                 <div className="mt-1 flex items-center justify-between gap-2">
@@ -1986,6 +2485,20 @@ function formatMessageSender(message: MessageItem): string {
     if (name) return name;
     if (email) return email;
     return 'Unknown sender';
+}
+
+function formatAccountSearchLabel(account: PublicAccount | null): string {
+    if (!account) return 'selected account';
+    const displayName = (account.display_name || '').trim();
+    if (!displayName) return account.email;
+    return `${displayName} <${account.email}>`;
+}
+
+function formatMessageSize(size: number | null): string {
+    if (!size || size <= 0) return '-';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function constrainToViewport(x: number, y: number, width: number, height: number): { left: number; top: number } {

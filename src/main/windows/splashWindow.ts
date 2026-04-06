@@ -1,7 +1,6 @@
 import {app, BrowserWindow} from 'electron';
 import path from 'path';
 import {fileURLToPath} from 'url';
-import {getAppSettingsSync} from '../settings/store.js';
 import {loadWindowContent} from './loadWindowContent.js';
 
 const isDev = !app.isPackaged;
@@ -21,7 +20,7 @@ export function openSplashWindow(options: OpenSplashWindowOptions = {}): Browser
     }
 
     const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
-    const showTitleBar = Boolean(options.forceTitleBar || getAppSettingsSync().developerMode);
+    const showTitleBar = isDev || Boolean(options.forceTitleBar);
 
     splashWin = new BrowserWindow({
         width: 420,
