@@ -751,7 +751,7 @@ function ContactsRoute({
         </aside>
     );
     const contactsToolbar = (
-        <div className="flex items-center gap-2">
+        <div className="flex h-10 min-w-0 items-center gap-2">
             <select
                 value={selectedBookId ?? ''}
                 onChange={(event) => setSelectedBookId(event.target.value ? Number(event.target.value) : null)}
@@ -779,7 +779,7 @@ function ContactsRoute({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search contacts..."
-                className="h-10 w-full max-w-xl rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 disabled:opacity-60 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                className="h-10 min-w-0 w-full max-w-xl rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 disabled:opacity-60 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
                 disabled={!accountId}
             />
             <button
@@ -1487,7 +1487,7 @@ function CalendarRoute({
     );
     const selectedDayEvents = selectedDayForModal ? (eventsByDay.get(selectedDayForModal) ?? []) : [];
     const calendarToolbar = (
-        <div className="flex items-center gap-2">
+        <div className="flex h-10 min-w-0 items-center gap-2">
             <div
                 className="flex items-center rounded-md border border-slate-300 bg-white dark:border-[#3a3d44] dark:bg-[#1e1f22]">
                 <button

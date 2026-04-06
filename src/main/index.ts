@@ -764,15 +764,31 @@ function closeMainWindowForNoAccounts(): void {
     }
 }
 
+function configureLinuxDesktopEntryName(): void {
+    if (process.platform !== 'linux') return;
+    const runtimeDesktop = String(process.env.CHROME_DESKTOP || '').trim();
+    const desktopNames = [
+        runtimeDesktop,
+        `${app.getName().toLowerCase()}.desktop`,
+        `${app.getName()}.desktop`,
+    ].filter(Boolean);
+    for (const desktopName of desktopNames) {
+        try {
+            (app as any).setDesktopName?.(desktopName);
+            logger.info('Linux desktop name set to %s', desktopName);
+            break;
+        } catch {
+            // try next candidate
+        }
+    }
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
     logger.warn('Single instance lock unavailable, quitting');
     app.quit();
 } else {
-    if (process.platform === 'linux') {
-        // Ensure Linux launcher badge APIs target the packaged desktop entry.
-        (app as any).setDesktopName?.(`${app.getName()}.desktop`);
-    }
+    configureLinuxDesktopEntryName();
     registerProtocolHandlers();
     installExternalNavigationPolicy();
 

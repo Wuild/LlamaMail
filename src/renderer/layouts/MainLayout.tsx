@@ -126,6 +126,10 @@ const ACCOUNT_COLLAPSE_STORAGE_KEY = 'lunamail.accountCollapseState.v1';
 const MAIL_TABLE_COLUMNS_STORAGE_KEY = 'lunamail.mailTableColumns.v1';
 const MAIL_TABLE_COLUMN_WIDTHS_STORAGE_KEY = 'lunamail.mailTableColumnWidths.v1';
 const MAIL_TABLE_RESIZE_HANDLE_CLASS = 'absolute inset-y-0 right-[-8px] z-10 w-4 cursor-col-resize hover:bg-sky-400/20';
+const SIDE_LIST_SPLIT_BREAKPOINT_PX = 1320;
+const SIDE_LIST_SIDEBAR_WINDOW_FRACTION = 0.5;
+const SIDE_LIST_MIN_SIDEBAR_WIDTH_PX = 180;
+const TOP_TABLE_COMPACT_BREAKPOINT_PX = 860;
 
 type MailPaneLayoutMode = 'side-list' | 'top-table';
 type MailTableColumnKey =
@@ -391,6 +395,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         minWidth: 300,
         maxWidth: 760,
     });
+    const [viewportWidth, setViewportWidth] = React.useState<number>(() => {
+        if (typeof window === 'undefined') return 1920;
+        return window.innerWidth;
+    });
+    const [viewportHeight, setViewportHeight] = React.useState<number>(() => {
+        if (typeof window === 'undefined') return 1080;
+        return window.innerHeight;
+    });
     const selectedFolder = React.useMemo(
         () => folders.find((folder) => folder.path === selectedFolderPath) ?? null,
         [folders, selectedFolderPath],
@@ -512,6 +524,29 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         if (!Number.isFinite(accountId)) return [];
         return accountFoldersById[accountId] ?? [];
     }, [accountFilter, accountFoldersById]);
+
+    const isCompactSideList = mailView === 'side-list' && viewportWidth < SIDE_LIST_SPLIT_BREAKPOINT_PX;
+    const isCompactTopTable = mailView === 'top-table' && viewportHeight < TOP_TABLE_COMPACT_BREAKPOINT_PX;
+    const effectiveSidebarWidth = React.useMemo(() => {
+        if (!isCompactSideList) return sidebarWidth;
+        const maxCompactSidebarWidth = Math.max(
+            SIDE_LIST_MIN_SIDEBAR_WIDTH_PX,
+            Math.round(viewportWidth * SIDE_LIST_SIDEBAR_WINDOW_FRACTION),
+        );
+        // Respect persisted resize width, but cap sidebar to 50% in compact mode.
+        return Math.max(SIDE_LIST_MIN_SIDEBAR_WIDTH_PX, Math.min(sidebarWidth, maxCompactSidebarWidth));
+    }, [isCompactSideList, sidebarWidth, viewportWidth]);
+
+    React.useEffect(() => {
+        const onResize = () => {
+            setViewportWidth(window.innerWidth);
+            setViewportHeight(window.innerHeight);
+        };
+        window.addEventListener('resize', onResize);
+        return () => {
+            window.removeEventListener('resize', onResize);
+        };
+    }, []);
 
     const parseDraggedMessageIds = React.useCallback((event: React.DragEvent<HTMLElement>): number[] => {
         const idsRaw = event.dataTransfer.getData('application/x-lunamail-message-ids');
@@ -1046,6 +1081,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                     <td key={`${message.id}-subject`}
                         className={cn(baseCell, message.is_read ? 'font-medium text-slate-700 dark:text-slate-300' : 'font-semibold text-slate-950 dark:text-white')}>
                         <div className="flex min-w-0 items-center gap-2">
+                            {!message.is_read && (
+                                <span
+                                    className="inline-flex h-2 w-2 shrink-0 rounded-full bg-sky-500 dark:bg-[#8ab4ff]"
+                                    title="Unread"
+                                    aria-label="Unread"
+                                />
+                            )}
                             <span className="truncate">{message.subject || '(No subject)'}</span>
                             {getThreadCount(message) > 1 && (
                                 <span
@@ -1249,7 +1291,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
                 <div className="min-h-0 flex h-full overflow-hidden">
                 {!hideFolderSidebar && (
-                    <div className="relative min-h-0 shrink-0" style={{width: sidebarWidth}}>
+                    <div className="relative min-h-0 shrink-0" style={{width: effectiveSidebarWidth}}>
                     <aside
                         className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white text-slate-800 dark:border-[#3a3d44] dark:bg-[#2b2d31] dark:text-slate-100">
                         <ScrollArea className="min-h-0 flex-1 px-2.5 py-3">
@@ -1276,7 +1318,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                 {accounts.map((account, accountIndex) => {
                                     const isSelectedAccount = account.id === selectedAccountId;
                                     const isSyncingAccount = (syncingAccountIds?.has(account.id) ?? false) || localSyncingAccountIds.has(account.id);
-                                    const isExpanded = !collapsedAccountIds.has(account.id);
+                                    const isPersistedExpanded = !collapsedAccountIds.has(account.id);
+                                    // Keep the active account open in the UI without changing persisted collapse state.
+                                    const isExpanded = isSelectedAccount || isPersistedExpanded;
                                     const accountFolders = accountFoldersById[account.id] ?? [];
                                     const accountUnread = accountFolders
                                         .reduce((sum, folder) => sum + Math.max(0, Number(folder.unread_count) || 0), 0);
@@ -1337,7 +1381,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                         )}
                                                 </span>
                                                 </Link>
-                                                <div className="flex items-center gap-1 pr-1">
+                                                <div className="ml-auto flex items-center gap-1 pr-0">
                                                     <div
                                                         className={cn('flex items-center gap-1 transition-opacity', isSyncingAccount ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
                                                     <button
@@ -1374,6 +1418,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                             )}
                                                         />
                                                     )}
+                                                    <button
+                                                        type="button"
+                                                        className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-[#454850] dark:hover:text-slate-100"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            toggleAccountExpanded(account.id);
+                                                        }}
+                                                        title={isExpanded ? 'Collapse account folders' : 'Expand account folders'}
+                                                        aria-label={isExpanded ? 'Collapse account folders' : 'Expand account folders'}
+                                                        aria-expanded={isExpanded}
+                                                    >
+                                                        <ChevronRight
+                                                            size={14}
+                                                            className={cn('transition-transform', isExpanded && 'rotate-90')}
+                                                        />
+                                                    </button>
                                                 </div>
                                             </div>
 
@@ -1602,8 +1663,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                     {mailView === 'side-list' && (
                         <>
                             <main
-                                className="relative flex min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]"
-                                style={{width: mailListWidth}}
+                                className={cn(
+                                    'relative flex min-h-0 flex-col border-r border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]',
+                                    isCompactSideList ? 'min-w-0 flex-1' : 'shrink-0',
+                                )}
+                                style={isCompactSideList ? undefined : {width: mailListWidth}}
                             >
                                 <div className="border-b border-slate-200 p-2 dark:border-[#3a3d44]">
                                     <div className="relative">
@@ -1676,7 +1740,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                 selectedMessageIds.includes(message.id) && 'bg-sky-50/70 dark:bg-[#3a3e52]',
                                                 selectedMessageId === message.id && 'border-l-4 border-l-sky-600 dark:border-l-[#5865f2]',
                                             )}
-                                            onClick={(event) => onMessageRowClick(event, message, messageIndex)}
+                                            onClick={(event) => {
+                                                onMessageRowClick(event, message, messageIndex);
+                                                if (!isCompactSideList) return;
+                                                if (event.shiftKey || event.ctrlKey || event.metaKey) return;
+                                                void window.electronAPI.openMessageWindow(message.id);
+                                            }}
                                             onDoubleClick={() => {
                                                 void window.electronAPI.openMessageWindow(message.id);
                                             }}
@@ -1693,6 +1762,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                         >
                                             <div
                                                 className={`flex min-w-0 items-center gap-2 text-sm ${message.is_read ? 'font-medium text-slate-700 dark:text-slate-300' : 'font-semibold text-slate-950 dark:text-white'}`}>
+                                                {!message.is_read && (
+                                                    <span
+                                                        className="inline-flex h-2 w-2 shrink-0 rounded-full bg-sky-500 dark:bg-[#8ab4ff]"
+                                                        title="Unread"
+                                                        aria-label="Unread"
+                                                    />
+                                                )}
                                                 <span className="truncate">{message.subject || '(No subject)'}</span>
                                                 {getThreadCount(message) > 1 && (
                                                     <span
@@ -1723,12 +1799,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                             }).tag ?? null)}</span>
                                                         </span>
                                                     )}
-                                                    {!message.is_read && (
-                                                        <span
-                                                            className="inline-flex shrink-0 rounded-sm border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:border-[#4a6cbf] dark:bg-[#2e3e66] dark:text-[#c6d7ff]">
-                                                            Unread
-                                                        </span>
-                                                    )}
                                                 </div>
                                                 <span
                                                     className="ml-3 inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
@@ -1755,23 +1825,30 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                             of list</div>
                                     )}
                                 </ScrollArea>
-                                <div
-                                    role="separator"
-                                    aria-orientation="vertical"
-                                    className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
-                                    onMouseDown={onMailListResizeStart}
-                                />
+                                {!isCompactSideList && (
+                                    <div
+                                        role="separator"
+                                        aria-orientation="vertical"
+                                        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
+                                        onMouseDown={onMailListResizeStart}
+                                    />
+                                )}
                             </main>
-                            <section
-                                className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#34373d]">{children}</section>
+                            {!isCompactSideList && (
+                                <section
+                                    className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#34373d]">{children}</section>
+                            )}
                         </>
                     )}
 
                     {mailView === 'top-table' && (
                         <section className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#34373d]">
                             <div
-                                className="relative flex shrink-0 min-h-0 flex-col border-b border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]"
-                                style={{height: topListHeight}}>
+                                className={cn(
+                                    'relative flex min-h-0 flex-col border-b border-slate-200 bg-white dark:border-[#3a3d44] dark:bg-[#2b2d31]',
+                                    isCompactTopTable ? 'flex-1' : 'shrink-0',
+                                )}
+                                style={isCompactTopTable ? undefined : {height: topListHeight}}>
                                 <div className="border-b border-slate-200 p-2 dark:border-[#3a3d44]">
                                     <div className="flex items-center gap-2">
                                         <div className="relative flex-1">
@@ -1943,7 +2020,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                                         'cursor-pointer border-t border-slate-100 first:border-t-0 hover:bg-slate-50 dark:border-[#393c41] dark:hover:bg-[#32353b]',
                                                         selectedMessageIds.includes(message.id) && 'bg-sky-50/70 dark:bg-[#3a3e52]',
                                                     )}
-                                                    onClick={(event) => onMessageRowClick(event, message, messageIndex)}
+                                                    onClick={(event) => {
+                                                        onMessageRowClick(event, message, messageIndex);
+                                                        if (!isCompactTopTable) return;
+                                                        if (event.shiftKey || event.ctrlKey || event.metaKey) return;
+                                                        void window.electronAPI.openMessageWindow(message.id);
+                                                    }}
                                                     onDoubleClick={() => {
                                                         void window.electronAPI.openMessageWindow(message.id);
                                                     }}
@@ -1976,14 +2058,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                                             more messages...</div>
                                     )}
                                 </ScrollArea>
-                                <div
-                                    role="separator"
-                                    aria-orientation="horizontal"
-                                    className="absolute bottom-0 left-0 right-0 z-10 h-1.5 cursor-row-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
-                                    onMouseDown={onTopListResizeStart}
-                                />
+                                {!isCompactTopTable && (
+                                    <div
+                                        role="separator"
+                                        aria-orientation="horizontal"
+                                        className="absolute bottom-0 left-0 right-0 z-10 h-1.5 cursor-row-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
+                                        onMouseDown={onTopListResizeStart}
+                                    />
+                                )}
                             </div>
-                            <div className="min-h-0 flex-1">{children}</div>
+                            {!isCompactTopTable && <div className="min-h-0 flex-1">{children}</div>}
                         </section>
                     )}
             </div>

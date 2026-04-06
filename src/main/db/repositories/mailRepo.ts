@@ -408,7 +408,16 @@ export function listThreadMessagesByFolder(accountId: number, folderPath: string
         `
             WITH base AS (
                 SELECT m.*,
-                       COALESCE(NULLIF(trim(m.thread_id), ''), printf('message-%d', m.id)) AS thread_group
+                       CASE
+                           WHEN COALESCE(NULLIF(trim(m.thread_id), ''), '') <> ''
+                               AND m.thread_id NOT LIKE 'subj:%'
+                               THEN m.thread_id
+                           WHEN COALESCE(NULLIF(trim(m.in_reply_to), ''), '') <> ''
+                               THEN 'mid:' || lower(replace(replace(trim(m.in_reply_to), '<', ''), '>', ''))
+                           WHEN COALESCE(NULLIF(trim(m.message_id), ''), '') <> ''
+                               THEN 'mid:' || lower(replace(replace(trim(m.message_id), '<', ''), '>', ''))
+                           ELSE COALESCE(NULLIF(trim(m.thread_id), ''), printf('message-%d', m.id))
+                           END AS thread_group
                 FROM messages m
                 WHERE m.account_id = ?
                   AND m.folder_id = ?

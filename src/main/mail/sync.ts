@@ -143,6 +143,8 @@ export async function syncAccountMailboxWithCredentials(
                         inReplyTo: msg.envelope?.inReplyTo ?? null,
                         references: envelopeWithRefs?.references,
                         subject: msg.envelope?.subject ?? null,
+                        fromAddress: msg.envelope?.from?.[0]?.address ?? null,
+                        toAddress: msg.envelope?.to?.map((a) => a.address).filter(Boolean).join(', ') ?? null,
                     });
                     upsertThread(threadId, msg.envelope?.subject ?? null, messageDate ?? new Date().toISOString());
                     upsertMessage({

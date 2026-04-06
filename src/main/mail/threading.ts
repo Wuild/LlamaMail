@@ -47,19 +47,28 @@ export function buildThreadId(input: {
     inReplyTo?: string | null;
     references?: unknown;
     subject?: string | null;
+    fromAddress?: string | null;
+    toAddress?: string | null;
 }): string {
+    const refs = parseReferenceIdentifiers(input.references);
+    // Prefer the oldest known reference as the conversation root key.
+    if (refs.length > 0) return `mid:${refs[0]}`;
+
     const inReplyTo = normalizeMessageIdentifier(input.inReplyTo);
     if (inReplyTo) return `mid:${inReplyTo}`;
-
-    const refs = parseReferenceIdentifiers(input.references);
-    if (refs.length > 0) return `mid:${refs[refs.length - 1]}`;
 
     const messageId = normalizeMessageIdentifier(input.messageId);
     if (messageId) return `mid:${messageId}`;
 
     const normalizedSubject = normalizeSubjectForThreading(input.subject);
+    const normalizedFrom = normalizeWhitespace(String(input.fromAddress || '')).toLowerCase();
+    const normalizedTo = normalizeWhitespace(String(input.toAddress || '')).toLowerCase();
     const hash = createHash('sha1')
         .update(normalizedSubject || '(no-subject)')
+        .update('\n')
+        .update(normalizedFrom || '(no-from)')
+        .update('\n')
+        .update(normalizedTo || '(no-to)')
         .digest('hex');
     return `subj:${hash}`;
 }

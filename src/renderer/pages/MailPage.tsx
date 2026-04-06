@@ -44,7 +44,6 @@ import type {
     FolderItem,
     MessageBodyResult,
     MessageItem,
-    MessageThreadItem,
     OpenMessageTargetEvent,
     PublicAccount,
     SyncStatusEvent
@@ -67,7 +66,7 @@ function MailPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<MessageItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
-    const [messages, setMessages] = useState<MessageThreadItem[]>([]);
+    const [messages, setMessages] = useState<MessageItem[]>([]);
     const [messageFetchLimit, setMessageFetchLimit] = useState<number>(MESSAGE_PAGE_SIZE);
     const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
     const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -464,7 +463,7 @@ function MailPage() {
         const loadMessages = async () => {
             setLoadingMoreMessages(true);
             try {
-                const rowsRaw = await window.electronAPI.getFolderThreads(selectedAccountId, selectedFolderPath, messageFetchLimit);
+                const rowsRaw = await window.electronAPI.getFolderMessages(selectedAccountId, selectedFolderPath, messageFetchLimit);
                 setHasMoreMessages(rowsRaw.length >= messageFetchLimit);
                 setMessages(applyPendingReadOverrides(filterOutPendingDeletes(rowsRaw)));
             } finally {
@@ -841,7 +840,7 @@ function MailPage() {
             return;
         }
 
-        const msgRowsRaw = await window.electronAPI.getFolderThreads(accountId, chosenFolder, messageFetchLimit);
+        const msgRowsRaw = await window.electronAPI.getFolderMessages(accountId, chosenFolder, messageFetchLimit);
         const msgRows = applyPendingReadOverrides(filterOutPendingDeletes(msgRowsRaw));
         setHasMoreMessages(msgRowsRaw.length >= messageFetchLimit);
         setMessages(msgRows);
