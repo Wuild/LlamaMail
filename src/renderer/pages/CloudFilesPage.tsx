@@ -49,12 +49,15 @@ import {
     invalidateDeletedFolderCaches,
     ONEDRIVE_SCOPE_OPTIONS,
     parseNavigationTrail,
+    pruneCollapsedCloudAccountIds,
+    readCollapsedCloudAccountIds,
     providerLabels,
     readCloudTableColumns,
     readPersistedFolderCache,
     renderCloudFileTypeIcon,
     resolveOneDriveScope,
     serializeNavigationTrail,
+    writeCollapsedCloudAccountIds,
     writeCloudTableColumns,
     writePersistedFolderCache,
     type CloudTableColumnKey,
@@ -101,7 +104,7 @@ export default function CloudFilesPage() {
     const [activeFileActionId, setActiveFileActionId] = useState<string | null>(null);
     const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
     const [refreshingAccountIds, setRefreshingAccountIds] = useState<Set<number>>(new Set());
-    const [collapsedAccountIds, setCollapsedAccountIds] = useState<Set<number>>(new Set());
+    const [collapsedAccountIds, setCollapsedAccountIds] = useState<Set<number>>(() => readCollapsedCloudAccountIds());
     const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: CloudItem } | null>(null);
     const [accountMenu, setAccountMenu] = useState<{ x: number; y: number; account: PublicCloudAccount } | null>(null);
     const [storageUsage, setStorageUsage] = useState<CloudStorageUsage | null>(null);
@@ -253,6 +256,18 @@ export default function CloudFilesPage() {
         nextParams.set("trail", serializeNavigationTrail(buildRootTrail(fallbackAccount.provider)));
         setSearchParams(nextParams, {replace: true});
     }, [accounts, searchParams, selectedAccount, setSearchParams]);
+
+    useEffect(() => {
+        setCollapsedAccountIds((prev) => {
+            if (accounts.length === 0) return prev;
+            const next = pruneCollapsedCloudAccountIds(prev, accounts.map((account) => account.id));
+            return next.size !== prev.size ? next : prev;
+        });
+    }, [accounts]);
+
+    useEffect(() => {
+        writeCollapsedCloudAccountIds(collapsedAccountIds);
+    }, [collapsedAccountIds]);
 
     useEffect(() => {
         if (!rowMenu) return;
@@ -1031,7 +1046,7 @@ export default function CloudFilesPage() {
                     const active = account.id === selectedAccountId;
                     const rootTrail = buildRootTrail(account.provider);
                     const isOneDrive = account.provider === "onedrive";
-                    const isExpanded = active || !collapsedAccountIds.has(account.id);
+                    const isExpanded = !collapsedAccountIds.has(account.id);
                     const selectedScope = active ? resolveOneDriveScope(nav) : "home";
                     return (
                         <div

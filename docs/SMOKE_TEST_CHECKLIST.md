@@ -55,3 +55,6 @@ Use this checklist after each refactor PR.
   with `ipcClient`.
 - 2026-04-08: `npm run test:unit` passed after `window.electronAPI` call replacement.
 - 2026-04-08: `npm run build` passed after `window.electronAPI` call replacement.
+- 2026-04-08: `npm run check:architecture` passed after account/folder collapse-state persistence updates.
+- 2026-04-08: `npm run test:unit` passed after account/folder collapse-state persistence updates.
+- 2026-04-08: `npm run build` passed after account/folder collapse-state persistence updates.

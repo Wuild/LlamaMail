@@ -107,8 +107,7 @@ export default function AccountFolderSidebar({
                             const isSelectedAccount = account.id === selectedAccountId;
                             const isSyncingAccount =
                                 (syncingAccountIds?.has(account.id) ?? false) || localSyncingAccountIds.has(account.id);
-                            const isPersistedExpanded = !collapsedAccountIds.has(account.id);
-                            const isExpanded = isSelectedAccount || isPersistedExpanded;
+                            const isExpanded = !collapsedAccountIds.has(account.id);
                             const accountFolders = accountFoldersById[account.id] ?? [];
                             const accountUnread = accountFolders.reduce(
                                 (sum, folder) => sum + Math.max(0, Number(folder.unread_count) || 0),

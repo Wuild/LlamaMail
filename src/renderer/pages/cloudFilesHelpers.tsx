@@ -27,6 +27,7 @@ export const DEFAULT_ONEDRIVE_TENANT_ID = "common";
 
 const CLOUD_FOLDER_CACHE_PREFIX = "lunamail.cloud.folder.cache.v1";
 const CLOUD_TABLE_COLUMNS_STORAGE_KEY = "lunamail.cloud.table.columns.v1";
+const CLOUD_ACCOUNT_COLLAPSE_STORAGE_KEY = "lunamail.cloud.accountCollapseState.v1";
 
 export const CLOUD_TABLE_RESIZE_HANDLE_CLASS =
     "absolute -right-1 top-1/2 h-[calc(100%-10px)] w-2 -translate-y-1/2 cursor-col-resize rounded bg-transparent after:absolute after:bottom-1 after:left-1/2 after:top-1 after:w-px after:-translate-x-1/2 after:bg-slate-300 after:content-[''] hover:after:bg-sky-500 dark:after:bg-[#4a4d55] dark:hover:after:bg-[#8ab4ff]";
@@ -120,6 +121,36 @@ export function writeCloudTableColumns(columns: CloudTableColumnKey[]): void {
     } catch {
         // Ignore preference persistence failures.
     }
+}
+
+export function readCollapsedCloudAccountIds(): Set<number> {
+    if (typeof window === "undefined") return new Set();
+    try {
+        const raw = window.localStorage.getItem(CLOUD_ACCOUNT_COLLAPSE_STORAGE_KEY);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw) as number[];
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.filter((value) => Number.isFinite(value)));
+    } catch {
+        return new Set();
+    }
+}
+
+export function writeCollapsedCloudAccountIds(ids: Set<number>): void {
+    try {
+        window.localStorage.setItem(CLOUD_ACCOUNT_COLLAPSE_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+    } catch {
+        // Ignore preference persistence failures.
+    }
+}
+
+export function pruneCollapsedCloudAccountIds(ids: Set<number>, accountIds: number[]): Set<number> {
+    const valid = new Set(accountIds);
+    const next = new Set<number>();
+    for (const id of ids) {
+        if (valid.has(id)) next.add(id);
+    }
+    return next;
 }
 
 function isHierarchicalPathToken(token: string): boolean {
