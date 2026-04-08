@@ -1,6 +1,6 @@
 import {format} from 'node:util';
 
-export type DebugLogSource = 'imap' | 'smtp' | 'carddav' | 'caldav' | 'app';
+export type DebugLogSource = 'imap' | 'smtp' | 'carddav' | 'caldav' | 'cloud' | 'app';
 export type DebugLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 export interface DebugLogEntry {

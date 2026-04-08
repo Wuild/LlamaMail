@@ -40,6 +40,7 @@ import {formatBytes} from "../lib/format";
 import {formatSystemDateTime} from "../lib/dateTime";
 import WorkspaceLayout from "../layouts/WorkspaceLayout";
 import {useResizableSidebar} from "../hooks/useResizableSidebar";
+import {ipcClient} from "../lib/ipcClient";
 
 type NavigationEntry = { token: string; label: string };
 type CloudTableColumnKey = "name" | "type" | "size" | "modified" | "created";
@@ -171,12 +172,12 @@ export default function CloudFilesPage() {
     useEffect(() => {
         let active = true;
         const load = async () => {
-            const rows = await window.electronAPI.getCloudAccounts();
+            const rows = await ipcClient.getCloudAccounts();
             if (!active) return;
             setAccounts(rows);
         };
         void load();
-        const off = window.electronAPI.onCloudAccountsUpdated?.((rows) => {
+        const off = ipcClient.onCloudAccountsUpdated((rows) => {
             if (!active) return;
             setAccounts(rows);
         });
@@ -428,7 +429,7 @@ export default function CloudFilesPage() {
         const loadUsage = (markLoading: boolean) => {
             if (!active) return;
             if (markLoading) setStorageLoading(true);
-            void window.electronAPI
+            void ipcClient
                 .getCloudStorageUsage(selectedAccount.id)
                 .then((usage) => {
                     if (!active) return;
@@ -473,7 +474,7 @@ export default function CloudFilesPage() {
         let active = true;
         setLoading(true);
         setStatus("Loading cloud files...");
-        void window.electronAPI
+        void ipcClient
             .listCloudItems(selectedAccount.id, currentNavEntry.token)
             .then((result) => {
                 if (!active) return;
@@ -514,7 +515,7 @@ export default function CloudFilesPage() {
         const token = currentNavEntry.token;
         const key = `${accountId}:${token}`;
         const timer = window.setInterval(() => {
-            void window.electronAPI
+            void ipcClient
                 .listCloudItems(accountId, token)
                 .then((result) => {
                     setFilesCache((prev) => {
@@ -645,7 +646,7 @@ export default function CloudFilesPage() {
         setMutating(true);
         setStatus("Creating folder...");
         try {
-            await window.electronAPI.createCloudFolder(selectedAccount.id, current?.token ?? null, trimmed);
+            await ipcClient.createCloudFolder(selectedAccount.id, current?.token ?? null, trimmed);
             setStatus(`Folder "${trimmed}" created.`);
             setReloadKey((value) => value + 1);
         } catch (error: any) {
@@ -661,7 +662,7 @@ export default function CloudFilesPage() {
         setMutating(true);
         setStatus("Uploading files...");
         try {
-            const result = await window.electronAPI.uploadCloudFiles(selectedAccount.id, current?.token ?? null);
+            const result = await ipcClient.uploadCloudFiles(selectedAccount.id, current?.token ?? null);
             if (!result.uploaded) {
                 setStatus("Upload cancelled.");
                 return;
@@ -699,15 +700,15 @@ export default function CloudFilesPage() {
                 writePersistedFolderCache(selectedAccount.id, currentNavEntry.token, nextVisibleItems);
                 clearPersistedDeletedFolderCaches(selectedAccount.id, item);
             }
-            await window.electronAPI.deleteCloudItem(selectedAccount.id, item.path);
+            await ipcClient.deleteCloudItem(selectedAccount.id, item.path);
             let stillExists = false;
             try {
-                const statusResult = await window.electronAPI.getCloudItemStatus(accountId, item.path);
+                const statusResult = await ipcClient.getCloudItemStatus(accountId, item.path);
                 stillExists = statusResult.exists;
             } catch {
                 stillExists = false;
             }
-            const refreshed = await window.electronAPI.listCloudItems(accountId, folderToken);
+            const refreshed = await ipcClient.listCloudItems(accountId, folderToken);
             setItems(refreshed.items);
             const refreshedCacheKey = `${accountId}:${folderToken}`;
             setFilesCache((prev) => ({...prev, [refreshedCacheKey]: refreshed.items}));
@@ -741,7 +742,7 @@ export default function CloudFilesPage() {
             setStatus(`Opening ${item.name} in external app...`);
         }, 4500);
         try {
-            await window.electronAPI.openCloudItem(selectedAccount.id, item.path, item.name, "open");
+            await ipcClient.openCloudItem(selectedAccount.id, item.path, item.name, "open");
             finished = true;
             setStatus(`Opened ${item.name}.`);
         } catch (error: any) {
@@ -759,7 +760,7 @@ export default function CloudFilesPage() {
         setRowMenu(null);
         setStatus(`Downloading ${item.name}...`);
         try {
-            const result = await window.electronAPI.openCloudItem(selectedAccount.id, item.path, item.name, "save");
+            const result = await ipcClient.openCloudItem(selectedAccount.id, item.path, item.name, "save");
             if (!result.ok || result.action === "cancelled") {
                 setStatus("Download cancelled.");
                 return;
@@ -777,7 +778,7 @@ export default function CloudFilesPage() {
         setRowMenu(null);
         setStatus(`Generating share link for ${item.name}...`);
         try {
-            const result = await window.electronAPI.createCloudShareLink(selectedAccount.id, item.path);
+            const result = await ipcClient.createCloudShareLink(selectedAccount.id, item.path);
             setShareModal({name: item.name, url: result.url});
             setStatus("Share link ready.");
         } catch (error: any) {
@@ -797,7 +798,7 @@ export default function CloudFilesPage() {
                 user: (draft.user || "").trim() || null,
                 secret: draft.secret,
             };
-            await window.electronAPI.addCloudAccount(payload);
+            await ipcClient.addCloudAccount(payload);
             setShowAddModal(false);
             setDraft({
                 provider: "nextcloud",
@@ -819,7 +820,7 @@ export default function CloudFilesPage() {
         setLinkingOAuth(true);
         setStatus("Opening OneDrive sign-in...");
         try {
-            await window.electronAPI.linkCloudOAuth("onedrive", {
+            await ipcClient.linkCloudOAuth("onedrive", {
                 clientId: DEFAULT_ONEDRIVE_CLIENT_ID,
                 tenantId: DEFAULT_ONEDRIVE_TENANT_ID,
             });
@@ -860,7 +861,7 @@ export default function CloudFilesPage() {
         setAccountMenu(null);
         setStatus("Deleting cloud account...");
         try {
-            await window.electronAPI.deleteCloudAccount(account.id);
+            await ipcClient.deleteCloudAccount(account.id);
             setStatus("Cloud account deleted.");
         } catch (error: any) {
             setStatus(`Delete failed: ${error?.message || String(error)}`);
@@ -909,7 +910,7 @@ export default function CloudFilesPage() {
             if (nextSecret) {
                 payload.secret = nextSecret;
             }
-            await window.electronAPI.updateCloudAccount(editDraft.id, payload);
+            await ipcClient.updateCloudAccount(editDraft.id, payload);
             setShowEditModal(false);
             setEditDraft(null);
             if (selectedAccount?.id === editDraft.id) {

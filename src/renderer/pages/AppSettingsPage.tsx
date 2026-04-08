@@ -20,7 +20,7 @@ import WorkspaceLayout from '../layouts/WorkspaceLayout';
 import {normalizeAllowlistEntry} from '../features/mail/remoteContent';
 import {useAppSettings as useIpcAppSettings} from '../hooks/ipc/useAppSettings';
 import {useAutoUpdateState} from '../hooks/ipc/useAutoUpdateState';
-import {useAccounts} from '../hooks/ipc/useAccounts';
+import {useIpcEvent} from '../hooks/ipc/useIpcEvent';
 import {ipcClient} from '../lib/ipcClient';
 import {DEFAULT_APP_SETTINGS} from '../../shared/defaults';
 import {normalizeSyncIntervalMinutes, parseAppLanguage} from '../../shared/settingsRules';
@@ -74,10 +74,16 @@ export default function AppSettingsPage({
 											targetAccountId = null,
 											initialPanel = 'app',
 											openUpdaterToken = null,
-										}: AppSettingsPageProps) {
+}: AppSettingsPageProps) {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);
 	const {state: autoUpdateState, setState: setAutoUpdateState} = useAutoUpdateState();
-	const {accounts} = useAccounts();
+	const accountsQuery = useQuery({
+		queryKey: ['accounts', 'settings-page'],
+		queryFn: () => ipcClient.getAccounts(),
+		initialData: [],
+		refetchOnMount: 'always',
+	});
+	const accounts = accountsQuery.data;
 	const [updateActionBusy, setUpdateActionBusy] = useState(false);
 	const [appStatus, setAppStatus] = useState<string | null>(null);
 	const [panel, setPanel] = useState<SettingsPanel>(
@@ -102,6 +108,18 @@ export default function AppSettingsPage({
 	const [remoteAllowlistInput, setRemoteAllowlistInput] = useState('');
 
 	const saveRequestSeqRef = useRef(0);
+
+	useIpcEvent(ipcClient.onAccountAdded, () => {
+		void accountsQuery.refetch();
+	});
+
+	useIpcEvent(ipcClient.onAccountUpdated, () => {
+		void accountsQuery.refetch();
+	});
+
+	useIpcEvent(ipcClient.onAccountDeleted, () => {
+		void accountsQuery.refetch();
+	});
 
 	useEffect(() => {
 		setPanel((prev) => {
@@ -651,6 +669,20 @@ export default function AppSettingsPage({
 										onChange={(e) => void applySettingsPatch({minimizeToTray: e.target.checked})}
 									/>
 								</label>
+
+								<label
+									className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2.5 text-sm dark:border-[#3a3d44]">
+									<span className="text-slate-700 dark:text-slate-200">Use native titlebar</span>
+									<input
+										type="checkbox"
+										className="h-4 w-4 accent-sky-600 dark:accent-[#5865f2]"
+										checked={settings.useNativeTitleBar}
+										onChange={(e) => void applySettingsPatch({useNativeTitleBar: e.target.checked})}
+									/>
+								</label>
+								<p className="text-xs text-slate-500 dark:text-slate-400">
+									Switching this option recreates the main window to apply frame changes.
+								</p>
 
 								<label
 									className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2.5 text-sm dark:border-[#3a3d44]">

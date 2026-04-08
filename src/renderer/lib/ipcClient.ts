@@ -2,15 +2,22 @@ import type {
     AccountSyncSummary,
     AddAccountPayload,
     AddCalendarEventPayload,
+    AddCloudAccountPayload,
     AddressBookItem,
     AppSettings,
     AutoUpdateState,
     CalendarEventItem,
-    ContactItem,
+    CloudItem,
+    CloudItemStatus,
+    CloudOpenItemResult,
+    CloudShareLinkResult,
+    CloudStorageUsage,
+    CloudUploadResult,
     ComposeDraftPayload,
+    ContactItem,
     DavSyncSummary,
-    DiscoverResult,
     DebugLogEntry,
+    DiscoverResult,
     ExportContactsPayload,
     ExportContactsResult,
     GlobalErrorEvent,
@@ -20,6 +27,7 @@ import type {
     OpenMessageTargetEvent,
     PickedAttachment,
     PublicAccount,
+    PublicCloudAccount,
     RecentRecipientItem,
     SaveDraftPayload,
     SaveDraftResult,
@@ -28,6 +36,7 @@ import type {
     SetMessageReadResult,
     SyncStatusEvent,
     UpdateAccountPayload,
+    UpdateCloudAccountPayload,
     UpsertMailFilterPayload,
     VerifyPayload,
     VerifyResult,
@@ -109,6 +118,44 @@ export const ipcClient = {
     updateAccount: (accountId: number, payload: UpdateAccountPayload) =>
         window.electronAPI.updateAccount(accountId, payload),
     deleteAccount: (accountId: number) => window.electronAPI.deleteAccount(accountId),
+    getCloudAccounts: (): Promise<PublicCloudAccount[]> => window.electronAPI.getCloudAccounts(),
+    onCloudAccountsUpdated: (cb: (payload: PublicCloudAccount[]) => void): (() => void) =>
+        window.electronAPI.onCloudAccountsUpdated?.(cb) ?? noopUnsubscribe,
+    addCloudAccount: (payload: AddCloudAccountPayload): Promise<PublicCloudAccount> =>
+        window.electronAPI.addCloudAccount(payload),
+    updateCloudAccount: (accountId: number, payload: UpdateCloudAccountPayload): Promise<PublicCloudAccount> =>
+        window.electronAPI.updateCloudAccount(accountId, payload),
+    deleteCloudAccount: (accountId: number): Promise<{ removed: boolean }> =>
+        window.electronAPI.deleteCloudAccount(accountId),
+    linkCloudOAuth: (
+        provider: 'google-drive' | 'onedrive',
+        payload: { clientId: string; tenantId?: string | null },
+    ): Promise<PublicCloudAccount> => window.electronAPI.linkCloudOAuth(provider, payload),
+    listCloudItems: (accountId: number, pathOrToken?: string | null): Promise<{ path: string; items: CloudItem[] }> =>
+        window.electronAPI.listCloudItems(accountId, pathOrToken ?? null),
+    getCloudStorageUsage: (accountId: number): Promise<CloudStorageUsage> =>
+        window.electronAPI.getCloudStorageUsage(accountId),
+    createCloudFolder: (
+        accountId: number,
+        parentPathOrToken: string | null,
+        folderName: string,
+    ): Promise<{ id: string; path: string; name: string }> =>
+        window.electronAPI.createCloudFolder(accountId, parentPathOrToken ?? null, folderName),
+    uploadCloudFiles: (accountId: number, parentPathOrToken?: string | null): Promise<CloudUploadResult> =>
+        window.electronAPI.uploadCloudFiles(accountId, parentPathOrToken ?? null),
+    deleteCloudItem: (accountId: number, itemPathOrToken: string): Promise<{ removed: true }> =>
+        window.electronAPI.deleteCloudItem(accountId, itemPathOrToken),
+    getCloudItemStatus: (accountId: number, itemPathOrToken: string): Promise<CloudItemStatus> =>
+        window.electronAPI.getCloudItemStatus(accountId, itemPathOrToken),
+    openCloudItem: (
+        accountId: number,
+        itemPathOrToken: string,
+        fallbackName?: string | null,
+        action?: 'open' | 'save',
+    ): Promise<CloudOpenItemResult> =>
+        window.electronAPI.openCloudItem(accountId, itemPathOrToken, fallbackName ?? null, action ?? 'open'),
+    createCloudShareLink: (accountId: number, itemPathOrToken: string): Promise<CloudShareLinkResult> =>
+        window.electronAPI.createCloudShareLink(accountId, itemPathOrToken),
     syncAccount: (accountId: number): Promise<AccountSyncSummary> => window.electronAPI.syncAccount(accountId),
     getFolders: (accountId: number) => window.electronAPI.getFolders(accountId),
     getFolderMessages: (accountId: number, folderPath: string, limit?: number) =>

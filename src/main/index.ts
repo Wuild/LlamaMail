@@ -38,12 +38,18 @@ import {openComposeWindow} from './windows/composeWindow.js';
 import {getAddAccountWindow, openAddAccountWindow} from './windows/addAccountWindow.js';
 import {loadWindowContent} from './windows/loadWindowContent.js';
 import {closeSplashWindow, openSplashWindow} from './windows/splashWindow.js';
-import {attachWindowShortcuts, buildSecureWebPreferences, createFramelessAppWindow} from './windows/windowFactory.js';
+import {
+	attachWindowShortcuts,
+	buildSecureWebPreferences,
+	createAppWindow,
+	createFramelessAppWindow,
+} from './windows/windowFactory.js';
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
+let mainWindowUsesNativeTitleBar = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 let currentUnreadCount = 0;
@@ -163,8 +169,10 @@ function createWindow() {
 	const restoredState = loadMainWindowState();
 	const normalizedState = normalizeWindowState(restoredState);
 	logger.debug('Window state restored=%s normalized=%s', Boolean(restoredState), Boolean(normalizedState));
+	const currentSettings = getAppSettingsSync();
+	const useNativeTitleBar = Boolean(currentSettings.useNativeTitleBar);
 
-	const win = createFramelessAppWindow({
+	const windowOptions = {
 		width: normalizedState?.width ?? 1200,
 		height: normalizedState?.height ?? 800,
 		minWidth: MAIN_WINDOW_MIN_WIDTH,
@@ -177,7 +185,8 @@ function createWindow() {
 			preloadPath,
 			spellcheck: true,
 		}),
-	});
+	};
+	const win = useNativeTitleBar ? createAppWindow(windowOptions) : createFramelessAppWindow(windowOptions);
 	attachWindowShortcuts(win);
 	if (normalizedState?.isMaximized) {
 		win.maximize();
@@ -194,7 +203,6 @@ function createWindow() {
 	win.on('resize', scheduleSaveState);
 	win.on('maximize', scheduleSaveState);
 	win.on('unmaximize', scheduleSaveState);
-	const currentSettings = getAppSettingsSync();
 	win.webContents.session.setSpellCheckerLanguages(getSpellCheckerLanguages(currentSettings.language));
 	win.on('minimize', () => {
 		const settings = getAppSettingsSync();
@@ -224,6 +232,7 @@ function createWindow() {
 		}
 	});
 	mainWindow = win;
+	mainWindowUsesNativeTitleBar = useNativeTitleBar;
 	win.webContents.once('did-finish-load', () => {
 		flushPendingGlobalErrors(win);
 	});
@@ -266,6 +275,19 @@ function createWindow() {
 		}).catch((error) => {
 			console.error('Failed to load main window (prod):', error);
 		});
+	}
+}
+
+function recreateMainWindowForFrameChange(): void {
+	const existing = mainWindow;
+	if (!existing || existing.isDestroyed()) return;
+	logger.info('Recreating main window to apply titlebar mode change');
+	saveMainWindowState(existing);
+	const wasVisible = existing.isVisible();
+	existing.destroy();
+	createWindow();
+	if (wasVisible) {
+		showMainWindow();
 	}
 }
 
@@ -962,8 +984,12 @@ if (!gotSingleInstanceLock) {
 			}
 		});
 		registerAccountIpc();
-		registerSettingsIpc(() => {
+		registerSettingsIpc((settings) => {
+			const previousTitleBarMode = mainWindowUsesNativeTitleBar;
 			applyRuntimeSettings();
+			if (previousTitleBarMode !== Boolean(settings.useNativeTitleBar)) {
+				recreateMainWindowForFrameChange();
+			}
 		});
 		registerUpdaterIpc();
 		registerWindowIpc();

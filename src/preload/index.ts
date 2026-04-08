@@ -100,6 +100,73 @@ export interface PublicAccount {
 	created_at: string;
 }
 
+export type CloudProvider = 'nextcloud' | 'webdav' | 'google-drive' | 'onedrive';
+
+export interface PublicCloudAccount {
+	id: number;
+	provider: CloudProvider;
+	name: string;
+	base_url: string | null;
+	user: string | null;
+	created_at: string;
+}
+
+export interface AddCloudAccountPayload {
+	provider: CloudProvider;
+	name: string;
+	base_url?: string | null;
+	user?: string | null;
+	secret: string;
+}
+
+export interface UpdateCloudAccountPayload {
+	name?: string | null;
+	base_url?: string | null;
+	user?: string | null;
+	secret?: string | null;
+}
+
+export interface CloudItem {
+	id: string;
+	name: string;
+	path: string;
+	isFolder: boolean;
+	size: number | null;
+	createdAt: string | null;
+	modifiedAt: string | null;
+	mimeType: string | null;
+}
+
+export interface CloudStorageUsage {
+	usedBytes: number | null;
+	totalBytes: number | null;
+}
+
+export interface CloudItemStatus {
+	exists: boolean;
+	item: CloudItem | null;
+	checkedAt: string;
+}
+
+export interface CloudShareLinkResult {
+	url: string;
+}
+
+export interface LinkCloudOAuthPayload {
+	clientId: string;
+	tenantId?: string | null;
+}
+
+export interface CloudUploadResult {
+	uploaded: number;
+}
+
+export interface CloudOpenItemResult {
+	ok: boolean;
+	action: 'opened' | 'saved' | 'cancelled';
+	path: string;
+}
+
 export interface ServiceSettings {
 	host: string;
 	port: number;
@@ -411,7 +478,7 @@ export interface OpenMessageTargetEvent {
 export interface DebugLogEntry {
 	id: number;
 	timestamp: string;
-	source: 'imap' | 'smtp' | 'carddav' | 'caldav' | 'app';
+	source: 'imap' | 'smtp' | 'carddav' | 'caldav' | 'cloud' | 'app';
 	level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 	scope: string;
 	message: string;
@@ -436,6 +503,40 @@ const api = {
 	updateAccount: (accountId: number, payload: UpdateAccountPayload): Promise<PublicAccount> =>
 		ipcRenderer.invoke('update-account', accountId, payload),
 	deleteAccount: (accountId: number): Promise<AccountDeletedEvent> => ipcRenderer.invoke('delete-account', accountId),
+	getCloudAccounts: (): Promise<PublicCloudAccount[]> => ipcRenderer.invoke('get-cloud-accounts'),
+	addCloudAccount: (payload: AddCloudAccountPayload): Promise<PublicCloudAccount> =>
+		ipcRenderer.invoke('add-cloud-account', payload),
+	updateCloudAccount: (accountId: number, payload: UpdateCloudAccountPayload): Promise<PublicCloudAccount> =>
+		ipcRenderer.invoke('update-cloud-account', accountId, payload),
+	deleteCloudAccount: (accountId: number): Promise<{ removed: boolean }> =>
+		ipcRenderer.invoke('delete-cloud-account', accountId),
+	linkCloudOAuth: (provider: 'google-drive' | 'onedrive', payload: LinkCloudOAuthPayload): Promise<PublicCloudAccount> =>
+		ipcRenderer.invoke('link-cloud-oauth', provider, payload),
+	listCloudItems: (accountId: number, pathOrToken?: string | null): Promise<{ path: string; items: CloudItem[] }> =>
+		ipcRenderer.invoke('list-cloud-items', accountId, pathOrToken ?? null),
+	getCloudStorageUsage: (accountId: number): Promise<CloudStorageUsage> =>
+		ipcRenderer.invoke('get-cloud-storage-usage', accountId),
+	createCloudFolder: (
+		accountId: number,
+		parentPathOrToken: string | null,
+		folderName: string,
+	): Promise<{ id: string; path: string; name: string }> =>
+		ipcRenderer.invoke('create-cloud-folder', accountId, parentPathOrToken ?? null, folderName),
+	deleteCloudItem: (accountId: number, itemPathOrToken: string): Promise<{ removed: true }> =>
+		ipcRenderer.invoke('delete-cloud-item', accountId, itemPathOrToken),
+	getCloudItemStatus: (accountId: number, itemPathOrToken: string): Promise<CloudItemStatus> =>
+		ipcRenderer.invoke('get-cloud-item-status', accountId, itemPathOrToken),
+	createCloudShareLink: (accountId: number, itemPathOrToken: string): Promise<CloudShareLinkResult> =>
+		ipcRenderer.invoke('create-cloud-share-link', accountId, itemPathOrToken),
+	uploadCloudFiles: (accountId: number, parentPathOrToken?: string | null): Promise<CloudUploadResult> =>
+		ipcRenderer.invoke('upload-cloud-files', accountId, parentPathOrToken ?? null),
+	openCloudItem: (
+		accountId: number,
+		itemPathOrToken: string,
+		fallbackName?: string | null,
+		action?: 'open' | 'save',
+	): Promise<CloudOpenItemResult> =>
+		ipcRenderer.invoke('open-cloud-item', accountId, itemPathOrToken, fallbackName ?? null, action ?? 'open'),
 	getUnreadCount: (): Promise<number> => ipcRenderer.invoke('get-unread-count'),
 	discoverMailSettings: (email: string): Promise<DiscoverResult> =>
 		ipcRenderer.invoke('discover-mail-settings', email),
@@ -614,6 +715,11 @@ const api = {
 		const listener = (_event: Electron.IpcRendererEvent, payload: AccountDeletedEvent) => callback(payload);
 		ipcRenderer.on('account-deleted', listener);
 		return () => ipcRenderer.removeListener('account-deleted', listener);
+	},
+	onCloudAccountsUpdated: (callback: (payload: PublicCloudAccount[]) => void): (() => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, payload: PublicCloudAccount[]) => callback(payload);
+		ipcRenderer.on('cloud-accounts-updated', listener);
+		return () => ipcRenderer.removeListener('cloud-accounts-updated', listener);
 	},
 	onUnreadCountUpdated: (callback: (payload: number) => void): (() => void) => {
 		const listener = (_event: Electron.IpcRendererEvent, payload: number) => callback(payload);

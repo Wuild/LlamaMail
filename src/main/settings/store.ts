@@ -4,6 +4,7 @@ import path from 'path';
 import type {AppLanguage, AppSettings, AppSettingsPatch, AppTheme, MailView} from '../../shared/ipcTypes.js';
 import {DEFAULT_APP_SETTINGS, createDefaultAppSettings} from '../../shared/defaults.js';
 import {
+    normalizeNavRailOrder,
     normalizeSyncIntervalMinutes,
     parseAppLanguage,
     parseAppTheme,
@@ -23,6 +24,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     const language: AppLanguage = parseAppLanguage(input?.language);
     const theme: AppTheme = parseAppTheme(input?.theme);
     const mailView: MailView = parseMailView(input?.mailView);
+    const navRailOrder = normalizeNavRailOrder(input?.navRailOrder);
     const blockRemoteContent =
         typeof input?.blockRemoteContent === 'boolean'
             ? input.blockRemoteContent
@@ -46,6 +48,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
 
     const minimizeToTray =
         typeof input?.minimizeToTray === 'boolean' ? input.minimizeToTray : DEFAULT_APP_SETTINGS.minimizeToTray;
+    const useNativeTitleBar =
+        typeof input?.useNativeTitleBar === 'boolean'
+            ? input.useNativeTitleBar
+            : DEFAULT_APP_SETTINGS.useNativeTitleBar;
     const autoUpdateEnabled =
         typeof input?.autoUpdateEnabled === 'boolean'
             ? input.autoUpdateEnabled
@@ -57,9 +63,11 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
         language,
         theme,
         mailView,
+        navRailOrder,
         blockRemoteContent,
         remoteContentAllowlist,
         minimizeToTray,
+        useNativeTitleBar,
         syncIntervalMinutes,
         autoUpdateEnabled,
         developerMode,

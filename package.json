@@ -1,5 +1,6 @@
 {
   "name": "lunamail",
+  "type": "module",
   "version": "v1.0.18",
   "description": "Modern offline-first desktop email client for Linux.",
   "homepage": "https://github.com/Wuild/LunaMail",
@@ -57,6 +58,7 @@
     "electron": "^41.1.1",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^16.5.0",

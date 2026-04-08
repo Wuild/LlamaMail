@@ -508,7 +508,7 @@ async function syncAccountMailboxInWorker(
     onWorkerReady?: (worker: Worker) => void,
 ): Promise<SyncSummary> {
     const credentials = await getAccountSyncCredentials(accountId);
-    const worker = new Worker(new URL('../workers/mailSyncWorker.js', import.meta.url), {
+    const worker = new Worker(new URL('../workers/mailSyncWorker.mjs', import.meta.url), {
         workerData: {
             dbPath: getSqlitePath(),
             credentials,

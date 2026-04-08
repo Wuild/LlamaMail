@@ -1,5 +1,5 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {Bug, CalendarDays, CircleHelp, Copy, Download, Mail, Minus, Settings, Square, Users, X} from 'lucide-react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Bug, CalendarDays, CircleHelp, Cloud, Copy, Download, Mail, Minus, Settings, Square, Users, X} from 'lucide-react';
 import {HashRouter, Navigate, Route, Routes, useLocation, useNavigate} from 'react-router-dom';
 import MailPage from './pages/MailPage';
 import DebugConsolePage from './pages/DebugConsolePage';
@@ -16,7 +16,52 @@ import {useWindowControlsState} from './hooks/ipc/useWindowControlsState';
 import {useAppSettings} from './hooks/ipc/useAppSettings';
 import {useIpcEvent} from './hooks/ipc/useIpcEvent';
 import {ipcClient} from './lib/ipcClient';
-import type {GlobalErrorEvent} from '../shared/ipcTypes';
+import type {AppSettings, GlobalErrorEvent} from '../shared/ipcTypes';
+import CloudFilesPage from './pages/CloudFilesPage';
+
+type TopNavItemId = AppSettings['navRailOrder'][number];
+type TopNavItemDef = {
+	id: TopNavItemId;
+	to: string;
+	label: string;
+	icon: React.ReactNode;
+	badgeCount?: number;
+};
+
+const DEFAULT_TOP_NAV_ORDER: TopNavItemId[] = ['email', 'contacts', 'calendar', 'cloud'];
+
+function isTopNavItemId(value: unknown): value is TopNavItemId {
+	return value === 'email' || value === 'contacts' || value === 'calendar' || value === 'cloud';
+}
+
+function normalizeTopNavOrder(input: unknown): TopNavItemId[] {
+	const source = Array.isArray(input) ? input : [];
+	const normalized: TopNavItemId[] = [];
+	for (const item of source) {
+		if (!isTopNavItemId(item)) continue;
+		if (normalized.includes(item)) continue;
+		normalized.push(item);
+	}
+	for (const item of DEFAULT_TOP_NAV_ORDER) {
+		if (!normalized.includes(item)) normalized.push(item);
+	}
+	return normalized;
+}
+
+function reorderTopNavItems(
+	order: TopNavItemId[],
+	sourceId: TopNavItemId,
+	insertionIndex: number,
+): TopNavItemId[] {
+	const sourceIndex = order.indexOf(sourceId);
+	if (sourceIndex < 0) return order;
+	const next = [...order];
+	next.splice(sourceIndex, 1);
+	const clampedInsertionIndex = Math.max(0, Math.min(order.length, insertionIndex));
+	const adjustedInsertionIndex = sourceIndex < clampedInsertionIndex ? clampedInsertionIndex - 1 : clampedInsertionIndex;
+	next.splice(adjustedInsertionIndex, 0, sourceId);
+	return next;
+}
 
 export default function MainWindowApp() {
 	return (
@@ -32,9 +77,15 @@ function MainWindowShell() {
 	const {accounts, selectedAccountId, setSelectedAccountId, totalUnreadCount} = useAccounts();
 	const {isMaximized, toggleMaximize, minimize, close} = useWindowControlsState();
 	const {appVersion, autoUpdatePhase, autoUpdateMessage} = useAutoUpdateState();
-	const {appSettings} = useAppSettings(DEFAULT_APP_SETTINGS);
+	const {appSettings, setAppSettings} = useAppSettings(DEFAULT_APP_SETTINGS);
 	const developerMode = Boolean(appSettings.developerMode);
 	const [globalErrors, setGlobalErrors] = useState<GlobalErrorEvent[]>([]);
+	const [topNavOrder, setTopNavOrder] = useState<TopNavItemId[]>(() =>
+		normalizeTopNavOrder(appSettings.navRailOrder),
+	);
+	const [draggingTopNavItemId, setDraggingTopNavItemId] = useState<TopNavItemId | null>(null);
+	const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null);
+	const dragStartOrderRef = useRef<TopNavItemId[] | null>(null);
 
 	const pushGlobalError = (entry: GlobalErrorEvent) => {
 		setGlobalErrors((prev) => {
@@ -97,11 +148,63 @@ function MainWindowShell() {
 		const path = location.pathname || '/';
 		if (path.startsWith('/contacts')) return 'Contacts';
 		if (path.startsWith('/calendar')) return 'Calendar';
+		if (path.startsWith('/cloud')) return 'Cloud';
 		if (path.startsWith('/settings')) return 'Settings';
 		if (path.startsWith('/debug')) return 'Debug';
 		if (path.startsWith('/help')) return 'Help';
 		return 'Mail';
 	}, [location.pathname]);
+
+	useEffect(() => {
+		setTopNavOrder(normalizeTopNavOrder(appSettings.navRailOrder));
+	}, [appSettings.navRailOrder]);
+
+	const topNavItems = useMemo<TopNavItemDef[]>(() => {
+		const all: Record<TopNavItemId, TopNavItemDef> = {
+			email: {id: 'email', to: '/email', label: 'Mail', icon: <Mail size={18}/>, badgeCount: totalUnreadCount},
+			contacts: {id: 'contacts', to: '/contacts', label: 'Contacts', icon: <Users size={18}/>},
+			calendar: {id: 'calendar', to: '/calendar', label: 'Calendar', icon: <CalendarDays size={18}/>},
+			cloud: {id: 'cloud', to: '/cloud', label: 'Cloud', icon: <Cloud size={18}/>},
+		};
+		return topNavOrder.map((id) => all[id]).filter(Boolean);
+	}, [topNavOrder, totalUnreadCount]);
+
+	const persistTopNavOrder = (nextOrder: TopNavItemId[]) => {
+		setTopNavOrder(nextOrder);
+		setAppSettings((prev) => ({...prev, navRailOrder: nextOrder}));
+		void ipcClient.updateAppSettings({navRailOrder: nextOrder}).catch(() => undefined);
+	};
+
+	const onTopNavDragStart = (event: React.DragEvent<HTMLDivElement>, itemId: TopNavItemId) => {
+		dragStartOrderRef.current = topNavOrder;
+		setDraggingTopNavItemId(itemId);
+		event.dataTransfer.effectAllowed = 'move';
+		event.dataTransfer.setData('text/plain', itemId);
+	};
+
+	const onTopNavDragEnter = (event: React.DragEvent<HTMLDivElement>, insertionIndex: number) => {
+		if (!draggingTopNavItemId) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		setDropIndicatorIndex(insertionIndex);
+	};
+
+	const onTopNavDrop = (event: React.DragEvent<HTMLDivElement>, insertionIndex: number) => {
+		event.preventDefault();
+		const draggedId = draggingTopNavItemId;
+		if (!draggedId) return;
+		const next = reorderTopNavItems(topNavOrder, draggedId, insertionIndex);
+		setDropIndicatorIndex(null);
+		setDraggingTopNavItemId(null);
+		if (next.join('|') === topNavOrder.join('|')) return;
+		persistTopNavOrder(next);
+	};
+
+	const onTopNavDragEnd = () => {
+		setDraggingTopNavItemId(null);
+		setDropIndicatorIndex(null);
+		dragStartOrderRef.current = null;
+	};
 
 	useEffect(() => {
 		document.title = pageTitle;
@@ -236,9 +339,36 @@ function MainWindowShell() {
 				<aside
 					className="flex h-full w-16 shrink-0 flex-col items-center justify-between bg-slate-800 py-3 dark:bg-[#111216]">
 					<div className="flex flex-col items-center gap-2">
-						<NavRailItem to="/email" icon={<Mail size={18}/>} label="Mail" badgeCount={totalUnreadCount}/>
-						<NavRailItem to="/contacts" icon={<Users size={18}/>} label="Contacts"/>
-						<NavRailItem to="/calendar" icon={<CalendarDays size={18}/>} label="Calendar"/>
+						{topNavItems.map((item, index) => {
+							const showDropIndicatorBefore = dropIndicatorIndex === index;
+							const showDropIndicatorAfter = dropIndicatorIndex === index + 1;
+							return (
+								<div
+									key={item.id}
+									className="relative"
+									draggable
+									onDragStart={(event) => onTopNavDragStart(event, item.id)}
+									onDragEnter={(event) => onTopNavDragEnter(event, index)}
+									onDragOver={(event) => onTopNavDragEnter(event, index)}
+									onDrop={(event) => onTopNavDrop(event, index)}
+									onDragEnd={onTopNavDragEnd}
+								>
+									{showDropIndicatorBefore && (
+										<span
+											className="pointer-events-none absolute -top-1 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-sky-300 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]"
+											aria-hidden
+										/>
+									)}
+									<NavRailItem to={item.to} icon={item.icon} label={item.label} badgeCount={item.badgeCount}/>
+									{showDropIndicatorAfter && (
+										<span
+											className="pointer-events-none absolute -bottom-1 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-sky-300 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]"
+											aria-hidden
+										/>
+									)}
+								</div>
+							);
+						})}
 					</div>
 					<div className="flex flex-col items-center gap-2">
 						<NavRailItem to="/settings/application" icon={<Settings size={16}/>} label="Settings"/>
@@ -255,6 +385,7 @@ function MainWindowShell() {
 						<Route path="/email/:accountId/:folderId" element={<MailPage/>}/>
 						<Route path="/email/:accountId/:folderId/:emailId" element={<MailPage/>}/>
 						<Route path="/mail/*" element={<Navigate to="/email" replace/>}/>
+						<Route path="/cloud" element={<CloudFilesPage/>}/>
 						<Route
 							path="/contacts"
 							element={
