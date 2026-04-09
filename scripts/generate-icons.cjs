@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 
 const projectRoot = path.resolve(__dirname, '..');
 const llamaSource = path.join(projectRoot, 'src', 'resources', 'llama.png');
+const llamaTraySource = path.join(projectRoot, 'src', 'resources', 'llamatray.png');
 const buildDir = path.join(projectRoot, 'build');
 const iconsDir = path.join(buildDir, 'icons');
 const appIconOut = path.join(buildDir, 'icon.png');
@@ -35,7 +36,7 @@ async function writeAppIcons() {
 }
 
 async function writeTrayIcon() {
-    await sharp(llamaSource).resize(64, 64, {fit: 'contain'}).png().toFile(trayIconOut);
+    await sharp(llamaTraySource).resize(64, 64, {fit: 'contain'}).png().toFile(trayIconOut);
 }
 
 async function writeWindowsIco() {

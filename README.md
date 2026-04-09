@@ -1,5 +1,8 @@
-# LlamaMail
+<img src="./src/resources/llama.png" alt="build status" width="300px" />
 
+
+# LlamaMail
+ 
 LlamaMail is a modern, offline-first desktop email client for Linux built with:
 
 - Electron
