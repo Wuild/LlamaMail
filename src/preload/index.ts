@@ -474,6 +474,7 @@ export interface SendEmailBackgroundStatusEvent {
 
 export interface SaveDraftPayload {
 	accountId: number;
+    draftMessageId?: number | null;
 	to?: string | null;
 	cc?: string | null;
 	bcc?: string | null;
@@ -488,10 +489,13 @@ export interface SaveDraftPayload {
 
 export interface SaveDraftResult {
 	ok: true;
+    draftId: string;
 }
 
 export interface ComposeDraftPayload {
 	accountId?: number | null;
+    draftMessageId?: number | null;
+    draftSessionId?: string | null;
 	to?: string | null;
 	cc?: string | null;
 	bcc?: string | null;

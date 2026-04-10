@@ -56,13 +56,14 @@ import {
     ListOrdered,
     ListX,
     MessageSquareQuote,
-    Pilcrow,
     SeparatorHorizontal,
     Strikethrough,
     Underline,
 } from 'lucide-react';
 import {$createImageNode, ImageNode} from './lexical/ImageNode';
 import ImageDnDPlugin from './lexical/ImageDnDPlugin';
+import {createDefaultAppSettings} from '@/shared/defaults';
+import {useAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 
 interface HtmlLexicalEditorProps {
     value: string;
@@ -133,6 +134,10 @@ function applyHtmlToEditor(editor: LexicalEditor, value: string): void {
             }
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
+            // Some draft providers may persist contenteditable flags; strip them so the editor stays editable.
+            doc.querySelectorAll('[contenteditable]').forEach((element) => {
+                element.removeAttribute('contenteditable');
+            });
             const nodes = normalizeImportedNodes($generateNodesFromDOM(editor, doc));
             if (nodes.length === 0) {
                 root.append($createParagraphNode());
@@ -160,6 +165,11 @@ function normalizeImportedNodes(nodes: Array<any>): Array<any> {
             normalized.push(paragraphBuffer);
         }
         paragraphBuffer.append(node);
+    }
+
+    const lastNode = normalized[normalized.length - 1];
+    if (lastNode && $isDecoratorNode(lastNode)) {
+        normalized.push($createParagraphNode());
     }
 
     return normalized;
@@ -277,21 +287,14 @@ function ToolbarPlugin({appearance = 'default'}: { appearance?: 'default' | 'emb
         editor.update(() => {
             const selection = $getSelection();
             if ($isRangeSelection(selection)) {
+                const anchorNode = selection.anchor.getNode();
+                const topLevel = anchorNode.getKey() === 'root' ? anchorNode : anchorNode.getTopLevelElementOrThrow();
+                const topTag = typeof (topLevel as any).getTag === 'function' ? String((topLevel as any).getTag()) : '';
+                if (topTag === tag) {
+                    $setBlocksType(selection, () => $createParagraphNode());
+                    return;
+                }
                 $setBlocksType(selection, () => new HeadingNode(tag));
-            }
-        });
-    };
-
-    const setParagraph = () => {
-        editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
-        editor.update(() => {
-            let selection = $getSelection();
-            if (!$isRangeSelection(selection)) {
-                $getRoot().selectEnd();
-                selection = $getSelection();
-            }
-            if ($isRangeSelection(selection)) {
-                $setBlocksType(selection, () => $createParagraphNode());
             }
         });
     };
@@ -380,9 +383,6 @@ function ToolbarPlugin({appearance = 'default'}: { appearance?: 'default' | 'emb
             <ToolbarIcon title="H2" onClick={() => setHeading('h2')} appearance={appearance} active={activeFormats.headingH2}>
                 <Heading2 size={18}/>
             </ToolbarIcon>
-            <ToolbarIcon title="Paragraph" onClick={setParagraph} appearance={appearance}>
-                <Pilcrow size={18}/>
-            </ToolbarIcon>
             <ToolbarIcon title="Quote" onClick={setQuote} appearance={appearance} active={activeFormats.quote}>
                 <MessageSquareQuote size={18}/>
             </ToolbarIcon>
@@ -462,6 +462,8 @@ export default function HtmlLexicalEditor({
     const lastInternalHtmlRef = useRef('');
     const lastInternalPlainRef = useRef('');
     const [isFileDragActive, setIsFileDragActive] = useState(false);
+    const defaultSettings = useMemo(() => createDefaultAppSettings(), []);
+    const {appSettings} = useAppSettings(defaultSettings);
     const initialConfig = useMemo(
         () => ({
             namespace: 'llamamail-html-editor',
@@ -482,6 +484,7 @@ export default function HtmlLexicalEditor({
                     <RichTextPlugin
                         contentEditable={
                             <ContentEditable
+                                spellCheck={Boolean(appSettings.spellcheckEnabled)}
                                 className={
                                     appearance === 'embedded'
                                         ? 'editor-content editor-content-embedded editor-content-shell lexical-editor-input'
@@ -804,6 +807,16 @@ function toInlineEmailHtml(inputHtml: string): string {
         applyStyle(el, 'font-family:ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--state-hover); padding:1px 4px; border-radius:4px;'),
     );
     doc.querySelectorAll('img').forEach((el) => {
+        const align = String(el.getAttribute('data-llamamail-align') || '').toLowerCase().trim();
+        if (align === 'left') {
+            applyStyle(el, 'float:left; margin:0 1rem 0.75rem 0;');
+        } else if (align === 'right') {
+            applyStyle(el, 'float:right; margin:0 0 0.75rem 1rem;');
+        } else if (align === 'center') {
+            applyStyle(el, 'float:none; margin:0 auto 0.75rem;');
+        } else {
+            applyStyle(el, 'float:none; margin:0.5rem 0 0.75rem;');
+        }
         applyStyle(el, 'max-width:100%; height:auto; display:block;');
         if (!el.getAttribute('alt')) el.setAttribute('alt', '');
     });

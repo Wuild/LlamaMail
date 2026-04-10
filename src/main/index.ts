@@ -1,15 +1,16 @@
 import {
-    app,
-    BrowserWindow,
-    clipboard,
-    Menu,
-    nativeImage,
-    nativeTheme,
-    Notification,
-    screen,
-    session,
-    shell,
-    Tray,
+	app,
+	BrowserWindow,
+	clipboard,
+	dialog,
+	Menu,
+	nativeImage,
+	nativeTheme,
+	Notification,
+	screen,
+	session,
+	shell,
+	Tray,
 } from 'electron';
 import fs from 'fs';
 import path from 'path';
@@ -18,30 +19,30 @@ import {createAppLogger, onDebugLog} from './debug/debugLog.js';
 import {initDb} from './db/index.js';
 import {getAccounts} from './db/repositories/accountsRepo.js';
 import {
-    getCurrentUnreadCount,
-    registerAccountIpc,
-    setAccountCountChangedListener,
-    setAutoSyncIntervalMinutes,
-    setNewMailListener,
-    setUnreadCountListener,
-    startAccountAutoSync,
-    stopAccountAutoSync,
+	getCurrentUnreadCount,
+	registerAccountIpc,
+	setAccountCountChangedListener,
+	setAutoSyncIntervalMinutes,
+	setNewMailListener,
+	setUnreadCountListener,
+	startAccountAutoSync,
+	stopAccountAutoSync,
 } from './ipc/accounts.js';
 import {queueCloudOAuthCallbackUrl, registerCloudIpc} from './ipc/cloud.js';
 import {registerSettingsIpc} from './ipc/settings.js';
 import {
-    broadcastAccountSyncStatus,
-    broadcastGlobalError,
-    broadcastToAllWindows,
-    broadcastUnreadCountUpdated
+	broadcastAccountSyncStatus,
+	broadcastGlobalError,
+	broadcastToAllWindows,
+	broadcastUnreadCountUpdated
 } from './ipc/broadcast.js';
 import {broadcastAutoUpdateState, registerUpdaterIpc} from './ipc/updater.js';
 import {registerWindowIpc} from './ipc/windows.js';
 import {
-    getAppSettings,
-    getAppSettingsBootSnapshotSync,
-    getAppSettingsSync,
-    getSpellCheckerLanguages
+	getAppSettings,
+	getAppSettingsBootSnapshotSync,
+	getAppSettingsSync,
+	getSpellCheckerLanguages
 } from './settings/store.js';
 import {reconcileDemoData} from './demo/demoMode.js';
 import {checkForUpdates, initAutoUpdater, runStartupUpdateFlow, setAutoUpdateEnabled} from './updater/autoUpdate.js';
@@ -51,11 +52,11 @@ import {openComposeWindow} from './windows/composeWindow.js';
 import {loadWindowContent} from './windows/loadWindowContent.js';
 import {closeSplashWindow, openSplashWindow} from './windows/splashWindow.js';
 import {
-    attachWindowShortcuts,
-    buildSecureWebPreferences,
-    createAppWindow,
-    createFramelessAppWindow,
-    resolveWindowIconPath,
+	attachWindowShortcuts,
+	buildSecureWebPreferences,
+	createAppWindow,
+	createFramelessAppWindow,
+	resolveWindowIconPath,
 } from './windows/windowFactory.js';
 import {APP_NAME, APP_PROTOCOL} from './config.js';
 
@@ -896,11 +897,61 @@ function installExternalNavigationPolicy(): void {
 				fatal: true,
 			});
 		});
+        contents.on('will-prevent-unload', (event) => {
+            const owner = BrowserWindow.fromWebContents(contents) ?? undefined;
+            if (owner && !owner.isDestroyed()) {
+                if (owner.isMinimized()) owner.restore();
+                if (!owner.isVisible()) owner.show();
+                owner.focus();
+            }
+            const dialogOptions: Electron.MessageBoxSyncOptions = {
+                type: 'warning',
+                title: APP_NAME,
+                message: 'Discard unsaved changes?',
+                detail: 'This window has unsaved changes. Leaving will discard them.',
+                buttons: ['Discard Changes', 'Cancel'],
+                defaultId: 1,
+                cancelId: 1,
+                noLink: true,
+            };
+            const choice = owner
+                ? dialog.showMessageBoxSync(owner, dialogOptions)
+                : dialog.showMessageBoxSync(dialogOptions);
+            if (choice === 0) {
+                event.preventDefault();
+            }
+        });
 		contents.on('context-menu', (_menuEvent, params) => {
 			const canEdit = Boolean(params.isEditable);
 			const editFlags = params.editFlags ?? {};
 			if (canEdit) {
+                const suggestionItems: Electron.MenuItemConstructorOptions[] = [];
+                const misspelledWord = String(params.misspelledWord || '').trim();
+                const dictionarySuggestions = Array.isArray(params.dictionarySuggestions)
+                    ? params.dictionarySuggestions.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+                    : [];
+                if (misspelledWord && dictionarySuggestions.length > 0) {
+                    for (const suggestion of dictionarySuggestions.slice(0, 8)) {
+                        suggestionItems.push({
+                            label: suggestion,
+                            click: () => {
+                                contents.replaceMisspelling(suggestion);
+                            },
+                        });
+                    }
+                    suggestionItems.push({type: 'separator'});
+                }
+                if (misspelledWord) {
+                    suggestionItems.push({
+                        label: 'Add to Dictionary',
+                        click: () => {
+                            contents.session.addWordToSpellCheckerDictionary(misspelledWord);
+                        },
+                    });
+                    suggestionItems.push({type: 'separator'});
+                }
 				const nativeEditMenu = Menu.buildFromTemplate([
+                    ...suggestionItems,
 					{label: 'Undo', role: 'undo', enabled: Boolean(editFlags.canUndo)},
 					{label: 'Redo', role: 'redo', enabled: Boolean(editFlags.canRedo)},
 					{type: 'separator'},

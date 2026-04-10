@@ -65,13 +65,7 @@ import {
 } from './mailAccountOrder';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {createDefaultAppSettings} from '@/shared/defaults';
-import type {
-    FolderItem,
-    MessageItem,
-    OpenMessageTargetEvent,
-    PublicAccount,
-    SyncStatusEvent,
-} from '@/preload';
+import type {FolderItem, MessageItem, OpenMessageTargetEvent, PublicAccount, SyncStatusEvent,} from '@/preload';
 
 const MESSAGE_PAGE_SIZE = 100;
 const MIN_INLINE_MAIL_BODY_WIDTH = 520;
@@ -179,6 +173,17 @@ function MailPage() {
         () => messages.find((m) => m.id === selectedMessageId) ?? null,
         [messages, selectedMessageId],
     );
+    const selectedFolder = useMemo(
+        () => (selectedFolderPath ? folders.find((folder) => folder.path === selectedFolderPath) ?? null : null),
+        [folders, selectedFolderPath],
+    );
+    const isDraftMessageSelected = useMemo(() => {
+        if (!selectedMessage) return false;
+        const folderType = String(selectedFolder?.type || '').toLowerCase();
+        const folderPath = String(selectedFolder?.path || selectedFolderPath || '').toLowerCase();
+        if (folderType === 'drafts' || folderPath.includes('draft')) return true;
+        return /^<draft\./i.test(String(selectedMessage.message_id || ''));
+    }, [selectedFolder, selectedFolderPath, selectedMessage]);
     const messageAttachments = selectedMessageBody?.attachments ?? [];
     const senderWhitelisted = isSenderAllowed(selectedMessage?.from_address, appSettings.remoteContentAllowlist || []);
     const sessionAllowed = selectedMessageId ? sessionRemoteAllowedMessageIds.includes(selectedMessageId) : false;
@@ -1068,16 +1073,19 @@ function MailPage() {
             }
             if (key === 'r' && !event.shiftKey && !event.altKey) {
                 event.preventDefault();
+                if (isDraftMessageSelected) return;
                 onReply();
                 return;
             }
             if (key === 'r' && event.shiftKey && !event.altKey) {
                 event.preventDefault();
+                if (isDraftMessageSelected) return;
                 onReplyAll();
                 return;
             }
             if (key === 'f' && event.shiftKey && !event.altKey) {
                 event.preventDefault();
+                if (isDraftMessageSelected) return;
                 onForward();
                 return;
             }
@@ -1099,6 +1107,7 @@ function MailPage() {
         selectedMessageId,
         selectedFolderPath,
         selectedMessage,
+        isDraftMessageSelected,
         selectedMessageBody,
         showSourceModal,
         systemLocale,
@@ -1553,10 +1562,14 @@ function MailPage() {
                             aria-label="Message actions"
                             className="mail-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
                         >
-                            <ToolboxButton label="Reply" icon={<Reply size={14}/>} onClick={onReply} primary/>
-                            <ToolboxButton label="Reply all" icon={<ReplyAll size={14}/>} onClick={onReplyAll}/>
-                            <ToolboxButton label="Forward" icon={<Forward size={14}/>} onClick={onForward}/>
-                            <span className="divider-default mx-1 h-6 w-px"/>
+                            {!isDraftMessageSelected && (
+                                <>
+                                    <ToolboxButton label="Reply" icon={<Reply size={14}/>} onClick={onReply} primary/>
+                                    <ToolboxButton label="Reply all" icon={<ReplyAll size={14}/>} onClick={onReplyAll}/>
+                                    <ToolboxButton label="Forward" icon={<Forward size={14}/>} onClick={onForward}/>
+                                    <span className="divider-default mx-1 h-6 w-px"/>
+                                </>
+                            )}
                             <ToolboxButton
                                 label="Open"
                                 icon={<SquareArrowOutUpRight size={14}/>}

@@ -155,6 +155,7 @@ export default function MessageWindowPage() {
 		);
 	}, [allowRemoteForMessage, body]);
 	const attachments = body?.attachments ?? [];
+    const isDraftMessage = /^<draft\./i.test(String(message?.message_id || ''));
 
 	useEffect(() => {
 		if (!attachmentMenu) return;
@@ -299,33 +300,37 @@ export default function MessageWindowPage() {
 					aria-label="Message actions"
 					className="mail-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
 				>
-					<Button
-						type="button"
-						variant="default"
-						className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
-						onClick={onReply}
-					>
-						<Reply size={14}/>
-						<span>Reply</span>
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
-						onClick={onReplyAll}
-					>
-						<ReplyAll size={14}/>
-						<span>Reply all</span>
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
-						onClick={onForward}
-					>
-						<Forward size={14}/>
-						<span>Forward</span>
-					</Button>
+                    {!isDraftMessage && (
+                        <>
+                            <Button
+                                type="button"
+                                variant="default"
+                                className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
+                                onClick={onReply}
+                            >
+                                <Reply size={14}/>
+                                <span>Reply</span>
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
+                                onClick={onReplyAll}
+                            >
+                                <ReplyAll size={14}/>
+                                <span>Reply all</span>
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
+                                onClick={onForward}
+                            >
+                                <Forward size={14}/>
+                                <span>Forward</span>
+                            </Button>
+                        </>
+                    )}
 					<Button
 						type="button"
 						variant="ghost"

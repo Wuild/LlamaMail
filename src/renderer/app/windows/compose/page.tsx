@@ -50,6 +50,7 @@ import type {ComposeAttachment, RecipientFieldKey} from '@renderer/app/windows/c
 const EMAIL_ADDRESS_REGEX = /^[^\s@<>(),;:]+@[^\s@<>(),;:]+\.[^\s@<>(),;:]+$/;
 const CONTACT_META_PREFIX = '[LUNAMAIL_CONTACT_META_V1]';
 const CLOUD_FOLDER_CACHE_PREFIX = 'llamamail.cloud.folder.cache.v1';
+const DRAFT_AUTOSAVE_INTERVAL_MS = 15000;
 type ComposeValidationErrors = {
     from: string | null;
     recipients: string | null;
@@ -130,8 +131,11 @@ function ComposeEmailPage() {
     const cloudFilesCacheRef = useRef<Record<string, CloudItem[]>>({});
     const cloudRequestSeqRef = useRef(0);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastSavedSignatureRef = useRef<string>('');
+    const isSavingDraftRef = useRef(false);
     const draftSessionIdRef = useRef<string>(`draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+    const draftMessageIdRef = useRef<number | null>(null);
     const autoSignatureRef = useRef<{ accountId: number; html: string; text: string } | null>(null);
     const recipientSearchSeqRef = useRef(0);
 
@@ -240,7 +244,14 @@ function ComposeEmailPage() {
     }, [selectedFromAccount, body, plainBody]);
 
     const applyDraft = useCallback((draft: ComposeDraftPayload | null | undefined) => {
-        if (!draft) return;
+        if (!draft) {
+            draftMessageIdRef.current = null;
+            return;
+        }
+        if (typeof draft.draftSessionId === 'string' && draft.draftSessionId.trim()) {
+            draftSessionIdRef.current = draft.draftSessionId.trim();
+        }
+        draftMessageIdRef.current = typeof draft.draftMessageId === 'number' ? draft.draftMessageId : null;
         if (typeof draft.accountId === 'number') setFromAccountId(draft.accountId);
         if (typeof draft.to === 'string') setToList(parseRecipients(draft.to));
         if (typeof draft.cc === 'string') {
@@ -450,6 +461,7 @@ function ComposeEmailPage() {
         if (!fromAccountId) return null;
         return {
             accountId: Number(fromAccountId),
+            draftMessageId: draftMessageIdRef.current,
             to: toList.length ? joinRecipients(toList) : null,
             cc: ccList.length ? joinRecipients(ccList) : null,
             bcc: bccList.length ? joinRecipients(bccList) : null,
@@ -480,31 +492,45 @@ function ComposeEmailPage() {
         attachments,
     ]);
 
-    useEffect(() => {
-        if (!draftPayload || sending) return;
-        const hasRecipient = Boolean((draftPayload.to || '').trim());
-        if (!hasRecipient) return;
+    const trySaveDraft = useCallback(
+        (payload: NonNullable<typeof draftPayload>) => {
+            if (sending) return;
+            const hasRecipient = Boolean((payload.to || '').trim());
+            if (!hasRecipient) return;
 
-        const signature = JSON.stringify(draftPayload);
-        if (signature === lastSavedSignatureRef.current) return;
+            const signature = JSON.stringify(payload);
+            if (signature === lastSavedSignatureRef.current) return;
+            if (isSavingDraftRef.current) return;
+            isSavingDraftRef.current = true;
 
-        if (autosaveTimerRef.current) {
-            clearTimeout(autosaveTimerRef.current);
-        }
-        autosaveTimerRef.current = setTimeout(() => {
-            const payload = draftPayload;
-            const currentSignature = signature;
             void ipcClient
                 .saveDraft(payload)
-                .then(() => {
-                    lastSavedSignatureRef.current = currentSignature;
+                .then((result) => {
+                    if (result?.draftId) {
+                        draftSessionIdRef.current = result.draftId;
+                    }
+                    lastSavedSignatureRef.current = signature;
                     setStatus((prev) => (prev?.startsWith('Send failed:') ? prev : 'Draft saved'));
                 })
                 .catch((e: any) => {
                     setStatus((prev) =>
                         prev?.startsWith('Sending') ? prev : `Draft save failed: ${e?.message || String(e)}`,
                     );
+                })
+                .finally(() => {
+                    isSavingDraftRef.current = false;
                 });
+        },
+        [sending],
+    );
+
+    useEffect(() => {
+        if (!draftPayload) return;
+        if (autosaveTimerRef.current) {
+            clearTimeout(autosaveTimerRef.current);
+        }
+        autosaveTimerRef.current = setTimeout(() => {
+            trySaveDraft(draftPayload);
         }, 1200);
 
         return () => {
@@ -513,7 +539,25 @@ function ComposeEmailPage() {
                 autosaveTimerRef.current = null;
             }
         };
-    }, [draftPayload, sending]);
+    }, [draftPayload, trySaveDraft]);
+
+    useEffect(() => {
+        if (autosaveIntervalRef.current) {
+            clearInterval(autosaveIntervalRef.current);
+            autosaveIntervalRef.current = null;
+        }
+        autosaveIntervalRef.current = setInterval(() => {
+            if (!draftPayload) return;
+            trySaveDraft(draftPayload);
+        }, DRAFT_AUTOSAVE_INTERVAL_MS);
+
+        return () => {
+            if (autosaveIntervalRef.current) {
+                clearInterval(autosaveIntervalRef.current);
+                autosaveIntervalRef.current = null;
+            }
+        };
+    }, [draftPayload, trySaveDraft]);
 
     useComposeWindowGuards({
         isComposeDirty,
@@ -1467,26 +1511,14 @@ function joinRecipients(recipients: string[]): string {
 }
 
 function AttachmentCard({attachment, onRemove}: { attachment: ComposeAttachment; onRemove: () => void }) {
-    const isImage = isImageAttachment(attachment.filename, attachment.contentType);
-    const [imageFailed, setImageFailed] = useState(false);
-
     return (
         <div
             className="surface-muted group relative flex w-[17rem] items-center gap-2 rounded-lg border ui-border-default p-2 text-xs ui-text-secondary">
             <div
                 className="h-10 w-10 shrink-0 overflow-hidden rounded-md border ui-border-default ui-surface-card">
-                {isImage && !imageFailed ? (
-                    <img
-                        src={toFileUrl(attachment.path)}
-                        alt={attachment.filename}
-                        className="h-full w-full object-cover"
-                        onError={() => setImageFailed(true)}
-                    />
-                ) : (
-                    <div className="ui-text-muted flex h-full w-full items-center justify-center">
-                        {renderAttachmentTypeIcon(attachment.filename, attachment.contentType)}
-                    </div>
-                )}
+                <div className="ui-text-muted flex h-full w-full items-center justify-center">
+                    {renderAttachmentTypeIcon(attachment.filename, attachment.contentType)}
+                </div>
             </div>
             <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{attachment.filename}</p>
@@ -1514,12 +1546,6 @@ function isImageAttachment(filename: string, contentType: string | null): boolea
     if (type.startsWith('image/')) return true;
     const ext = (filename.split('.').pop() || '').toLowerCase();
     return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext);
-}
-
-function toFileUrl(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/');
-    if (normalized.startsWith('/')) return `file://${encodeURI(normalized)}`;
-    return `file:///${encodeURI(normalized)}`;
 }
 
 function fileExtensionLabel(filename: string): string {

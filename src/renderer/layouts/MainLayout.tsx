@@ -149,6 +149,37 @@ const MESSAGE_TAG_OPTIONS: Array<{ value: string; label: string; dotClass: strin
 	{value: 'later', label: 'Later', dotClass: 'tag-dot-later'},
 ];
 
+function isDraftFolderType(folder: FolderItem | null | undefined): boolean {
+    if (!folder) return false;
+    const type = String(folder.type || '').toLowerCase();
+    const path = String(folder.path || '').toLowerCase();
+    return type === 'drafts' || path.includes('draft');
+}
+
+function parseHeadersFromSource(source: string): Record<string, string> {
+    const headerSection = String(source || '').split(/\r?\n\r?\n/, 1)[0] || '';
+    const unfolded = headerSection.replace(/\r?\n[ \t]+/g, ' ');
+    const headers: Record<string, string> = {};
+    for (const line of unfolded.split(/\r?\n/)) {
+        const index = line.indexOf(':');
+        if (index <= 0) continue;
+        const key = line.slice(0, index).trim().toLowerCase();
+        if (!key) continue;
+        headers[key] = line.slice(index + 1).trim();
+    }
+    return headers;
+}
+
+function parseReferencesHeader(value: string | null | undefined): string[] | null {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const refs = raw
+        .split(/\s+/)
+        .map((item) => item.trim())
+        .filter((item) => /^<[^>]+>$/.test(item));
+    return refs.length > 0 ? refs : null;
+}
+
 const MainLayout: React.FC<MainLayoutProps> = ({
 												   children,
 												   accounts,
@@ -454,6 +485,50 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 		maxSizeKbFilter,
 		advancedSearchOpen,
 	]);
+
+    const openMessageTarget = React.useCallback(
+        (messageId: number) => {
+            const message = messages.find((item) => item.id === messageId);
+            if (!message) {
+                void ipcClient.openMessageWindow(messageId);
+                return;
+            }
+
+            const accountFolders = accountFoldersById[message.account_id] ?? [];
+            const folder = accountFolders.find((item) => item.id === message.folder_id);
+            if (!isDraftFolderType(folder)) {
+                void ipcClient.openMessageWindow(messageId);
+                return;
+            }
+
+            void Promise.all([
+                ipcClient.getMessageBody(messageId, `open-draft-${messageId}-${Date.now()}`).catch(() => null),
+                ipcClient.getMessageSource(messageId).catch(() => null),
+            ])
+                .then(([bodyResult, sourceResult]) => {
+                    const headers = parseHeadersFromSource(sourceResult?.source || '');
+                    const referencesFromHeader = parseReferencesHeader(headers.references);
+                    const referencesFromMessage = parseReferencesHeader(message.references_text);
+                    void ipcClient.openComposeWindow({
+                        accountId: message.account_id,
+                        draftMessageId: message.id,
+                        draftSessionId: headers['x-llamamail-draft-session'] || null,
+                        to: headers.to || message.to_address || '',
+                        cc: headers.cc || '',
+                        bcc: headers.bcc || '',
+                        subject: message.subject || headers.subject || '',
+                        bodyHtml: bodyResult?.html || '',
+                        bodyText: bodyResult?.text || '',
+                        inReplyTo: headers['in-reply-to'] || message.in_reply_to || null,
+                        references: referencesFromHeader || referencesFromMessage || null,
+                    });
+                })
+                .catch(() => {
+                    void ipcClient.openMessageWindow(messageId);
+                });
+        },
+        [accountFoldersById, messages],
+    );
 
 	React.useEffect(() => {
 		if (accountFilter === 'all') return;
@@ -1133,7 +1208,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 								setMenu({kind: 'message', x, y, message});
 							}}
 							onOpenMessageWindow={(messageId) => {
-								void ipcClient.openMessageWindow(messageId);
+                                openMessageTarget(messageId);
 							}}
 							onResizeStart={onMailListResizeStart}
 							getThreadCount={getThreadCount}
@@ -1171,7 +1246,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 								setMenu({kind: 'message', x, y, message});
 							}}
 							onOpenMessageWindow={(messageId) => {
-								void ipcClient.openMessageWindow(messageId);
+                                openMessageTarget(messageId);
 							}}
 							renderTableCell={renderTableCell}
 							onTopListResizeStart={onTopListResizeStart}
@@ -1284,7 +1359,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				isProtectedFolder={isProtectedFolder}
 				onClose={() => setMenu(null)}
 				onOpenMessageWindow={(messageId) => {
-					void ipcClient.openMessageWindow(messageId);
+                    openMessageTarget(messageId);
 				}}
 				onMessageMarkReadToggle={onMessageMarkReadToggle}
 				onMessageFlagToggle={onMessageFlagToggle}

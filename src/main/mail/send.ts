@@ -7,6 +7,7 @@ import {
     getAccountSyncCredentials,
     getLocalAccountVCardPath
 } from '@main/db/repositories/accountsRepo.js';
+import {getMessageContext} from '@main/db/repositories/mailRepo.js';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {markdownToEmailHtml} from './markdown.js';
 import {resolveImapSecurity, resolveSmtpSecurity} from './security.js';
@@ -41,6 +42,7 @@ export interface SendEmailResult {
 
 export interface SaveDraftPayload {
     accountId: number;
+    draftMessageId?: number | null;
     to?: string | null;
     cc?: string | null;
     bcc?: string | null;
@@ -55,6 +57,7 @@ export interface SaveDraftPayload {
 
 export interface SaveDraftResult {
     ok: true;
+    draftId: string;
 }
 
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
@@ -179,18 +182,27 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
     const html = payload.html?.trim() ?? '';
     const subject = payload.subject?.trim() ?? '';
     const to = normalizeRecipients(payload.to);
+    const effectiveDraftId = (payload.draftSessionId || '').trim() || `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     const cc = normalizeRecipients(payload.cc);
     const bcc = normalizeRecipients(payload.bcc);
     if (!to) {
-        return {ok: true};
+        return {ok: true, draftId: effectiveDraftId};
     }
     const attachments = normalizeAttachments(payload.attachments);
     const hasContent = Boolean(to || cc || bcc || subject || text || html || attachments.length > 0);
     if (!hasContent) {
-        return {ok: true};
+        return {ok: true, draftId: effectiveDraftId};
     }
 
     const account = await getAccountSyncCredentials(payload.accountId);
+    const draftMessageId =
+        typeof payload.draftMessageId === 'number' && Number.isFinite(payload.draftMessageId)
+            ? Math.floor(payload.draftMessageId)
+            : null;
+    if (draftMessageId) {
+        await deleteDraftByMessageId(payload.accountId, draftMessageId);
+    }
+    await deleteDraftsBySession(payload.accountId, effectiveDraftId);
     const message = {
         from: account.email,
         to,
@@ -204,7 +216,7 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
         attachments: await readAttachmentBodies(attachments),
         messageId: `<draft.${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}@llamamail.local>`,
         date: new Date(),
-        headers: payload.draftSessionId?.trim() ? {[DRAFT_SESSION_HEADER]: payload.draftSessionId.trim()} : undefined,
+        headers: {[DRAFT_SESSION_HEADER]: effectiveDraftId},
     };
     const raw = await buildRawMessage(message);
     const client = new ImapFlow({
@@ -228,7 +240,7 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
         }
     }
 
-    return {ok: true};
+    return {ok: true, draftId: effectiveDraftId};
 }
 
 async function buildRawMessage(message: {
@@ -430,6 +442,39 @@ async function deleteDraftsBySession(accountId: number, draftSessionId: string):
             const uids = await client.search({header: {[DRAFT_SESSION_HEADER]: draftSessionId}}, {uid: true});
             if (!uids || uids.length === 0) return;
             await (client as any).messageDelete(uids, {uid: true});
+        } finally {
+            lock.release();
+        }
+    } finally {
+        try {
+            await client.logout();
+        } catch {
+            // ignore close errors
+        }
+    }
+}
+
+async function deleteDraftByMessageId(accountId: number, draftMessageId: number): Promise<void> {
+    const context = getMessageContext(draftMessageId);
+    if (!context) return;
+    if (context.accountId !== accountId) return;
+
+    const account = await getAccountSyncCredentials(accountId);
+    const client = new ImapFlow({
+        host: account.imap_host,
+        port: account.imap_port,
+        ...resolveImapSecurity(account.imap_secure),
+        auth: {user: account.user, pass: account.password},
+        logger: createMailDebugLogger('imap', `draft-replace:${accountId}`),
+    });
+
+    try {
+        await client.connect();
+        const lock = await client.getMailboxLock(context.folderPath);
+        try {
+            await (client as any).messageDelete(context.uid, {uid: true});
+        } catch {
+            // Ignore missing/expunged old draft rows during replacement.
         } finally {
             lock.release();
         }

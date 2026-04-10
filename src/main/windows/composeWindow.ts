@@ -31,6 +31,8 @@ type ComposeWindowState = {
 
 export interface ComposeDraftPayload {
     accountId?: number | null;
+    draftMessageId?: number | null;
+    draftSessionId?: string | null;
     to?: string | null;
     cc?: string | null;
     bcc?: string | null;

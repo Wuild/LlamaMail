@@ -57,6 +57,24 @@ function normalizeAlign(value: unknown): ImageAlign {
     return value === 'left' || value === 'center' || value === 'right' ? value : 'none';
 }
 
+function inferAlignFromStyle(node: HTMLImageElement): ImageAlign {
+    const floatValue = String(node.style.float || '').toLowerCase().trim();
+    if (floatValue === 'left') return 'left';
+    if (floatValue === 'right') return 'right';
+
+    const margin = String(node.style.margin || '').toLowerCase();
+    const marginLeft = String(node.style.marginLeft || '').toLowerCase();
+    const marginRight = String(node.style.marginRight || '').toLowerCase();
+    const hasAutoBoth =
+        margin.includes(' auto ') ||
+        margin.startsWith('auto ') ||
+        margin.endsWith(' auto') ||
+        (marginLeft === 'auto' && marginRight === 'auto');
+    if (hasAutoBoth) return 'center';
+
+    return 'none';
+}
+
 function importImageFromDom(node: Node): DOMConversionOutput | null {
     if (!(node instanceof HTMLImageElement)) return null;
     const src = node.getAttribute('src') || '';
@@ -78,7 +96,8 @@ function importImageFromDom(node: Node): DOMConversionOutput | null {
     const dataHeight = Number(node.getAttribute('data-llamamail-height') || '');
     const styleHeight = node.style.height.endsWith('px') ? Number(node.style.height.replace('px', '')) : NaN;
     const height = Number.isFinite(dataHeight) ? dataHeight : Number.isFinite(styleHeight) ? styleHeight : null;
-    const align = normalizeAlign(node.getAttribute('data-llamamail-align'));
+    const alignFromData = normalizeAlign(node.getAttribute('data-llamamail-align'));
+    const align = alignFromData === 'none' ? inferAlignFromStyle(node) : alignFromData;
     return {
         node: new ImageNode(src, altText, clampWidthPx(widthPx), clampHeight(height), align),
     };
