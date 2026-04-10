@@ -157,12 +157,6 @@ jobs:
           name: dist-windows
           path: release-assets
 
-      - name: Download macOS Intel artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-macos-x64
-          path: release-assets
-
       - name: Download macOS Apple Silicon artifacts
         uses: actions/download-artifact@v4
         with:
