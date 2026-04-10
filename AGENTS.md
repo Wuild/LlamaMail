@@ -424,7 +424,7 @@ Use this as the default process for all future development work.
 - Track work in `docs/OPTIMIZATION_ROADMAP.md` (or add a new roadmap/checklist doc for non-optimization epics).
 - Work in small, behavior-preserving slices. Check off only what is actually complete.
 - Prefer extracting pure logic into reusable modules/hooks before adding more page-level code.
-- Keep `docs/OPTIMIZATION_ROADMAP.md` and `docs/SMOKE_TEST_CHECKLIST.md` in sync with actual completed work.
+- Keep `docs/OPTIMIZATION_ROADMAP.md` in sync with actual completed work.
 
 ### 2) Contract-First IPC Changes
 
@@ -463,7 +463,6 @@ Run these locally for refactors/features:
 
 Also update:
 
-- `docs/SMOKE_TEST_CHECKLIST.md` with latest run log notes
 - relevant checklist/roadmap checkboxes
 
 ### 6) Tests and Guardrails

@@ -109,16 +109,14 @@ export default function AutoComplete({
                 className={inputClassName}
             />
             {open && rows.length > 0 && (
-                <div className="absolute left-0 top-[calc(100%+4px)] z-20 max-h-56 w-full overflow-auto rounded-md border border-slate-300 bg-white py-1 shadow-lg dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-card-dark)]">
+                <div className="autocomplete-menu">
                     {rows.map((row, index) => (
                         <Button
                             key={row.id}
                             type="button"
                             className={cn(
-                                'block w-full px-2 py-1.5 text-left transition-colors',
-                                index === activeRowIndex
-                                    ? 'bg-sky-100 text-slate-900 dark:bg-[var(--lm-surface-selected-accent-dark)] dark:text-slate-100'
-                                    : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-hover-dark)]',
+                                'autocomplete-option block justify-start text-left',
+                                index === activeRowIndex && 'is-active',
                             )}
                             onMouseDown={(event) => {
                                 event.preventDefault();
@@ -128,7 +126,7 @@ export default function AutoComplete({
                         >
                             <div className="truncate text-sm">{row.label}</div>
                             {row.description ? (
-                                <div className="truncate text-xs text-slate-500 dark:text-slate-400">{row.description}</div>
+                                <div className="autocomplete-option-description">{row.description}</div>
                             ) : null}
                         </Button>
                     ))}

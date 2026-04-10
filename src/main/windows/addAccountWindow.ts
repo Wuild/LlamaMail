@@ -3,7 +3,12 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {loadWindowContent} from './loadWindowContent.js';
 import {getAppSettingsSync} from '../settings/store.js';
-import {attachWindowShortcuts, buildSecureWebPreferences, createAppWindow, createFramelessAppWindow} from './windowFactory.js';
+import {
+    attachWindowShortcuts,
+    buildSecureWebPreferences,
+    createAppWindow,
+    createFramelessAppWindow
+} from './windowFactory.js';
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -11,7 +16,7 @@ const __dirname = path.dirname(__filename);
 
 let addAccountWin: BrowserWindow | null = null;
 
-export function openAddAccountWindow(parentWindow?: BrowserWindow): void {
+export function openAddAccountWindow(): void {
     if (addAccountWin && !addAccountWin.isDestroyed()) {
         addAccountWin.focus();
         return;
@@ -19,16 +24,12 @@ export function openAddAccountWindow(parentWindow?: BrowserWindow): void {
 
     const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
 
-    const parent = parentWindow && !parentWindow.isDestroyed() ? parentWindow : undefined;
-    const parentBounds = parent?.getBounds();
-
     const useNativeTitleBar = Boolean(getAppSettingsSync().useNativeTitleBar);
     const createWindow = useNativeTitleBar ? createAppWindow : createFramelessAppWindow;
     addAccountWin = createWindow({
-        parent,
-        modal: true,
-        width: Math.max(960, parentBounds?.width ?? 960),
-        height: Math.max(700, parentBounds?.height ?? 700),
+        modal: false,
+        width: 960,
+        height: 700,
         minWidth: 960,
         minHeight: 700,
         maxWidth: 1400,

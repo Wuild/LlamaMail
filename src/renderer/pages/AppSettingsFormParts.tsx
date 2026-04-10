@@ -12,7 +12,7 @@ type FieldProps = {
 export function Field({label, value, onChange, type = 'text', placeholder}: FieldProps) {
 	return (
 		<label className="block text-sm">
-			{label && <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">{label}</span>}
+			{label && <span className="ui-text-secondary mb-1 block font-medium">{label}</span>}
 			<FormInput
 				type={type}
 				value={value}
@@ -24,5 +24,5 @@ export function Field({label, value, onChange, type = 'text', placeholder}: Fiel
 }
 
 export function Label({children}: {children: React.ReactNode}) {
-	return <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{children}</div>;
+	return <div className="ui-text-secondary text-sm font-medium">{children}</div>;
 }

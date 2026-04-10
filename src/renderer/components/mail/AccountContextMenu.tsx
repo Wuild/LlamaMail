@@ -2,6 +2,7 @@ import React from 'react';
 import {FolderPlus, Settings} from 'lucide-react';
 import type {PublicAccount} from '../../../preload';
 import ContextItem from './ContextItem';
+import {ContextMenu, ContextMenuSeparator} from '../ui/ContextMenu';
 
 type CreateFolderState = {
     accountId: number;
@@ -32,14 +33,12 @@ export default function AccountContextMenu({
     if (!accountMenu) return null;
 
     return (
-        <div
+        <ContextMenu
             ref={menuRef}
-            className="fixed z-[1000] min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-menu-dark)]"
-            style={{
-                left: position.left,
-                top: position.top,
-                visibility: ready ? 'visible' : 'hidden',
-            }}
+            size="lg"
+            layer="1000"
+            position={position}
+            ready={ready}
             onClick={(event) => event.stopPropagation()}
         >
             <ContextItem
@@ -55,7 +54,7 @@ export default function AccountContextMenu({
                     onClose();
                 }}
             />
-            <div className="my-1 h-px bg-slate-200 dark:bg-[var(--lm-border-default-dark)]"/>
+            <ContextMenuSeparator/>
             <ContextItem
                 label="Edit Account Settings"
                 icon={<Settings size={14}/>}
@@ -64,6 +63,6 @@ export default function AccountContextMenu({
                     onClose();
                 }}
             />
-        </div>
+        </ContextMenu>
     );
 }

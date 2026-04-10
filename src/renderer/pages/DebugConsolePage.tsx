@@ -182,24 +182,25 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 	}
 
 	return (
-		<div className="h-full w-full overflow-hidden bg-slate-100 dark:bg-[#23252b]">
+		<div className="debug-page-surface h-full w-full overflow-hidden">
 			<div className="flex h-full flex-col">
 				{!embedded && <WindowTitleBar title="Debug Console" showMaximize/>}
 				<div className="min-h-0 flex-1 overflow-hidden p-3">
 					<div className="flex h-full min-h-0 flex-col gap-3">
-						<header className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#3a3d44] dark:bg-[#1e1f22]">
+						<header className="debug-card rounded-xl p-4">
 							<div className="flex flex-wrap items-start justify-between gap-3">
 								<div className="min-w-0">
-									<h1 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
+									<h1 className="ui-text-primary flex items-center gap-2 text-base font-semibold">
 										<TerminalSquare size={16}/>
 										Debug Console
 									</h1>
-									<p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+									<p className="debug-muted mt-1 text-xs">
 										Live runtime events with simple source and level filters.
 									</p>
 								</div>
 								<div className="flex items-center gap-2">
-									<label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 dark:border-[#3a3d44] dark:text-slate-300">
+									<label
+										className="debug-card debug-muted inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs">
 										<FormCheckbox
 											checked={autoScroll}
 											onChange={(event) => {
@@ -233,10 +234,11 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 							</div>
 						</header>
 
-						<section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#3a3d44] dark:bg-[#1e1f22]">
+						<section className="debug-card rounded-xl p-3">
 							<div className="flex flex-wrap items-center justify-between gap-3">
 								<div className="flex min-w-0 items-center gap-2">
-									<span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+									<span
+										className="debug-muted shrink-0 text-[11px] font-semibold uppercase tracking-wide">
 										Sources
 									</span>
 									<div className="flex min-w-0 flex-wrap items-center gap-1">
@@ -254,7 +256,8 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 									</div>
 								</div>
 								<div className="flex min-w-0 items-center justify-end gap-2">
-									<span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+									<span
+										className="debug-muted shrink-0 text-[11px] font-semibold uppercase tracking-wide">
 										Levels
 									</span>
 									<div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
@@ -276,14 +279,7 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 
 						<main className="min-h-0 flex-1">
 							<div
-								style={{
-									backgroundColor: '#0b0f14',
-									backgroundImage:
-										'radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 35%), linear-gradient(180deg, #0f141b 0%, #0b0f14 100%)',
-									userSelect: 'text',
-									WebkitUserSelect: 'text',
-								}}
-								className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:border-[#3a3d44]"
+								className="debug-log-shell flex h-full min-h-0 flex-col overflow-hidden rounded-xl select-text"
 							>
 								<div
 									ref={listRef}
@@ -291,16 +287,18 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 									onWheel={markUserScrollIntent}
 									onMouseDown={markUserScrollIntent}
 									onTouchStart={markUserScrollIntent}
-									className="min-h-0 flex-1 overflow-auto p-3 font-mono text-xs leading-5 text-slate-100 select-text [&_*]:select-text"
+									className="debug-log-text min-h-0 flex-1 overflow-auto p-3 font-mono text-xs leading-5 select-text [&_*]:select-text"
 								>
 								{logs.length === 0 && (
-									<div className="flex h-full min-h-[120px] items-center justify-center text-slate-400">
+									<div
+										className="debug-log-empty flex h-full min-h-[120px] items-center justify-center">
 										<Activity size={14} className="mr-2"/>
 										No debug events yet.
 									</div>
 								)}
 								{logs.length > 0 && filteredLogs.length === 0 && (
-									<div className="flex h-full min-h-[120px] items-center justify-center text-slate-400">
+									<div
+										className="debug-log-empty flex h-full min-h-[120px] items-center justify-center">
 										<Activity size={14} className="mr-2"/>
 										No events match current filters.
 									</div>
@@ -311,11 +309,11 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 										style={{overflowWrap: 'anywhere', wordBreak: 'break-word'}}
 										className="whitespace-pre-wrap break-words"
 									>
-										<span className="text-slate-500">[{entry.timestampLabel}]</span>{' '}
+										<span className="debug-log-timestamp">[{entry.timestampLabel}]</span>{' '}
 										<span className={levelClass(entry.level)}>{entry.level.toUpperCase()}</span>{' '}
-										<span className="text-cyan-300">{entry.source}</span>{' '}
-										<span className="text-amber-300">{entry.scope}</span>{' '}
-										<span className="text-slate-100">{entry.message}</span>
+										<span className="debug-log-source">{entry.source}</span>{' '}
+										<span className="debug-log-scope">{entry.scope}</span>{' '}
+										<span>{entry.message}</span>
 									</div>
 								))}
 							</div>
@@ -330,26 +328,22 @@ export default function DebugConsolePage({embedded = false}: {embedded?: boolean
 
 function ToolbarToggleButton({label, active, onClick}: {label: string; active: boolean; onClick: () => void}) {
 	return (
-		<button
+		<Button
 			type="button"
 			onClick={onClick}
-			className={`h-7 rounded-md border px-2.5 text-xs font-medium transition-colors ${
-				active
-					? 'border-sky-500 bg-sky-100 text-sky-800 dark:border-[#5865f2] dark:bg-[#5865f2]/25 dark:text-sky-100'
-					: 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-200 dark:hover:bg-[#2f3238]'
-			}`}
+			className={`debug-toggle h-7 rounded-md px-2.5 text-xs font-medium ${active ? 'is-active' : ''}`}
 		>
 			{label}
-		</button>
+		</Button>
 	);
 }
 
 function levelClass(level: DebugLogEntry['level']): string {
-	if (level === 'error' || level === 'fatal') return 'text-rose-400';
-	if (level === 'warn') return 'text-amber-400';
-	if (level === 'info') return 'text-emerald-400';
-	if (level === 'debug') return 'text-sky-400';
-	return 'text-violet-300';
+	if (level === 'error' || level === 'fatal') return 'debug-level-error';
+	if (level === 'warn') return 'debug-level-warn';
+	if (level === 'info') return 'debug-level-info';
+	if (level === 'debug') return 'debug-level-debug';
+	return 'debug-level-trace';
 }
 
 function formatLocalLogTime(timestamp: string): string {

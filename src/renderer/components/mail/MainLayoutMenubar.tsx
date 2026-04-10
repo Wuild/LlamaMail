@@ -1,5 +1,16 @@
 import React from 'react';
-import {Bug, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Mail, PenSquare, Search, Settings, Users} from 'lucide-react';
+import {
+    Bug,
+    CalendarDays,
+    ChevronLeft,
+    ChevronRight,
+    CircleHelp,
+    Mail,
+    PenSquare,
+    Search,
+    Settings,
+    Users
+} from 'lucide-react';
 import {Button} from '../ui/button';
 import {ipcClient} from '../../lib/ipcClient';
 import {cn} from '../../lib/utils';
@@ -34,7 +45,7 @@ export default function MainLayoutMenubar({
                 <div className="flex items-center gap-2">
                     <Button
                         variant="ghost"
-                        className="h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white disabled:opacity-40"
+                        className="titlebar-nav-button h-9 w-9 rounded-md p-0 disabled:opacity-40"
                         onClick={() => onNavigateBack?.()}
                         title="Back"
                         aria-label="Back"
@@ -44,7 +55,7 @@ export default function MainLayoutMenubar({
                     </Button>
                     <Button
                         variant="ghost"
-                        className="h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white disabled:opacity-40"
+                        className="titlebar-nav-button h-9 w-9 rounded-md p-0 disabled:opacity-40"
                         onClick={() => onNavigateForward?.()}
                         title="Forward"
                         aria-label="Forward"
@@ -53,11 +64,11 @@ export default function MainLayoutMenubar({
                         <ChevronRight size={16}/>
                     </Button>
                     <Mail size={18} className="opacity-90"/>
-                    <p className="truncate text-base font-semibold tracking-tight text-white">LlamaMail</p>
+                    <p className="titlebar-brand truncate text-base font-semibold tracking-tight">LlamaMail</p>
                 </div>
                 <Button
                     variant="ghost"
-                    className="h-9 rounded-md px-3 text-white/90 hover:bg-white/15 hover:text-white"
+                    className="titlebar-nav-button h-9 rounded-md px-3"
                     onClick={() => ipcClient.openComposeWindow()}
                     title="Compose"
                     aria-label="Compose"
@@ -68,8 +79,8 @@ export default function MainLayoutMenubar({
                 <Button
                     variant="ghost"
                     className={cn(
-                        'h-9 rounded-md px-3 text-white/90 hover:bg-white/15 hover:text-white',
-                        activeWorkspace === 'calendar' && 'bg-white/20 text-white',
+                        'titlebar-nav-button h-9 rounded-md px-3',
+                        activeWorkspace === 'calendar' && 'is-active',
                     )}
                     onClick={onOpenCalendar}
                     title="Open calendar"
@@ -81,8 +92,8 @@ export default function MainLayoutMenubar({
                 <Button
                     variant="ghost"
                     className={cn(
-                        'h-9 rounded-md px-3 text-white/90 hover:bg-white/15 hover:text-white',
-                        activeWorkspace === 'contacts' && 'bg-white/20 text-white',
+                        'titlebar-nav-button h-9 rounded-md px-3',
+                        activeWorkspace === 'contacts' && 'is-active',
                     )}
                     onClick={onOpenContacts}
                     title="Open contacts"
@@ -96,8 +107,8 @@ export default function MainLayoutMenubar({
                 <Button
                     variant="ghost"
                     className={cn(
-                        'mr-1 h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white',
-                        searchModalOpen && 'bg-white/20 text-white',
+                        'titlebar-nav-button mr-1 h-9 w-9 rounded-md p-0',
+                        searchModalOpen && 'is-active',
                     )}
                     onClick={onOpenSearch}
                     title="Search mail"
@@ -107,7 +118,7 @@ export default function MainLayoutMenubar({
                 </Button>
                 <Button
                     variant="ghost"
-                    className="mr-1 h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white"
+                    className="titlebar-nav-button mr-1 h-9 w-9 rounded-md p-0"
                     onClick={() => {
                         window.location.hash = '/settings/application';
                     }}
@@ -118,7 +129,7 @@ export default function MainLayoutMenubar({
                 </Button>
                 <Button
                     variant="ghost"
-                    className="h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white"
+                    className="titlebar-nav-button h-9 w-9 rounded-md p-0"
                     onClick={() => {
                         window.location.hash = '/debug';
                     }}
@@ -129,7 +140,7 @@ export default function MainLayoutMenubar({
                 </Button>
                 <Button
                     variant="ghost"
-                    className="h-9 w-9 rounded-md p-0 text-white/90 hover:bg-white/15 hover:text-white"
+                    className="titlebar-nav-button h-9 w-9 rounded-md p-0"
                     onClick={() => {
                         window.location.hash = '/help';
                     }}

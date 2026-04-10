@@ -1,15 +1,6 @@
-import {FormInput,FormSelect} from '../components/ui/FormControls';
+import {FormInput, FormSelect} from '../components/ui/FormControls';
 import React from "react";
-import {
-    File,
-    FileArchive,
-    FileAudio2,
-    FileCode,
-    FileImage,
-    FileSpreadsheet,
-    FileText,
-    FileVideo,
-} from "lucide-react";
+import {File, FileArchive, FileAudio2, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo,} from "lucide-react";
 import type {CloudItem, CloudProvider, CloudStorageUsage} from "../../preload";
 import {ONEDRIVE_DEFAULT_CLIENT_ID, ONEDRIVE_DEFAULT_TENANT_ID} from "../../shared/cloudConfig";
 
@@ -32,7 +23,7 @@ const CLOUD_TABLE_COLUMNS_STORAGE_KEY = "llamamail.cloud.table.columns.v1";
 const CLOUD_ACCOUNT_COLLAPSE_STORAGE_KEY = "llamamail.cloud.accountCollapseState.v1";
 
 export const CLOUD_TABLE_RESIZE_HANDLE_CLASS =
-    "absolute -right-1 top-1/2 h-[calc(100%-10px)] w-2 -translate-y-1/2 cursor-col-resize rounded bg-transparent after:absolute after:bottom-1 after:left-1/2 after:top-1 after:w-px after:-translate-x-1/2 after:bg-slate-300 after:content-[''] hover:after:bg-sky-500 dark:after:bg-[#4a4d55] dark:hover:after:bg-[#8ab4ff]";
+    "cloud-resize-handle absolute -right-1 top-1/2 h-[calc(100%-10px)] w-2 -translate-y-1/2 cursor-col-resize rounded bg-transparent after:absolute after:bottom-1 after:left-1/2 after:top-1 after:w-px after:-translate-x-1/2 after:content-['']";
 
 export const CLOUD_TABLE_COLUMN_OPTIONS: Array<{ key: CloudTableColumnKey; label: string }> = [
     {key: "name", label: "Name"},
@@ -211,7 +202,7 @@ export function formatStorageUsage(usage: CloudStorageUsage | null): string {
 export function renderCloudFileTypeIcon(item: CloudItem): React.ReactNode {
     const type = (item.mimeType || "").toLowerCase();
     const ext = (item.name.split(".").pop() || "").toLowerCase();
-    const baseClassName = "shrink-0 text-slate-500";
+    const baseClassName = "ui-text-muted shrink-0";
     if (type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico"].includes(ext)) {
         return <FileImage size={15} className={baseClassName}/>;
     }
@@ -323,12 +314,12 @@ export function Field(props: {
     const {label, value, onChange, placeholder, type = "text", as = "input", options = []} = props;
     return (
         <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">{label}</span>
+            <span className="ui-text-secondary mb-1 block font-medium">{label}</span>
             {as === "select" ? (
                 <FormSelect
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
-                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                    className="field-select h-10 w-full rounded-md px-3 text-sm"
                 >
                     {options.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -342,7 +333,7 @@ export function Field(props: {
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
                     placeholder={placeholder}
-                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-sky-500 dark:border-[#3a3d44] dark:bg-[#1e1f22] dark:text-slate-100 dark:focus:border-[#5865f2]"
+                    className="field-input h-10 w-full rounded-md px-3 text-sm"
                 />
             )}
         </label>

@@ -494,6 +494,9 @@ export interface ComposeDraftPayload {
 	body?: string | null;
 	bodyHtml?: string | null;
 	bodyText?: string | null;
+	quotedBodyHtml?: string | null;
+	quotedBodyText?: string | null;
+	quotedAllowRemote?: boolean;
 	inReplyTo?: string | null;
 	references?: string[] | string | null;
 }

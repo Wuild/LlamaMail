@@ -26,40 +26,41 @@ export default function SupportPage({embedded = false}: { embedded?: boolean }) 
 	}, []);
 
 	return (
-		<div className="lm-content h-full w-full overflow-hidden">
+		<div className="workspace-content h-full w-full overflow-hidden">
 			<div className="flex h-full flex-col">
 				{!embedded && <WindowTitleBar title="Support"/>}
 				<main className="min-h-0 flex-1 overflow-auto p-5">
 					<div className="mx-auto w-full max-w-5xl space-y-4">
-						<section className="lm-border-default relative overflow-hidden rounded-2xl border bg-gradient-to-br from-[var(--surface-sidebar)] via-[var(--surface-card)] to-[var(--surface-content)] p-5">
+						<section
+							className="support-hero-surface ui-border-default relative overflow-hidden rounded-2xl border p-5">
 							<div className="grid gap-5 md:grid-cols-[1.25fr_1fr] md:items-center">
 								<div className="min-w-0">
-									<h1 className="lm-text-primary text-2xl font-bold tracking-tight">
+									<h1 className="ui-text-primary text-2xl font-bold tracking-tight">
 										Meet LlamaMail
 									</h1>
-									<p className="lm-text-secondary mt-2 max-w-2xl text-sm">
+									<p className="ui-text-secondary mt-2 max-w-2xl text-sm">
 										A fast, offline-first desktop mail app built for focus: multi-account inboxes,
 										quick local search, and safe system boundaries by design.
 									</p>
 									<div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-										<span className="rounded-full border border-sky-300 bg-sky-100 px-2.5 py-1 font-medium text-sky-800">
+										<span className="chip-info rounded-full px-2.5 py-1 font-medium">
 											Version {version}
 										</span>
-										<span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 font-medium text-emerald-800">
+										<span className="chip-success rounded-full px-2.5 py-1 font-medium">
 											By {author}
 										</span>
 										<a
 											href={repoUrl}
 											target="_blank"
 											rel="noopener noreferrer"
-											className="lm-btn-secondary rounded-full px-2.5 py-1 font-medium"
+											className="button-secondary rounded-full px-2.5 py-1 font-medium"
 										>
 											View Project
 										</a>
 									</div>
 								</div>
 								<div className="flex justify-center md:justify-end">
-									<div className="lm-card relative overflow-hidden rounded-2xl bg-white/60 p-2 shadow-lg">
+									<div className="panel relative overflow-hidden rounded-2xl p-2 shadow-lg">
 										<img
 											src={llamaArt}
 											alt="LlamaMail mascot"
@@ -73,26 +74,26 @@ export default function SupportPage({embedded = false}: { embedded?: boolean }) 
 
 						<div className="columns-1 gap-4 md:columns-2">
 						<section
-							className="lm-card mb-4 break-inside-avoid rounded-xl p-4 text-sm">
-							<h2 className="lm-text-primary font-semibold">Project Snapshot</h2>
-							<div className="lm-text-secondary mt-2 grid gap-2">
+							className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
+							<h2 className="ui-text-primary font-semibold">Project Snapshot</h2>
+							<div className="ui-text-secondary mt-2 grid gap-2">
 								<div>
-									<span className="lm-text-muted font-medium">
+									<span className="ui-text-muted font-medium">
 										App version:
 									</span>{' '}
 									{version}
 								</div>
 								<div>
-									<span className="lm-text-muted font-medium">Built by:</span>{' '}
+									<span className="ui-text-muted font-medium">Built by:</span>{' '}
 									{author}
 								</div>
 								<div className="flex flex-wrap items-center gap-2">
-									<span className="lm-text-muted font-medium">Source:</span>
+									<span className="ui-text-muted font-medium">Source:</span>
 									<a
 										href={repoUrl}
 										target="_blank"
 										rel="noopener noreferrer"
-										className="lm-bg-hover rounded px-1.5 py-0.5 text-xs text-sky-700 underline decoration-sky-400/70 underline-offset-2 hover:text-sky-800"
+										className="link-primary-emphasis ui-surface-hover rounded px-1.5 py-0.5 text-xs"
 									>
 										{repoUrl}
 									</a>
@@ -101,36 +102,36 @@ export default function SupportPage({embedded = false}: { embedded?: boolean }) 
 						</section>
 
 						<section
-							className="lm-card mb-4 break-inside-avoid rounded-xl p-4 text-sm">
-							<h2 className="lm-text-primary font-semibold">How It Works</h2>
-							<div className="lm-text-secondary mt-2 space-y-2">
+							className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
+							<h2 className="ui-text-primary font-semibold">How It Works</h2>
+							<div className="ui-text-secondary mt-2 space-y-2">
 								<p>
-									<span className="lm-text-secondary font-medium">
+									<span className="ui-text-secondary font-medium">
 										Accounts & sync:
 									</span>{' '}
 									Each account syncs over IMAP and is cached locally for fast browsing, even when
 									network conditions are poor.
 								</p>
 								<p>
-									<span className="lm-text-secondary font-medium">
+									<span className="ui-text-secondary font-medium">
 										Message actions:
 									</span>{' '}
 									Read, move, archive, and flag updates are applied instantly in the UI and synced in
 									the background.
 								</p>
 								<p>
-									<span className="lm-text-secondary font-medium">Search:</span>{' '} 
+									<span className="ui-text-secondary font-medium">Search:</span>{' '}
 									Local indexing keeps search fast across accounts, folders, read state, date, and more.
 								</p>
 								<p>
-									<span className="lm-text-secondary font-medium">
+									<span className="ui-text-secondary font-medium">
 										Security:
 									</span>{' '}
 									The renderer has no direct Node access. Sensitive operations are isolated behind
 									preload IPC and the Electron main process.
 								</p>
 								<p>
-									<span className="lm-text-secondary font-medium">
+									<span className="ui-text-secondary font-medium">
 										Privacy controls:
 									</span>{' '}
 									Remote content can be blocked by default, then allowed once or permanently for
@@ -140,9 +141,9 @@ export default function SupportPage({embedded = false}: { embedded?: boolean }) 
 						</section>
 
 						<section
-							className="lm-card mb-4 break-inside-avoid rounded-xl p-4 text-sm">
-							<h2 className="lm-text-primary font-semibold">Safety Tips</h2>
-							<ul className="lm-text-secondary mt-2 list-disc space-y-1 pl-5">
+							className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
+							<h2 className="ui-text-primary font-semibold">Safety Tips</h2>
+							<ul className="ui-text-secondary mt-2 list-disc space-y-1 pl-5">
 								<li>Open message details to confirm the full sender address and Message-ID.</li>
 								<li>Be cautious when the display name does not match the actual sender address.</li>
 								<li>Avoid opening links from unexpected or suspicious domains.</li>
@@ -154,10 +155,10 @@ export default function SupportPage({embedded = false}: { embedded?: boolean }) 
 
 				{!embedded && (
 					<footer
-						className="lm-footer flex items-center justify-end px-5 py-3">
+						className="app-footer flex items-center justify-end px-5 py-3">
 						<Button
 							type="button"
-							className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
+							className="button-secondary rounded-md px-3 py-2 text-sm"
 							onClick={() => window.close()}
 						>
 							Close

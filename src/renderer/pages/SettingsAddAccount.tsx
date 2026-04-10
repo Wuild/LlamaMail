@@ -301,13 +301,13 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
     const canClose = embedded && typeof onCancel === 'function';
 
     return (
-        <div className={`${embedded ? 'h-full w-full' : 'h-screen w-screen'} lm-content overflow-hidden`}>
-            <div className="lm-card flex h-full w-full flex-col overflow-hidden border-0">
+        <div className={`${embedded ? 'h-full w-full' : 'h-screen w-screen'} workspace-content overflow-hidden`}>
+            <div className="panel flex h-full w-full flex-col overflow-hidden border-0">
                 {!embedded && <WindowTitleBar title="Add Account" />}
                 <div className="flex min-h-0 flex-1 overflow-hidden">
-                    <aside className="lm-sidebar w-72 shrink-0 px-6 py-7">
+                    <aside className="sidebar w-72 shrink-0 px-6 py-7">
                         <h2 className="text-lg font-semibold">New Account</h2>
-                        <p className="lm-text-muted mt-1 text-sm">Secure mail onboarding</p>
+                        <p className="ui-text-muted mt-1 text-sm">Secure mail onboarding</p>
                         <div className="mt-8 space-y-4">
                             {[1, 2, 3].map((n) => {
                                 const s = n as WizardStep;
@@ -333,14 +333,14 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                             event.stopPropagation();
                         }}
                     >
-                        <div className="lm-border-default shrink-0 border-b px-8 py-6">
-                            <p className="lm-text-muted text-xs font-medium uppercase tracking-wide">
+                        <div className="ui-border-default shrink-0 border-b px-8 py-6">
+                            <p className="ui-text-muted text-xs font-medium uppercase tracking-wide">
                                 Step {step} of 3
                             </p>
-                            <h3 className="lm-text-primary mt-1 text-lg font-semibold">{stepMeta[step].title}</h3>
-                            <div className="lm-bg-hover mt-3 h-1.5 w-full rounded-full">
+                            <h3 className="ui-text-primary mt-1 text-lg font-semibold">{stepMeta[step].title}</h3>
+                            <div className="ui-surface-hover mt-3 h-1.5 w-full rounded-full">
                                 <div
-                                    className="lm-btn-primary h-1.5 rounded-full border-0 transition-all"
+                                    className="button-primary h-1.5 rounded-full border-0 transition-all"
                                     style={{width: `${(step / 3) * 100}%`}}
                                 />
                             </div>
@@ -351,15 +351,15 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                                     {step === 1 && (
                                         <section className="space-y-5">
                                             <header>
-                                                <h3 className="lm-text-primary text-2xl font-semibold">
+                                                <h3 className="ui-text-primary text-2xl font-semibold">
                                                     Enter your account credentials
                                                 </h3>
-                                                <p className="lm-text-muted mt-1 text-sm">
+                                                <p className="ui-text-muted mt-1 text-sm">
                                                     We will autodiscover your server settings and verify authentication.
                                                 </p>
                                             </header>
 
-                                            <div className="lm-card rounded-xl p-5">
+                                            <div className="panel rounded-xl p-5">
                                                 <Field
                                                     label="Name (optional)"
                                                     value={name}
@@ -383,14 +383,15 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                                             </div>
 
                                             {loading && (
-                                                <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                                                <div
+                                                    className="notice-info flex items-start gap-3 rounded-xl px-4 py-3 text-sm">
                                                     <span
-                                                        className="mt-0.5 inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-sky-300 border-t-sky-600"
+                                                        className="spinner-info mt-0.5 inline-block h-4 w-4 shrink-0 animate-spin rounded-full"
                                                         aria-hidden
                                                     />
                                                     <div>
                                                         <p className="font-semibold">Running autodiscover</p>
-                                                        <p className="mt-0.5 text-xs text-sky-700/90">
+                                                        <p className="mt-0.5 text-xs opacity-90">
                                                             Detecting server settings and verifying IMAP/SMTP credentials.
                                                         </p>
                                                     </div>
@@ -402,10 +403,10 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                                     {step === 2 && (
                                         <section className="space-y-5">
                                             <header>
-                                                <h3 className="lm-text-primary text-2xl font-semibold">
+                                                <h3 className="ui-text-primary text-2xl font-semibold">
                                                     Manual server setup
                                                 </h3>
-                                                <p className="lm-text-muted mt-1 text-sm">
+                                                <p className="ui-text-muted mt-1 text-sm">
                                                     Autodiscover did not return complete settings. Enter IMAP and SMTP manually.
                                                 </p>
                                             </header>
@@ -440,15 +441,15 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                                     {step === 3 && (
                                         <section className="space-y-5">
                                             <header>
-                                                <h3 className="lm-text-primary text-2xl font-semibold">
+                                                <h3 className="ui-text-primary text-2xl font-semibold">
                                                     Confirm account details
                                                 </h3>
-                                                <p className="lm-text-muted mt-1 text-sm">
+                                                <p className="ui-text-muted mt-1 text-sm">
                                                     Everything looks good. Save to add this mailbox.
                                                 </p>
                                             </header>
 
-                                            <div className="lm-card rounded-xl p-5">
+                                            <div className="panel rounded-xl p-5">
                                                 <SummaryRow label="Email" value={email} />
                                                 <SummaryRow label="Provider" value={provider ?? 'custom'} />
                                                 <SummaryRow label="IMAP" value={`${imap?.host ?? '-'}:${imap?.port ?? '-'}`} />
@@ -460,19 +461,19 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                                     )}
 
                                     {error && (
-                                        <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                                        <p className="notice-danger mt-5 rounded-lg px-4 py-2 text-sm">
                                             {error}
                                         </p>
                                     )}
                                     {success && (
-                                        <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+                                        <p className="notice-info mt-5 rounded-lg px-4 py-2 text-sm">
                                             {success}
                                         </p>
                                     )}
                                 </div>
                             </div>
                         </main>
-                        <footer className="lm-footer flex shrink-0 items-center justify-between px-8 py-4">
+                        <footer className="app-footer flex shrink-0 items-center justify-between px-8 py-4">
                             <Button
                                 type="button"
                                 disabled={loading || (!canClose && step === 1)}
@@ -483,17 +484,17 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({embedded = false
                                     }
                                     onBack();
                                 }}
-                                className="lm-btn-secondary rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                className="button-secondary rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {step === 1 && canClose ? 'Cancel' : 'Back'}
                             </Button>
                             <Button
                                 type="submit"
                                 disabled={primaryActionDisabled}
-                                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                                className={`rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
                                     step === 3
-                                        ? 'bg-emerald-600 hover:bg-emerald-700'
-                                        : 'lm-btn-primary'
+                                        ? 'button-success'
+                                        : 'button-primary'
                                 }`}
                             >
                                 {primaryActionLabel}
@@ -513,15 +514,16 @@ const StepRailItem: React.FC<{
     title: string;
     subtitle: string;
 }> = ({step, active, done, title, subtitle}) => {
-    const badgeStyle = done ? 'bg-emerald-500 text-white' : active ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300';
+    const badgeStyle = done ? 'is-done' : active ? 'is-active' : 'is-pending';
     return (
-        <div className={`flex items-start gap-3 rounded-lg px-2 py-2 ${active ? 'bg-slate-800' : ''}`}>
-            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${badgeStyle}`}>
+        <div className={`wizard-step-item flex items-start gap-3 rounded-lg px-2 py-2 ${active ? 'is-active' : ''}`}>
+            <span
+                className={`wizard-step-badge flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${badgeStyle}`}>
                 {step}
             </span>
             <div>
-                <p className={`text-sm font-medium ${active ? 'text-white' : 'text-slate-200'}`}>{title}</p>
-                <p className="text-xs text-slate-400">{subtitle}</p>
+                <p className="wizard-step-title text-sm font-medium">{title}</p>
+                <p className="wizard-step-subtitle text-xs">{subtitle}</p>
             </div>
         </div>
     );
@@ -536,7 +538,7 @@ const Field: React.FC<{
     className?: string;
 }> = ({label, value, onChange, placeholder, type = 'text', className = ''}) => (
     <label className={`block text-sm ${className}`}>
-        <span className="lm-text-secondary font-medium">{label}</span>
+        <span className="ui-text-secondary font-medium">{label}</span>
         <FormInput
             type={type}
             value={value}
@@ -548,9 +550,10 @@ const Field: React.FC<{
 );
 
 const SummaryRow: React.FC<{ label: string; value: string }> = ({label, value}) => (
-    <div className="lm-border-default mb-2 flex items-start justify-between border-b pb-2 last:mb-0 last:border-b-0 last:pb-0">
-        <span className="lm-text-secondary text-sm font-medium">{label}</span>
-        <span className="lm-text-primary max-w-[65%] break-all text-right text-sm">{value}</span>
+    <div
+        className="ui-border-default mb-2 flex items-start justify-between border-b pb-2 last:mb-0 last:border-b-0 last:pb-0">
+        <span className="ui-text-secondary text-sm font-medium">{label}</span>
+        <span className="ui-text-primary max-w-[65%] break-all text-right text-sm">{value}</span>
     </div>
 );
 

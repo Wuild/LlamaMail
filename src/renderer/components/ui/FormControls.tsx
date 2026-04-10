@@ -5,13 +5,13 @@ type ControlVariant = 'default' | 'subtle';
 type ControlSize = 'sm' | 'md' | 'lg';
 type GroupPosition = 'none' | 'first' | 'middle' | 'last';
 
-const fieldBase = 'w-full lm-input transition-all disabled:cursor-not-allowed disabled:opacity-60';
+const fieldBase = 'field w-full transition-all disabled:cursor-not-allowed disabled:opacity-60';
 
 const variantStyles: Record<ControlVariant, string> = {
     default:
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]',
+        '',
     subtle:
-        'lm-input-subtle',
+        'field-subtle',
 };
 
 const sizeStyles: Record<ControlSize, string> = {
@@ -59,7 +59,7 @@ export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
     ({className, variant = 'default', size = 'md', groupPosition = 'none', leftIcon, rightIcon, ...props}, ref) => (
         <div className="relative">
             {leftIcon ? (
-                <span className="lm-text-muted pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2">
+                <span className="ui-text-muted pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2">
                     {leftIcon}
                 </span>
             ) : null}
@@ -78,7 +78,7 @@ export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
                 )}
             />
             {rightIcon ? (
-                <span className="lm-text-muted pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2">
+                <span className="ui-text-muted pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2">
                     {rightIcon}
                 </span>
             ) : null}
@@ -237,7 +237,7 @@ export const FormSelect = React.forwardRef<HTMLSelectElement, FormSelectProps>(
                         : children}
                 </select>
                 {leftIcon ? (
-                    <span className="lm-text-muted pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2">
+                    <span className="ui-text-muted pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2">
                         {leftIcon}
                     </span>
                 ) : null}
@@ -321,7 +321,7 @@ export const FormSelect = React.forwardRef<HTMLSelectElement, FormSelectProps>(
                             <span className="truncate">{displayLabel}</span>
                         )}
                     </span>
-                    <span className="lm-text-muted pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2">
+                    <span className="ui-text-muted pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2">
                         {rightIcon ?? <span aria-hidden>{open ? '▴' : '▾'}</span>}
                     </span>
                 </button>
@@ -330,7 +330,7 @@ export const FormSelect = React.forwardRef<HTMLSelectElement, FormSelectProps>(
                         role="listbox"
                         className={cn(
                             'absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-md py-1 shadow-lg',
-                            'lm-context-menu',
+                            'menu',
                             dropdownClassName,
                         )}
                     >
@@ -347,10 +347,10 @@ export const FormSelect = React.forwardRef<HTMLSelectElement, FormSelectProps>(
                                     className={cn(
                                         'block w-full px-3 py-2 text-left text-sm',
                                         item.disabled
-                                            ? 'cursor-not-allowed lm-text-muted opacity-60'
+                                            ? 'cursor-not-allowed ui-text-muted opacity-60'
                                             : isActive
-                                                ? 'lm-bg-active lm-text-primary'
-                                                : 'lm-menu-item',
+                                                ? 'ui-surface-active ui-text-primary'
+                                                : 'account-item',
                                         isSelected && !item.disabled && 'font-medium',
                                     )}
                                     onMouseEnter={() => {
@@ -372,7 +372,7 @@ export const FormSelect = React.forwardRef<HTMLSelectElement, FormSelectProps>(
                                             <span className="min-w-0 flex-1">
                                                 <span className="block truncate">{item.label}</span>
                                                 {item.description ? (
-                                                    <span className="lm-text-muted block truncate text-[11px]">
+                                                    <span className="ui-text-muted block truncate text-[11px]">
                                                         {item.description}
                                                     </span>
                                                 ) : null}
@@ -472,12 +472,10 @@ export const FormCheckbox = React.forwardRef<HTMLInputElement, React.InputHTMLAt
                 size === 'sm'
                     ? 'h-5 w-9 before:left-[2px] before:h-4 before:w-4 checked:before:translate-x-4'
                     : 'h-6 w-11 before:left-[2px] before:h-[18px] before:w-[18px] checked:before:translate-x-[22px]',
-                'relative appearance-none rounded-full border outline-none transition-all duration-200',
-                'lm-border-default',
-                'bg-[var(--surface-hover)]',
-                'before:absolute before:top-1/2 before:-translate-y-1/2 before:rounded-full before:bg-[var(--surface-card)] before:shadow before:transition-all before:duration-200 before:content-[\'\']',
-                'checked:border-[var(--color-primary)] checked:bg-[var(--color-primary)]',
-                'lm-focus-ring',
+                'relative  flex-shrink-0 appearance-none rounded-full border outline-none transition-all duration-200',
+                'field-toggle',
+                'before:absolute before:top-1/2 before:-translate-y-1/2 before:rounded-full before:shadow before:transition-all before:duration-200 before:content-[\'\']',
+                'focus-ring',
                 'disabled:cursor-not-allowed disabled:opacity-50',
                 className,
             )}

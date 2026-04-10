@@ -16,20 +16,20 @@ import {HorizontalRuleNode, INSERT_HORIZONTAL_RULE_COMMAND} from '@lexical/react
 import {$setBlocksType} from '@lexical/selection';
 import {$createQuoteNode, HeadingNode, QuoteNode} from '@lexical/rich-text';
 import {
+    $isListNode,
     INSERT_ORDERED_LIST_COMMAND,
     INSERT_UNORDERED_LIST_COMMAND,
     ListItemNode,
     ListNode,
     REMOVE_LIST_COMMAND,
-    $isListNode,
 } from '@lexical/list';
 import {AutoLinkNode, LinkNode} from '@lexical/link';
 import {$generateHtmlFromNodes, $generateNodesFromDOM} from '@lexical/html';
 import {$createCodeNode, CodeNode} from '@lexical/code';
 import {
+    $createParagraphNode,
     $createRangeSelection,
     $getNearestNodeFromDOMNode,
-    $createParagraphNode,
     $getRoot,
     $getSelection,
     $isDecoratorNode,
@@ -38,14 +38,15 @@ import {
     $isTextNode,
     $normalizeSelection__EXPERIMENTAL,
     $setSelection,
-    FORMAT_TEXT_COMMAND,
-    SELECTION_CHANGE_COMMAND,
     COMMAND_PRIORITY_LOW,
+    FORMAT_TEXT_COMMAND,
     type LexicalEditor,
+    SELECTION_CHANGE_COMMAND,
 } from 'lexical';
 import {$getNearestNodeOfType} from '@lexical/utils';
 import {
     Bold,
+    Code,
     Heading1,
     Heading2,
     Highlighter,
@@ -55,7 +56,6 @@ import {
     ListOrdered,
     ListX,
     MessageSquareQuote,
-    Code,
     Pilcrow,
     SeparatorHorizontal,
     Strikethrough,
@@ -74,7 +74,7 @@ interface HtmlLexicalEditorProps {
 
 const editorTheme = {
     paragraph: 'mb-2',
-    quote: 'border-l-4 border-slate-300 pl-3 italic text-slate-600 dark:border-slate-600 dark:text-slate-300',
+    quote: 'editor-quote pl-3 italic',
     heading: {
         h1: 'text-2xl font-semibold mb-2',
         h2: 'text-xl font-semibold mb-2',
@@ -90,10 +90,10 @@ const editorTheme = {
         italic: 'italic',
         underline: 'underline',
         strikethrough: 'line-through',
-        code: 'rounded bg-slate-200 px-1 py-0.5 font-mono text-[0.92em] dark:bg-slate-700',
+        code: 'editor-inline-code rounded px-1 py-0.5 font-mono text-[0.92em]',
     },
-    code: 'block rounded-md bg-slate-100 p-3 font-mono text-sm dark:bg-slate-800',
-    link: 'text-sky-600 underline dark:text-sky-400',
+    code: 'editor-code-block block rounded-md p-3 font-mono text-sm',
+    link: 'editor-link underline',
 };
 
 const AUTO_LINK_MATCHERS = [
@@ -123,22 +123,25 @@ function toHtmlDocument(value: string): string {
 
 function applyHtmlToEditor(editor: LexicalEditor, value: string): void {
     const html = toHtmlDocument(value);
-    editor.update(() => {
-        const root = $getRoot();
-        root.clear();
-        if (!html.trim()) {
-            root.append($createParagraphNode());
-            return;
-        }
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const nodes = normalizeImportedNodes($generateNodesFromDOM(editor, doc));
-        if (nodes.length === 0) {
-            root.append($createParagraphNode());
-            return;
-        }
-        root.append(...nodes);
-    });
+    editor.update(
+        () => {
+            const root = $getRoot();
+            root.clear();
+            if (!html.trim()) {
+                root.append($createParagraphNode());
+                return;
+            }
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const nodes = normalizeImportedNodes($generateNodesFromDOM(editor, doc));
+            if (nodes.length === 0) {
+                root.append($createParagraphNode());
+                return;
+            }
+            root.append(...nodes);
+        },
+        {tag: 'external-html-sync'},
+    );
 }
 
 function normalizeImportedNodes(nodes: Array<any>): Array<any> {
@@ -351,8 +354,8 @@ function ToolbarPlugin({appearance = 'default'}: { appearance?: 'default' | 'emb
         <div
             className={
                 appearance === 'embedded'
-                    ? 'flex shrink-0 flex-wrap items-center gap-1 border-b border-slate-300 bg-transparent p-2 dark:border-[var(--lm-border-default-dark)]'
-                    : 'flex shrink-0 flex-wrap items-center gap-1 border-b border-slate-300 bg-slate-50 p-2 dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-muted-dark)]'
+                    ? 'editor-toolbar-embedded flex shrink-0 flex-wrap items-center gap-1 p-2'
+                    : 'editor-toolbar-default flex shrink-0 flex-wrap items-center gap-1 p-2'
             }
         >
             <ToolbarIcon title="Bold" onClick={() => format('bold')} appearance={appearance} active={activeFormats.bold}>
@@ -370,7 +373,7 @@ function ToolbarPlugin({appearance = 'default'}: { appearance?: 'default' | 'emb
             <ToolbarIcon title="Highlight" onClick={() => format('highlight')} appearance={appearance}>
                 <Highlighter size={18}/>
             </ToolbarIcon>
-            <div className="mx-1 h-5 w-px bg-slate-300 dark:bg-[var(--lm-border-default-dark)]"/>
+            <div className="editor-toolbar-divider mx-1 h-5 w-px"/>
             <ToolbarIcon title="H1" onClick={() => setHeading('h1')} appearance={appearance} active={activeFormats.headingH1}>
                 <Heading1 size={18}/>
             </ToolbarIcon>
@@ -383,7 +386,7 @@ function ToolbarPlugin({appearance = 'default'}: { appearance?: 'default' | 'emb
             <ToolbarIcon title="Quote" onClick={setQuote} appearance={appearance} active={activeFormats.quote}>
                 <MessageSquareQuote size={18}/>
             </ToolbarIcon>
-            <div className="mx-1 h-5 w-px bg-slate-300 dark:bg-[var(--lm-border-default-dark)]"/>
+            <div className="editor-toolbar-divider mx-1 h-5 w-px"/>
             <ToolbarIcon
                 title="Bulleted list"
                 onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)}
@@ -407,7 +410,7 @@ function ToolbarPlugin({appearance = 'default'}: { appearance?: 'default' | 'emb
             >
                 <ListX size={18}/>
             </ToolbarIcon>
-            <div className="mx-1 h-5 w-px bg-slate-300 dark:bg-[var(--lm-border-default-dark)]"/>
+            <div className="editor-toolbar-divider mx-1 h-5 w-px"/>
             <ToolbarIcon title="Insert image" onClick={insertImage} appearance={appearance}>
                 <ImagePlus size={18}/>
             </ToolbarIcon>
@@ -441,17 +444,7 @@ function ToolbarIcon({
             onMouseDown={(event) => event.preventDefault()}
             onClick={onClick}
             className={
-                appearance === 'embedded'
-                    ? `inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors ${
-                        active
-                            ? 'border-sky-400 bg-sky-100 text-sky-900 dark:border-sky-500 dark:bg-[var(--lm-surface-editor-selected-dark)] dark:text-slate-100'
-                            : 'border-slate-300 bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-[var(--lm-border-default-dark)] dark:text-slate-300 dark:hover:bg-[var(--lm-surface-hover-dark)] dark:hover:text-slate-100'
-                    }`
-                    : `inline-flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${
-                        active
-                            ? 'border-sky-400 bg-sky-100 text-sky-900 dark:border-sky-500 dark:bg-[var(--lm-surface-editor-selected-dark)] dark:text-slate-100'
-                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-card-dark)] dark:text-slate-300 dark:hover:bg-[var(--lm-surface-hover-dark)] dark:hover:text-slate-100'
-                    }`
+                `${appearance === 'embedded' ? 'editor-toolbar-control-embedded editor-toolbar-button-embedded' : 'editor-toolbar-control-default editor-toolbar-button-default'} editor-toolbar-control editor-toolbar-button ${active ? 'is-active' : ''}`
             }
         >
             {children}
@@ -491,21 +484,20 @@ export default function HtmlLexicalEditor({
                             <ContentEditable
                                 className={
                                     appearance === 'embedded'
-                                        ? 'lexical-editor-input h-full w-full overflow-auto bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none dark:bg-[var(--lm-surface-panel-dark)] dark:text-slate-100'
-                                        : 'lexical-editor-input h-full w-full overflow-auto bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none dark:bg-[var(--lm-surface-card-dark)] dark:text-slate-100'
+                                        ? 'editor-content editor-content-embedded editor-content-shell lexical-editor-input'
+                                        : 'editor-content editor-content-default editor-content-shell lexical-editor-input'
                                 }
                             />
                         }
                         placeholder={
-                            <div
-                                className="pointer-events-none absolute left-4 top-3 text-sm text-slate-400 dark:text-slate-500">
+                            <div className="editor-placeholder editor-placeholder-shell">
                                 {placeholder || 'Write...'}
                             </div>
                         }
                         ErrorBoundary={LexicalErrorBoundary}
                     />
                     {isFileDragActive && (
-                        <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-md border-2 border-dashed border-sky-400 bg-sky-100/80 text-sm font-medium text-sky-900 dark:border-sky-500 dark:bg-sky-900/25 dark:text-sky-200">
+                        <div className="editor-drop-overlay editor-drop-overlay-shell">
                             Drop files: images insert inline, other files attach
                         </div>
                     )}
@@ -523,7 +515,8 @@ export default function HtmlLexicalEditor({
                 />
                 <ExternalHtmlSyncPlugin value={value} lastInternalHtmlRef={lastInternalHtmlRef}/>
                 <OnChangePlugin
-                    onChange={(editorState, editor) => {
+                    onChange={(editorState, editor, tags) => {
+                        if (tags.has('external-html-sync')) return;
                         editorState.read(() => {
                             const html = toInlineEmailHtml($generateHtmlFromNodes(editor, null));
                             const plain = $getRoot().getTextContent();
@@ -798,24 +791,24 @@ function toInlineEmailHtml(inputHtml: string): string {
 
     doc.querySelectorAll('p').forEach((el) => applyStyle(el, 'margin:0 0 12px 0; line-height:1.55;'));
     doc.querySelectorAll('blockquote').forEach((el) =>
-        applyStyle(el, 'margin:0 0 12px 0; padding-left:12px; border-left:3px solid var(--lm-border-light); color:var(--lm-text-subtle-light);'),
+        applyStyle(el, 'margin:0 0 12px 0; padding-left:12px; border-left:3px solid var(--content-border); color:var(--content-muted);'),
     );
     doc.querySelectorAll('ul').forEach((el) => applyStyle(el, 'margin:0 0 12px 22px; padding:0;'));
     doc.querySelectorAll('ol').forEach((el) => applyStyle(el, 'margin:0 0 12px 22px; padding:0;'));
     doc.querySelectorAll('li').forEach((el) => applyStyle(el, 'margin:0 0 6px 0;'));
-    doc.querySelectorAll('a').forEach((el) => applyStyle(el, 'color:var(--lm-color-link); text-decoration:underline;'));
+    doc.querySelectorAll('a').forEach((el) => applyStyle(el, 'color:var(--color-link); text-decoration:underline;'));
     doc.querySelectorAll('pre').forEach((el) =>
         applyStyle(el, 'margin:0 0 12px 0; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;'),
     );
     doc.querySelectorAll('code').forEach((el) =>
-        applyStyle(el, 'font-family:ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--lm-surface-soft-light); padding:1px 4px; border-radius:4px;'),
+        applyStyle(el, 'font-family:ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--state-hover); padding:1px 4px; border-radius:4px;'),
     );
     doc.querySelectorAll('img').forEach((el) => {
         applyStyle(el, 'max-width:100%; height:auto; display:block;');
         if (!el.getAttribute('alt')) el.setAttribute('alt', '');
     });
     doc.querySelectorAll('hr').forEach((el) =>
-        applyStyle(el, 'border:0; border-top:1px solid var(--lm-border-light); margin:12px 0;'),
+        applyStyle(el, 'border:0; border-top:1px solid var(--content-border); margin:12px 0;'),
     );
     doc.querySelectorAll('h1').forEach((el) => applyStyle(el, 'margin:0 0 12px 0; font-size:28px; line-height:1.25;'));
     doc.querySelectorAll('h2').forEach((el) => applyStyle(el, 'margin:0 0 12px 0; font-size:24px; line-height:1.3;'));

@@ -2,15 +2,15 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {AppWindow, Palette, Plus, ShieldCheck, Wrench} from 'lucide-react';
 import type {
-	AppSettings,
-	AutoUpdateState,
-	FolderItem,
-	MailFilter,
-	MailFilterActionType,
-	MailFilterField,
-	MailFilterMatchMode,
-	MailFilterOperator,
-	UpdateAccountPayload,
+    AppSettings,
+    AutoUpdateState,
+    FolderItem,
+    MailFilter,
+    MailFilterActionType,
+    MailFilterField,
+    MailFilterMatchMode,
+    MailFilterOperator,
+    UpdateAccountPayload,
 } from '../../preload';
 import {cn} from '../lib/utils';
 import WindowTitleBar from '../components/WindowTitleBar';
@@ -18,6 +18,7 @@ import {useThemePreference} from '../hooks/useAppTheme';
 import ServiceSettingsCard from '../components/settings/ServiceSettingsCard';
 import {Button} from '../components/ui/button';
 import {FormCheckbox, FormInput, FormSelect} from '../components/ui/FormControls';
+import {Modal} from '../components/ui/Modal';
 import DynamicSidebar, {type DynamicSidebarSection} from '../components/navigation/DynamicSidebar';
 import WorkspaceLayout from '../layouts/WorkspaceLayout';
 import HtmlLexicalEditor from '../components/HtmlLexicalEditor';
@@ -30,991 +31,1002 @@ import {ipcClient} from '../lib/ipcClient';
 import AppSettingsGeneralPanel from './AppSettingsGeneralPanel';
 import {Field, Label} from './AppSettingsFormParts';
 import {DEFAULT_APP_SETTINGS} from '../../shared/defaults';
-import {
-	APP_THEME_OPTIONS,
-	MAIL_VIEW_OPTIONS,
-} from '../../shared/settingsOptions';
+import {APP_THEME_OPTIONS, MAIL_VIEW_OPTIONS,} from '../../shared/settingsOptions';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '../lib/accountAvatar';
 
 type AppSettingsPageProps = {
-	embedded?: boolean;
-	targetAccountId?: number | null;
-	initialPanel?: 'app' | 'layout' | 'allowlist' | 'developer';
-	openUpdaterToken?: string | null;
+    embedded?: boolean;
+    targetAccountId?: number | null;
+    initialPanel?: 'app' | 'layout' | 'allowlist' | 'developer';
+    openUpdaterToken?: string | null;
 };
 
-type AccountEditor = UpdateAccountPayload & {id: number};
+type AccountEditor = UpdateAccountPayload & { id: number };
 type AccountPanelSection = 'identity' | 'server' | 'filters';
 type SettingsPanel =
-	| {kind: 'app'}
-	| {kind: 'layout'}
-	| {kind: 'allowlist'}
-	| {kind: 'developer'}
-	| {kind: 'account'; id: number};
+    | { kind: 'app' }
+    | { kind: 'layout' }
+    | { kind: 'allowlist' }
+    | { kind: 'developer' }
+    | { kind: 'account'; id: number };
 
 type MailFilterConditionDraft = {
-	field: MailFilterField;
-	operator: MailFilterOperator;
-	value: string;
+    field: MailFilterField;
+    operator: MailFilterOperator;
+    value: string;
 };
 
 type MailFilterActionDraft = {
-	type: MailFilterActionType;
-	value: string;
+    type: MailFilterActionType;
+    value: string;
 };
 
 type MailFilterDraft = {
-	id: number | null;
-	name: string;
-	enabled: boolean;
-	run_on_incoming: boolean;
-	match_mode: MailFilterMatchMode;
-	stop_processing: boolean;
-	conditions: MailFilterConditionDraft[];
-	actions: MailFilterActionDraft[];
+    id: number | null;
+    name: string;
+    enabled: boolean;
+    run_on_incoming: boolean;
+    match_mode: MailFilterMatchMode;
+    stop_processing: boolean;
+    conditions: MailFilterConditionDraft[];
+    actions: MailFilterActionDraft[];
 };
 
 type MailFilterModalState = {
-	mode: 'create' | 'edit';
-	draft: MailFilterDraft;
+    mode: 'create' | 'edit';
+    draft: MailFilterDraft;
 } | null;
 
 export default function AppSettingsPage({
-	embedded = false,
-	targetAccountId = null,
-	initialPanel = 'app',
-	openUpdaterToken = null,
-}: AppSettingsPageProps) {
-	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);
-	const {state: autoUpdateState, setState: setAutoUpdateState} = useAutoUpdateState();
-	const {accounts} = useAccounts();
-	const [updateActionBusy, setUpdateActionBusy] = useState(false);
-	const [appStatus, setAppStatus] = useState<string | null>(null);
-	const [panel, setPanel] = useState<SettingsPanel>(
-		typeof targetAccountId === 'number'
-			? {kind: 'account', id: targetAccountId}
-			: initialPanel === 'developer'
-				? {kind: 'developer'}
-				: initialPanel === 'allowlist'
-					? {kind: 'allowlist'}
-				: initialPanel === 'layout'
-						? {kind: 'layout'}
-						: {kind: 'app'},
-	);
-	const [editor, setEditor] = useState<AccountEditor | null>(null);
-	const [accountSection, setAccountSection] = useState<AccountPanelSection>('identity');
-	const [savingAccount, setSavingAccount] = useState(false);
-	const [deletingAccount, setDeletingAccount] = useState(false);
-	const [accountStatus, setAccountStatus] = useState<string | null>(null);
-	const [mailFilterBusy, setMailFilterBusy] = useState(false);
-	const [runningFilterId, setRunningFilterId] = useState<number | null>(null);
-	const [developerStatus, setDeveloperStatus] = useState<string | null>(null);
-	const [showUpdaterModal, setShowUpdaterModal] = useState(false);
-	const [mailFilterModal, setMailFilterModal] = useState<MailFilterModalState>(null);
-	const [remoteAllowlistInput, setRemoteAllowlistInput] = useState('');
-	const [isDefaultEmailClient, setIsDefaultEmailClient] = useState<boolean | null>(null);
-	const [defaultEmailClientBusy, setDefaultEmailClientBusy] = useState(false);
-	const {sidebarWidth: settingsSidebarWidth, onResizeStart: onSettingsSidebarResizeStart} = useResizableSidebar({
-		defaultWidth: 320,
-		minWidth: 240,
-		maxWidth: 460,
-		storageKey: 'llamamail.settings.sidebar.width',
-	});
-	const {sidebarWidth: accountSectionSidebarWidth, onResizeStart: onAccountSectionResizeStart} =
-		useResizableSidebar({
-			defaultWidth: 240,
-			minWidth: 180,
-			maxWidth: 420,
-			storageKey: 'llamamail.settings.account.sections.width',
-		});
+                                            embedded = false,
+                                            targetAccountId = null,
+                                            initialPanel = 'app',
+                                            openUpdaterToken = null,
+                                        }: AppSettingsPageProps) {
+    const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);
+    const {state: autoUpdateState, setState: setAutoUpdateState} = useAutoUpdateState();
+    const {accounts} = useAccounts();
+    const [updateActionBusy, setUpdateActionBusy] = useState(false);
+    const [appStatus, setAppStatus] = useState<string | null>(null);
+    const [panel, setPanel] = useState<SettingsPanel>(
+        typeof targetAccountId === 'number'
+            ? {kind: 'account', id: targetAccountId}
+            : initialPanel === 'developer'
+                ? {kind: 'developer'}
+                : initialPanel === 'allowlist'
+                    ? {kind: 'allowlist'}
+                    : initialPanel === 'layout'
+                        ? {kind: 'layout'}
+                        : {kind: 'app'},
+    );
+    const [editor, setEditor] = useState<AccountEditor | null>(null);
+    const [accountSection, setAccountSection] = useState<AccountPanelSection>('identity');
+    const [savingAccount, setSavingAccount] = useState(false);
+    const [deletingAccount, setDeletingAccount] = useState(false);
+    const [accountStatus, setAccountStatus] = useState<string | null>(null);
+    const [mailFilterBusy, setMailFilterBusy] = useState(false);
+    const [runningFilterId, setRunningFilterId] = useState<number | null>(null);
+    const [developerStatus, setDeveloperStatus] = useState<string | null>(null);
+    const [showUpdaterModal, setShowUpdaterModal] = useState(false);
+    const [mailFilterModal, setMailFilterModal] = useState<MailFilterModalState>(null);
+    const [remoteAllowlistInput, setRemoteAllowlistInput] = useState('');
+    const [isDefaultEmailClient, setIsDefaultEmailClient] = useState<boolean | null>(null);
+    const [defaultEmailClientBusy, setDefaultEmailClientBusy] = useState(false);
+    const {sidebarWidth: settingsSidebarWidth, onResizeStart: onSettingsSidebarResizeStart} = useResizableSidebar({
+        defaultWidth: 320,
+        minWidth: 240,
+        maxWidth: 460,
+        storageKey: 'llamamail.settings.sidebar.width',
+    });
+    const {sidebarWidth: accountSectionSidebarWidth, onResizeStart: onAccountSectionResizeStart} =
+        useResizableSidebar({
+            defaultWidth: 240,
+            minWidth: 180,
+            maxWidth: 420,
+            storageKey: 'llamamail.settings.account.sections.width',
+        });
 
-	useEffect(() => {
-		setPanel((prev) => {
-			if (prev.kind === 'account' && accounts.some((account) => account.id === prev.id)) return prev;
-			if (typeof targetAccountId === 'number' && accounts.some((account) => account.id === targetAccountId)) {
-				return {kind: 'account', id: targetAccountId};
-			}
-			return prev.kind === 'account' ? {kind: 'app'} : prev;
-		});
-	}, [accounts, targetAccountId]);
+    useEffect(() => {
+        setPanel((prev) => {
+            if (prev.kind === 'account' && accounts.some((account) => account.id === prev.id)) return prev;
+            if (typeof targetAccountId === 'number' && accounts.some((account) => account.id === targetAccountId)) {
+                return {kind: 'account', id: targetAccountId};
+            }
+            return prev.kind === 'account' ? {kind: 'app'} : prev;
+        });
+    }, [accounts, targetAccountId]);
 
-	useEffect(() => {
-		if (typeof targetAccountId === 'number') return;
-		if (initialPanel === 'developer') {
-			setPanel({kind: 'developer'});
-			return;
-		}
-		if (initialPanel === 'layout') {
-			setPanel({kind: 'layout'});
-			return;
-		}
-		if (initialPanel === 'allowlist') {
-			setPanel({kind: 'allowlist'});
-			return;
-		}
-		if (embedded) {
-			setPanel({kind: 'app'});
-			return;
-		}
-		setPanel((prev) =>
-			prev.kind === 'account' || prev.kind === 'layout' || prev.kind === 'allowlist' ? prev : {kind: 'app'},
-		);
-	}, [embedded, initialPanel, targetAccountId]);
+    useEffect(() => {
+        if (typeof targetAccountId === 'number') return;
+        if (initialPanel === 'developer') {
+            setPanel({kind: 'developer'});
+            return;
+        }
+        if (initialPanel === 'layout') {
+            setPanel({kind: 'layout'});
+            return;
+        }
+        if (initialPanel === 'allowlist') {
+            setPanel({kind: 'allowlist'});
+            return;
+        }
+        if (embedded) {
+            setPanel({kind: 'app'});
+            return;
+        }
+        setPanel((prev) =>
+            prev.kind === 'account' || prev.kind === 'layout' || prev.kind === 'allowlist' ? prev : {kind: 'app'},
+        );
+    }, [embedded, initialPanel, targetAccountId]);
 
-	useEffect(() => {
-		if (!openUpdaterToken) return;
-		setPanel({kind: 'developer'});
-		setShowUpdaterModal(true);
-	}, [openUpdaterToken]);
+    useEffect(() => {
+        if (!openUpdaterToken) return;
+        setPanel({kind: 'developer'});
+        setShowUpdaterModal(true);
+    }, [openUpdaterToken]);
 
-	useEffect(() => {
-		if (panel.kind !== 'app') return;
-		let cancelled = false;
-		void (async () => {
-			try {
-				const result = await ipcClient.getDefaultEmailClientStatus();
-				if (cancelled) return;
-				setIsDefaultEmailClient(result.isDefault);
-			} catch {
-				if (cancelled) return;
-				setIsDefaultEmailClient(null);
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [panel.kind]);
+    useEffect(() => {
+        if (panel.kind !== 'app') return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const result = await ipcClient.getDefaultEmailClientStatus();
+                if (cancelled) return;
+                setIsDefaultEmailClient(result.isDefault);
+            } catch {
+                if (cancelled) return;
+                setIsDefaultEmailClient(null);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [panel.kind]);
 
-	const selectedAccount = useMemo(
-		() => (panel.kind === 'account' ? (accounts.find((account) => account.id === panel.id) ?? null) : null),
-		[accounts, panel],
-	);
-	const accountFoldersQuery = useQuery({
-		queryKey: ['folders', 'account-settings', selectedAccount?.id ?? null],
-		queryFn: () => ipcClient.getFolders(selectedAccount!.id),
-		enabled: Boolean(selectedAccount),
-		initialData: [] as FolderItem[],
-	});
-	const accountFolders = accountFoldersQuery.data;
-	const mailFiltersQuery = useQuery({
-		queryKey: ['mail-filters', selectedAccount?.id ?? null],
-		queryFn: () => ipcClient.getMailFilters(selectedAccount!.id),
-		enabled: Boolean(selectedAccount),
-		initialData: [] as MailFilter[],
-	});
-	const mailFilters = mailFiltersQuery.data;
+    const selectedAccount = useMemo(
+        () => (panel.kind === 'account' ? (accounts.find((account) => account.id === panel.id) ?? null) : null),
+        [accounts, panel],
+    );
+    const accountFoldersQuery = useQuery({
+        queryKey: ['folders', 'account-settings', selectedAccount?.id ?? null],
+        queryFn: () => ipcClient.getFolders(selectedAccount!.id),
+        enabled: Boolean(selectedAccount),
+        initialData: [] as FolderItem[],
+    });
+    const accountFolders = accountFoldersQuery.data;
+    const mailFiltersQuery = useQuery({
+        queryKey: ['mail-filters', selectedAccount?.id ?? null],
+        queryFn: () => ipcClient.getMailFilters(selectedAccount!.id),
+        enabled: Boolean(selectedAccount),
+        initialData: [] as MailFilter[],
+    });
+    const mailFilters = mailFiltersQuery.data;
 
-	useEffect(() => {
-		if (!selectedAccount) {
-			setEditor(null);
-			return;
-		}
-		setAccountSection('identity');
-		setEditor({
-			id: selectedAccount.id,
-			email: selectedAccount.email,
-			provider: selectedAccount.provider,
-			display_name: selectedAccount.display_name,
-			reply_to: selectedAccount.reply_to,
-			organization: selectedAccount.organization,
-			signature_text: selectedAccount.signature_text,
-			signature_is_html: selectedAccount.signature_is_html,
-			signature_file_path: selectedAccount.signature_file_path,
-			attach_vcard: selectedAccount.attach_vcard,
-			user: selectedAccount.user,
-			imap_host: selectedAccount.imap_host,
-			imap_port: selectedAccount.imap_port,
-			imap_secure: selectedAccount.imap_secure,
-			pop3_host: selectedAccount.pop3_host,
-			pop3_port: selectedAccount.pop3_port,
-			pop3_secure: selectedAccount.pop3_secure,
-			smtp_host: selectedAccount.smtp_host,
-			smtp_port: selectedAccount.smtp_port,
-			smtp_secure: selectedAccount.smtp_secure,
-			password: '',
-		});
-	}, [selectedAccount]);
+    useEffect(() => {
+        if (!selectedAccount) {
+            setEditor(null);
+            return;
+        }
+        setAccountSection('identity');
+        setEditor({
+            id: selectedAccount.id,
+            email: selectedAccount.email,
+            provider: selectedAccount.provider,
+            display_name: selectedAccount.display_name,
+            reply_to: selectedAccount.reply_to,
+            organization: selectedAccount.organization,
+            signature_text: selectedAccount.signature_text,
+            signature_is_html: selectedAccount.signature_is_html,
+            signature_file_path: selectedAccount.signature_file_path,
+            attach_vcard: selectedAccount.attach_vcard,
+            user: selectedAccount.user,
+            imap_host: selectedAccount.imap_host,
+            imap_port: selectedAccount.imap_port,
+            imap_secure: selectedAccount.imap_secure,
+            pop3_host: selectedAccount.pop3_host,
+            pop3_port: selectedAccount.pop3_port,
+            pop3_secure: selectedAccount.pop3_secure,
+            smtp_host: selectedAccount.smtp_host,
+            smtp_port: selectedAccount.smtp_port,
+            smtp_secure: selectedAccount.smtp_secure,
+            password: '',
+        });
+    }, [selectedAccount]);
 
-	useEffect(() => {
-		if (!selectedAccount) {
-			setMailFilterModal(null);
-		}
-	}, [selectedAccount]);
+    useEffect(() => {
+        if (!selectedAccount) {
+            setMailFilterModal(null);
+        }
+    }, [selectedAccount]);
 
-	useThemePreference(settings.theme);
+    useThemePreference(settings.theme);
 
-	async function applySettingsPatch(patch: Partial<AppSettings>): Promise<boolean> {
-		setSettings((prev) => ({...prev, ...patch}));
-		setAppStatus('Saving...');
-		try {
-			const saved = await ipcClient.updateAppSettings(patch);
-			setSettings(saved);
-			setAppStatus('Settings saved.');
-			return true;
-		} catch (e: any) {
-			const latest = await ipcClient.getAppSettings().catch(() => null);
-			if (latest) setSettings(latest);
-			setAppStatus(`Save failed: ${e?.message || String(e)}`);
-			return false;
-		}
-	}
+    async function applySettingsPatch(patch: Partial<AppSettings>): Promise<boolean> {
+        setSettings((prev) => ({...prev, ...patch}));
+        setAppStatus('Saving...');
+        try {
+            const saved = await ipcClient.updateAppSettings(patch);
+            setSettings(saved);
+            setAppStatus('Settings saved.');
+            return true;
+        } catch (e: any) {
+            const latest = await ipcClient.getAppSettings().catch(() => null);
+            if (latest) setSettings(latest);
+            setAppStatus(`Save failed: ${e?.message || String(e)}`);
+            return false;
+        }
+    }
 
-	async function onTitlebarModeChange(useNativeTitleBar: boolean): Promise<void> {
-		const pendingValue = useNativeTitleBar === settings.useNativeTitleBar ? null : useNativeTitleBar;
-		const saved = await applySettingsPatch({pendingUseNativeTitleBar: pendingValue});
-		if (!saved) return;
-		setAppStatus(
-			pendingValue === null
-				? 'Titlebar restart change cleared.'
-				: 'Titlebar change queued. Restart required to apply.',
-		);
-	}
+    async function onTitlebarModeChange(useNativeTitleBar: boolean): Promise<void> {
+        const pendingValue = useNativeTitleBar === settings.useNativeTitleBar ? null : useNativeTitleBar;
+        const saved = await applySettingsPatch({pendingUseNativeTitleBar: pendingValue});
+        if (!saved) return;
+        setAppStatus(
+            pendingValue === null
+                ? 'Titlebar restart change cleared.'
+                : 'Titlebar change queued. Restart required to apply.',
+        );
+    }
 
-	async function onHardwareAccelerationChange(enabled: boolean): Promise<void> {
-		const pendingValue = enabled === settings.hardwareAcceleration ? null : enabled;
-		const saved = await applySettingsPatch({pendingHardwareAcceleration: pendingValue});
-		if (!saved) return;
-		setAppStatus(
-			pendingValue === null
-				? 'Hardware acceleration restart change cleared.'
-				: 'Hardware acceleration change queued. Restart required to apply.',
-		);
-	}
+    async function onHardwareAccelerationChange(enabled: boolean): Promise<void> {
+        const pendingValue = enabled === settings.hardwareAcceleration ? null : enabled;
+        const saved = await applySettingsPatch({pendingHardwareAcceleration: pendingValue});
+        if (!saved) return;
+        setAppStatus(
+            pendingValue === null
+                ? 'Hardware acceleration restart change cleared.'
+                : 'Hardware acceleration change queued. Restart required to apply.',
+        );
+    }
 
-	async function onSetDefaultEmailClient(): Promise<void> {
-		setDefaultEmailClientBusy(true);
-		setAppStatus('Requesting default email app...');
-		try {
-			const result = await ipcClient.setDefaultEmailClient();
-			setIsDefaultEmailClient(result.isDefault);
-			if (result.isDefault) {
-				setAppStatus('LlamaMail is now the default email app for mailto links.');
-				return;
-			}
-			if (result.ok) {
-				setAppStatus('Default email app request sent. Confirm the change in your system settings if prompted.');
-				return;
-			}
-			setAppStatus(result.error || 'Could not set LlamaMail as default email app.');
-		} catch (e: any) {
-			setAppStatus(`Default app change failed: ${e?.message || String(e)}`);
-		} finally {
-			setDefaultEmailClientBusy(false);
-		}
-	}
+    async function onSetDefaultEmailClient(): Promise<void> {
+        setDefaultEmailClientBusy(true);
+        setAppStatus('Requesting default email app...');
+        try {
+            const result = await ipcClient.setDefaultEmailClient();
+            setIsDefaultEmailClient(result.isDefault);
+            if (result.isDefault) {
+                setAppStatus('LlamaMail is now the default email app for mailto links.');
+                return;
+            }
+            if (result.ok) {
+                setAppStatus('Default email app request sent. Confirm the change in your system settings if prompted.');
+                return;
+            }
+            setAppStatus(result.error || 'Could not set LlamaMail as default email app.');
+        } catch (e: any) {
+            setAppStatus(`Default app change failed: ${e?.message || String(e)}`);
+        } finally {
+            setDefaultEmailClientBusy(false);
+        }
+    }
 
-	async function addRemoteAllowlistEntry(): Promise<void> {
-		const normalized = normalizeAllowlistEntry(remoteAllowlistInput);
-		if (!normalized) {
-			setAppStatus('Enter a valid sender email or domain.');
-			return;
-		}
-		const merged = [...new Set([...(settings.remoteContentAllowlist || []), normalized])];
-		setRemoteAllowlistInput('');
-		await applySettingsPatch({remoteContentAllowlist: merged});
-	}
+    async function addRemoteAllowlistEntry(): Promise<void> {
+        const normalized = normalizeAllowlistEntry(remoteAllowlistInput);
+        if (!normalized) {
+            setAppStatus('Enter a valid sender email or domain.');
+            return;
+        }
+        const merged = [...new Set([...(settings.remoteContentAllowlist || []), normalized])];
+        setRemoteAllowlistInput('');
+        await applySettingsPatch({remoteContentAllowlist: merged});
+    }
 
-	async function removeRemoteAllowlistEntry(entry: string): Promise<void> {
-		const next = (settings.remoteContentAllowlist || []).filter((item) => item !== entry);
-		await applySettingsPatch({remoteContentAllowlist: next});
-	}
+    async function removeRemoteAllowlistEntry(entry: string): Promise<void> {
+        const next = (settings.remoteContentAllowlist || []).filter((item) => item !== entry);
+        await applySettingsPatch({remoteContentAllowlist: next});
+    }
 
-	async function onSaveAccount() {
-		if (!editor || savingAccount) return;
-		setSavingAccount(true);
-		setAccountStatus('Saving account...');
-		try {
-			const normalized: UpdateAccountPayload = {
-				...editor,
-				email: editor.email.trim(),
-				user: editor.user.trim(),
-				provider: editor.provider?.trim() || null,
-				display_name: editor.display_name?.trim() || null,
-				reply_to: editor.reply_to?.trim() || null,
-				organization: editor.organization?.trim() || null,
-				signature_text: editor.signature_text ?? null,
-				signature_is_html: 1,
-				signature_file_path: editor.signature_file_path?.trim() || null,
-				attach_vcard: editor.attach_vcard ? 1 : 0,
-				imap_host: editor.imap_host.trim(),
-				smtp_host: editor.smtp_host.trim(),
-				pop3_host: editor.pop3_host?.trim() || null,
-				password: editor.password?.trim() || null,
-			};
-			await ipcClient.updateAccount(editor.id, normalized);
-			setAccountStatus('Account settings saved.');
-			setEditor((prev) => (prev ? {...prev, password: ''} : prev));
-		} catch (e: any) {
-			setAccountStatus(`Save failed: ${e?.message || String(e)}`);
-		} finally {
-			setSavingAccount(false);
-		}
-	}
+    async function onSaveAccount() {
+        if (!editor || savingAccount) return;
+        setSavingAccount(true);
+        setAccountStatus('Saving account...');
+        try {
+            const normalized: UpdateAccountPayload = {
+                ...editor,
+                email: editor.email.trim(),
+                user: editor.user.trim(),
+                provider: editor.provider?.trim() || null,
+                display_name: editor.display_name?.trim() || null,
+                reply_to: editor.reply_to?.trim() || null,
+                organization: editor.organization?.trim() || null,
+                signature_text: editor.signature_text ?? null,
+                signature_is_html: 1,
+                signature_file_path: editor.signature_file_path?.trim() || null,
+                attach_vcard: editor.attach_vcard ? 1 : 0,
+                imap_host: editor.imap_host.trim(),
+                smtp_host: editor.smtp_host.trim(),
+                pop3_host: editor.pop3_host?.trim() || null,
+                password: editor.password?.trim() || null,
+            };
+            await ipcClient.updateAccount(editor.id, normalized);
+            setAccountStatus('Account settings saved.');
+            setEditor((prev) => (prev ? {...prev, password: ''} : prev));
+        } catch (e: any) {
+            setAccountStatus(`Save failed: ${e?.message || String(e)}`);
+        } finally {
+            setSavingAccount(false);
+        }
+    }
 
-	async function onDeleteAccount() {
-		if (!editor || deletingAccount) return;
-		const confirmed = window.confirm(
-			`Delete account "${editor.email}"?\n\nThis removes all synced local data for this account.`,
-		);
-		if (!confirmed) return;
-		setDeletingAccount(true);
-		setAccountStatus('Deleting account...');
-		try {
-			await ipcClient.deleteAccount(editor.id);
-			setAccountStatus('Account deleted.');
-			setPanel({kind: 'app'});
-		} catch (e: any) {
-			setAccountStatus(`Delete failed: ${e?.message || String(e)}`);
-		} finally {
-			setDeletingAccount(false);
-		}
-	}
+    async function onDeleteAccount() {
+        if (!editor || deletingAccount) return;
+        const confirmed = window.confirm(
+            `Delete account "${editor.email}"?\n\nThis removes all synced local data for this account.`,
+        );
+        if (!confirmed) return;
+        setDeletingAccount(true);
+        setAccountStatus('Deleting account...');
+        try {
+            await ipcClient.deleteAccount(editor.id);
+            setAccountStatus('Account deleted.');
+            setPanel({kind: 'app'});
+        } catch (e: any) {
+            setAccountStatus(`Delete failed: ${e?.message || String(e)}`);
+        } finally {
+            setDeletingAccount(false);
+        }
+    }
 
-	function onOpenCreateMailFilter() {
-		setMailFilterModal({
-			mode: 'create',
-			draft: createDefaultMailFilterDraft(mailFilters.length + 1),
-		});
-	}
+    function onOpenCreateMailFilter() {
+        setMailFilterModal({
+            mode: 'create',
+            draft: createDefaultMailFilterDraft(mailFilters.length + 1),
+        });
+    }
 
-	function onOpenEditMailFilter(filter: MailFilter) {
-		setMailFilterModal({
-			mode: 'edit',
-			draft: mapMailFilterToDraft(filter),
-		});
-	}
+    function onOpenEditMailFilter(filter: MailFilter) {
+        setMailFilterModal({
+            mode: 'edit',
+            draft: mapMailFilterToDraft(filter),
+        });
+    }
 
-	function updateMailFilterDraft(updater: (prev: MailFilterDraft) => MailFilterDraft) {
-		setMailFilterModal((prev) => {
-			if (!prev) return prev;
-			return {...prev, draft: updater(prev.draft)};
-		});
-	}
+    function updateMailFilterDraft(updater: (prev: MailFilterDraft) => MailFilterDraft) {
+        setMailFilterModal((prev) => {
+            if (!prev) return prev;
+            return {...prev, draft: updater(prev.draft)};
+        });
+    }
 
-	async function onSaveMailFilterModal() {
-		if (!selectedAccount || !mailFilterModal || mailFilterBusy) return;
-		const {mode, draft} = mailFilterModal;
-		const name = draft.name.trim();
-		if (!name) {
-			setAccountStatus('Filter name is required.');
-			return;
-		}
-		if (draft.match_mode !== 'all_messages' && draft.conditions.length === 0) {
-			setAccountStatus('Add at least one condition, or use "Match all messages".');
-			return;
-		}
-		if (draft.actions.length === 0) {
-			setAccountStatus('Add at least one action.');
-			return;
-		}
-		const invalidMoveAction = draft.actions.some(
-			(action) => action.type === 'move_to_folder' && !action.value.trim(),
-		);
-		if (invalidMoveAction) {
-			setAccountStatus('Select a folder for every "Move to folder" action.');
-			return;
-		}
+    async function onSaveMailFilterModal() {
+        if (!selectedAccount || !mailFilterModal || mailFilterBusy) return;
+        const {mode, draft} = mailFilterModal;
+        const name = draft.name.trim();
+        if (!name) {
+            setAccountStatus('Filter name is required.');
+            return;
+        }
+        if (draft.match_mode !== 'all_messages' && draft.conditions.length === 0) {
+            setAccountStatus('Add at least one condition, or use "Match all messages".');
+            return;
+        }
+        if (draft.actions.length === 0) {
+            setAccountStatus('Add at least one action.');
+            return;
+        }
+        const invalidMoveAction = draft.actions.some(
+            (action) => action.type === 'move_to_folder' && !action.value.trim(),
+        );
+        if (invalidMoveAction) {
+            setAccountStatus('Select a folder for every "Move to folder" action.');
+            return;
+        }
 
-		setMailFilterBusy(true);
-		setAccountStatus(mode === 'create' ? 'Creating filter...' : 'Saving filter...');
-		try {
-			const saved = await ipcClient.saveMailFilter(selectedAccount.id, {
-				id: draft.id ?? undefined,
-				name,
-				enabled: draft.enabled ? 1 : 0,
-				run_on_incoming: draft.run_on_incoming ? 1 : 0,
-				match_mode: draft.match_mode,
-				stop_processing: draft.stop_processing ? 1 : 0,
-				conditions: draft.conditions.map((condition) => ({
-					field: condition.field,
-					operator: condition.operator,
-					value: condition.value,
-				})),
-				actions: draft.actions.map((action) => ({
-					type: action.type,
-					value: action.value,
-				})),
-			});
-			await mailFiltersQuery.refetch();
-			setMailFilterModal(null);
-			setAccountStatus(mode === 'create' ? 'Filter created.' : 'Filter saved.');
-		} catch (e: any) {
-			setAccountStatus(`Filter save failed: ${e?.message || String(e)}`);
-		} finally {
-			setMailFilterBusy(false);
-		}
-	}
+        setMailFilterBusy(true);
+        setAccountStatus(mode === 'create' ? 'Creating filter...' : 'Saving filter...');
+        try {
+            const saved = await ipcClient.saveMailFilter(selectedAccount.id, {
+                id: draft.id ?? undefined,
+                name,
+                enabled: draft.enabled ? 1 : 0,
+                run_on_incoming: draft.run_on_incoming ? 1 : 0,
+                match_mode: draft.match_mode,
+                stop_processing: draft.stop_processing ? 1 : 0,
+                conditions: draft.conditions.map((condition) => ({
+                    field: condition.field,
+                    operator: condition.operator,
+                    value: condition.value,
+                })),
+                actions: draft.actions.map((action) => ({
+                    type: action.type,
+                    value: action.value,
+                })),
+            });
+            await mailFiltersQuery.refetch();
+            setMailFilterModal(null);
+            setAccountStatus(mode === 'create' ? 'Filter created.' : 'Filter saved.');
+        } catch (e: any) {
+            setAccountStatus(`Filter save failed: ${e?.message || String(e)}`);
+        } finally {
+            setMailFilterBusy(false);
+        }
+    }
 
-	async function onDeleteMailFilter(filterId: number) {
-		if (!selectedAccount || mailFilterBusy) return;
-		setMailFilterBusy(true);
-		setAccountStatus('Deleting filter...');
-		try {
-			const result = await ipcClient.deleteMailFilter(selectedAccount.id, filterId);
-			if (result.removed) {
-				await mailFiltersQuery.refetch();
-				setAccountStatus('Filter deleted.');
-			} else {
-				setAccountStatus('Filter was already removed.');
-			}
-		} catch (e: any) {
-			setAccountStatus(`Filter delete failed: ${e?.message || String(e)}`);
-		} finally {
-			setMailFilterBusy(false);
-		}
-	}
+    async function onDeleteMailFilter(filterId: number) {
+        if (!selectedAccount || mailFilterBusy) return;
+        setMailFilterBusy(true);
+        setAccountStatus('Deleting filter...');
+        try {
+            const result = await ipcClient.deleteMailFilter(selectedAccount.id, filterId);
+            if (result.removed) {
+                await mailFiltersQuery.refetch();
+                setAccountStatus('Filter deleted.');
+            } else {
+                setAccountStatus('Filter was already removed.');
+            }
+        } catch (e: any) {
+            setAccountStatus(`Filter delete failed: ${e?.message || String(e)}`);
+        } finally {
+            setMailFilterBusy(false);
+        }
+    }
 
-	async function onRunMailFilter(filterId?: number) {
-		if (!selectedAccount) return;
-		if (mailFilterModal) {
-			setAccountStatus('Save the open filter first before running filters.');
-			return;
-		}
-		if (typeof filterId === 'number' && (!Number.isFinite(filterId) || filterId <= 0)) {
-			setAccountStatus('Save this filter before running it.');
-			return;
-		}
-		setRunningFilterId(filterId ?? -1);
-		setAccountStatus('Running filter...');
-		try {
-			const result = await ipcClient.runMailFilters(selectedAccount.id, {filterId});
-			setAccountStatus(
-				`Run complete. Processed ${result.processed}, matched ${result.matched}, actions ${result.actionsApplied}, errors ${result.errors}.`,
-			);
-		} catch (e: any) {
-			setAccountStatus(`Filter run failed: ${e?.message || String(e)}`);
-		} finally {
-			setRunningFilterId(null);
-		}
-	}
+    async function onRunMailFilter(filterId?: number) {
+        if (!selectedAccount) return;
+        if (mailFilterModal) {
+            setAccountStatus('Save the open filter first before running filters.');
+            return;
+        }
+        if (typeof filterId === 'number' && (!Number.isFinite(filterId) || filterId <= 0)) {
+            setAccountStatus('Save this filter before running it.');
+            return;
+        }
+        setRunningFilterId(filterId ?? -1);
+        setAccountStatus('Running filter...');
+        try {
+            const result = await ipcClient.runMailFilters(selectedAccount.id, {filterId});
+            setAccountStatus(
+                `Run complete. Processed ${result.processed}, matched ${result.matched}, actions ${result.actionsApplied}, errors ${result.errors}.`,
+            );
+        } catch (e: any) {
+            setAccountStatus(`Filter run failed: ${e?.message || String(e)}`);
+        } finally {
+            setRunningFilterId(null);
+        }
+    }
 
-	async function onCheckForUpdates() {
-		if (updateActionBusy) return;
-		setUpdateActionBusy(true);
-		try {
-			const next = await ipcClient.checkForUpdates();
-			setAutoUpdateState(next);
-		} finally {
-			setUpdateActionBusy(false);
-		}
-	}
+    async function onCheckForUpdates() {
+        if (updateActionBusy) return;
+        setUpdateActionBusy(true);
+        try {
+            const next = await ipcClient.checkForUpdates();
+            setAutoUpdateState(next);
+        } finally {
+            setUpdateActionBusy(false);
+        }
+    }
 
-	async function onDownloadUpdate() {
-		if (updateActionBusy) return;
-		setUpdateActionBusy(true);
-		try {
-			const next = await ipcClient.downloadUpdate();
-			setAutoUpdateState(next);
-		} finally {
-			setUpdateActionBusy(false);
-		}
-	}
+    async function onDownloadUpdate() {
+        if (updateActionBusy) return;
+        setUpdateActionBusy(true);
+        try {
+            const next = await ipcClient.downloadUpdate();
+            setAutoUpdateState(next);
+        } finally {
+            setUpdateActionBusy(false);
+        }
+    }
 
-	async function onInstallUpdate() {
-		await ipcClient.quitAndInstallUpdate();
-	}
+    async function onInstallUpdate() {
+        await ipcClient.quitAndInstallUpdate();
+    }
 
-	async function onTriggerTestNotification() {
-		setDeveloperStatus('Sending test notification...');
-		try {
-			const result = await ipcClient.devShowNotification();
-			if (!result.supported) {
-				setDeveloperStatus('System notifications are not supported in this environment.');
-				return;
-			}
-			setDeveloperStatus(
-				result.hasTarget
-					? 'Test notification sent for first account/folder/message.'
-					: 'Notification sent, but no message exists in first account/folder.',
-			);
-		} catch (e: any) {
-			setDeveloperStatus(`Notification failed: ${e?.message || String(e)}`);
-		}
-	}
+    async function onTriggerTestNotification() {
+        setDeveloperStatus('Sending test notification...');
+        try {
+            const result = await ipcClient.devShowNotification();
+            if (!result.supported) {
+                setDeveloperStatus('System notifications are not supported in this environment.');
+                return;
+            }
+            setDeveloperStatus(
+                result.hasTarget
+                    ? 'Test notification sent for first account/folder/message.'
+                    : 'Notification sent, but no message exists in first account/folder.',
+            );
+        } catch (e: any) {
+            setDeveloperStatus(`Notification failed: ${e?.message || String(e)}`);
+        }
+    }
 
-	async function onPlayNotificationSound() {
-		setDeveloperStatus('Playing notification sound...');
-		try {
-			const result = await ipcClient.devPlayNotificationSound();
-			setDeveloperStatus(result.played ? 'Notification sound played.' : 'Could not play notification sound.');
-		} catch (e: any) {
-			setDeveloperStatus(`Sound failed: ${e?.message || String(e)}`);
-		}
-	}
+    async function onPlayNotificationSound() {
+        setDeveloperStatus('Playing notification sound...');
+        try {
+            const result = await ipcClient.devPlayNotificationSound();
+            setDeveloperStatus(result.played ? 'Notification sound played.' : 'Could not play notification sound.');
+        } catch (e: any) {
+            setDeveloperStatus(`Sound failed: ${e?.message || String(e)}`);
+        }
+    }
 
-	async function onShowUpdaterWindow() {
-		setDeveloperStatus('Opening updater window in first app window...');
-		try {
-			const result = await ipcClient.devOpenUpdaterWindow();
-			if (result.opened) {
-				setDeveloperStatus('Updater window opened in first app window.');
-				return;
-			}
-			setDeveloperStatus('No app window available to open updater window.');
-		} catch (e: any) {
-			setDeveloperStatus(`Failed to open updater window: ${e?.message || String(e)}`);
-		}
-	}
+    async function onShowUpdaterWindow() {
+        setDeveloperStatus('Opening updater window in first app window...');
+        try {
+            const result = await ipcClient.devOpenUpdaterWindow();
+            if (result.opened) {
+                setDeveloperStatus('Updater window opened in first app window.');
+                return;
+            }
+            setDeveloperStatus('No app window available to open updater window.');
+        } catch (e: any) {
+            setDeveloperStatus(`Failed to open updater window: ${e?.message || String(e)}`);
+        }
+    }
 
-	const isAccountPanel = panel.kind === 'account';
-	const isLayoutPanel = panel.kind === 'layout';
-	const isAllowlistPanel = panel.kind === 'allowlist';
-	const isDeveloperPanel = panel.kind === 'developer';
-	const effectiveHardwareAcceleration =
-		typeof settings.pendingHardwareAcceleration === 'boolean'
-			? settings.pendingHardwareAcceleration
-			: settings.hardwareAcceleration;
-	const effectiveUseNativeTitleBar =
-		typeof settings.pendingUseNativeTitleBar === 'boolean'
-			? settings.pendingUseNativeTitleBar
-			: settings.useNativeTitleBar;
-	const activeStatus = isDeveloperPanel ? developerStatus : appStatus;
-	const hasStatusText = Boolean((activeStatus || '').trim());
-	const shouldShowFooter = !isAccountPanel && (!embedded || hasStatusText);
-	const selectedSidebarItemId = panel.kind === 'account' ? `account:${panel.id}` : panel.kind;
-	const sidebarSections: DynamicSidebarSection[] = useMemo(
-		() => [
-				{
-					id: 'primary',
-						items: [
-							{id: 'app', label: 'Application', to: '/settings/application', icon: <AppWindow size={15}/>},
-							{id: 'layout', label: 'Appearance', to: '/settings/layout', icon: <Palette size={15}/>},
-							{id: 'allowlist', label: 'Whitelist', to: '/settings/whitelist', icon: <ShieldCheck size={15}/>},
-							{id: 'developer', label: 'Developer', to: '/settings/developer', icon: <Wrench size={15}/>},
-						],
-					},
-			{
-				id: 'accounts',
-				title: 'Accounts',
-				emptyLabel: 'No accounts available.',
-				items: [
-					...accounts.map((account) => ({
-						id: `account:${account.id}`,
-						label: account.display_name?.trim() || account.email,
-						description: account.display_name?.trim() ? account.email : null,
-						to: `/settings/account/${account.id}`,
-						avatar: (() => {
-							const colors = getAccountAvatarColorsForAccount(account);
-							return (
-								<span
-									className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold"
-									style={{backgroundColor: colors.background, color: colors.foreground}}
-									aria-hidden
-								>
+    const isAccountPanel = panel.kind === 'account';
+    const isLayoutPanel = panel.kind === 'layout';
+    const isAllowlistPanel = panel.kind === 'allowlist';
+    const isDeveloperPanel = panel.kind === 'developer';
+    const effectiveHardwareAcceleration =
+        typeof settings.pendingHardwareAcceleration === 'boolean'
+            ? settings.pendingHardwareAcceleration
+            : settings.hardwareAcceleration;
+    const effectiveUseNativeTitleBar =
+        typeof settings.pendingUseNativeTitleBar === 'boolean'
+            ? settings.pendingUseNativeTitleBar
+            : settings.useNativeTitleBar;
+    const activeStatus = isDeveloperPanel ? developerStatus : appStatus;
+    const hasStatusText = Boolean((activeStatus || '').trim());
+    const shouldShowFooter = !isAccountPanel && (!embedded || hasStatusText);
+    const selectedSidebarItemId = panel.kind === 'account' ? `account:${panel.id}` : panel.kind;
+    const sidebarSections: DynamicSidebarSection[] = useMemo(
+        () => [
+            {
+                id: 'primary',
+                items: [
+                    {id: 'app', label: 'Application', to: '/settings/application', icon: <AppWindow size={15}/>},
+                    {id: 'layout', label: 'Appearance', to: '/settings/layout', icon: <Palette size={15}/>},
+                    {id: 'allowlist', label: 'Whitelist', to: '/settings/whitelist', icon: <ShieldCheck size={15}/>},
+                    {id: 'developer', label: 'Developer', to: '/settings/developer', icon: <Wrench size={15}/>},
+                ],
+            },
+            {
+                id: 'accounts',
+                title: 'Accounts',
+                emptyLabel: 'No accounts available.',
+                items: [
+                    ...accounts.map((account) => ({
+                        id: `account:${account.id}`,
+                        label: account.display_name?.trim() || account.email,
+                        description: account.display_name?.trim() ? account.email : null,
+                        to: `/settings/account/${account.id}`,
+                        avatar: (() => {
+                            const colors = getAccountAvatarColorsForAccount(account);
+                            return (
+                                <span
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold"
+                                    style={{backgroundColor: colors.background, color: colors.foreground}}
+                                    aria-hidden
+                                >
 									{getAccountMonogram(account)}
 								</span>
-							);
-						})(),
-					})),
-					{
-						id: 'account:add',
-						label: 'Add account',
-						description: 'Open account setup',
-						icon: <Plus size={15}/>,
-					},
-				],
-			},
-		],
-		[accounts],
-	);
+                            );
+                        })(),
+                    })),
+                    {
+                        id: 'account:add',
+                        label: 'Add account',
+                        description: 'Open account setup',
+                        icon: <Plus size={15}/>,
+                    },
+                ],
+            },
+        ],
+        [accounts],
+    );
 
-	function onSidebarSelect(itemId: string): void {
-		if (itemId === 'account:add') {
-			void ipcClient.openAddAccountWindow();
-			return;
-		}
-		if (itemId === 'app') {
-			setPanel({kind: 'app'});
-			return;
-		}
-		if (itemId === 'layout') {
-			setPanel({kind: 'layout'});
-			return;
-		}
-		if (itemId === 'developer') {
-			setPanel({kind: 'developer'});
-			return;
-		}
-		if (itemId === 'allowlist') {
-			setPanel({kind: 'allowlist'});
-			return;
-		}
-		if (itemId.startsWith('account:')) {
-			const accountId = Number(itemId.slice('account:'.length));
-			if (Number.isFinite(accountId) && accountId > 0) {
-				setPanel({kind: 'account', id: accountId});
-			}
-		}
-	}
+    function onSidebarSelect(itemId: string): void {
+        if (itemId === 'account:add') {
+            window.location.hash = '/add-account';
+            return;
+        }
+        if (itemId === 'app') {
+            setPanel({kind: 'app'});
+            return;
+        }
+        if (itemId === 'layout') {
+            setPanel({kind: 'layout'});
+            return;
+        }
+        if (itemId === 'developer') {
+            setPanel({kind: 'developer'});
+            return;
+        }
+        if (itemId === 'allowlist') {
+            setPanel({kind: 'allowlist'});
+            return;
+        }
+        if (itemId.startsWith('account:')) {
+            const accountId = Number(itemId.slice('account:'.length));
+            if (Number.isFinite(accountId) && accountId > 0) {
+                setPanel({kind: 'account', id: accountId});
+            }
+        }
+    }
 
-	const footerActions = (
-		<div className="flex items-center justify-between">
-			<div className="flex items-center gap-2">
-				{hasStatusText && <span className="lm-text-muted text-xs">{activeStatus}</span>}
-			</div>
-			<div className="flex items-center gap-2">
-				{!embedded && (
-					<Button
-						type="button"
-						variant="outline"
-						className="rounded-md px-3 py-2 text-sm"
-						onClick={() => window.close()}
-					>
-						Close
-					</Button>
-				)}
-			</div>
-		</div>
-	);
+    const footerActions = (
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                {hasStatusText && <span className="ui-text-muted text-xs">{activeStatus}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+                {!embedded && (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-md px-3 py-2 text-sm"
+                        onClick={() => window.close()}
+                    >
+                        Close
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
 
-	const menubar = (
-		<div className="flex items-start gap-3">
-			<div>
-				<h1 className="lm-text-primary text-lg font-semibold">App Settings</h1>
-				<p className="lm-text-muted text-xs">
-						{isAccountPanel
-							? 'Manage account configuration and credentials'
-							: isLayoutPanel
-								? 'Theme and visual preferences'
-								: isAllowlistPanel
-									? 'Remote content allowlist and privacy controls'
-								: isDeveloperPanel
-									? 'Developer testing tools and diagnostics'
-									: 'Application preferences and updates'}
-				</p>
-			</div>
-		</div>
-	);
+    const menubar = (
+        <div className="flex items-start gap-3">
+            <div>
+                <h1 className="ui-text-primary text-lg font-semibold">App Settings</h1>
+                <p className="ui-text-muted text-xs">
+                    {isAccountPanel
+                        ? 'Manage account configuration and credentials'
+                        : isLayoutPanel
+                            ? 'Theme and visual preferences'
+                            : isAllowlistPanel
+                                ? 'Remote content allowlist and privacy controls'
+                                : isDeveloperPanel
+                                    ? 'Developer testing tools and diagnostics'
+                                    : 'Application preferences and updates'}
+                </p>
+            </div>
+        </div>
+    );
 
-	return (
-		<div className="lm-bg-content h-full w-full overflow-hidden">
-			<div className="flex h-full flex-col">
-				{!embedded && <WindowTitleBar title="App Settings" />}
-				<WorkspaceLayout
-					className="lm-bg-content"
-					menubar={menubar}
-					showMenuBar
-					sidebar={
-						<DynamicSidebar
-							sections={sidebarSections}
-							selectedItemId={selectedSidebarItemId}
-							onSelectItem={onSidebarSelect}
-						/>
-					}
-					showFooter={shouldShowFooter}
-					footer={footerActions}
-					showStatusBar={false}
-					sidebarWidth={settingsSidebarWidth}
-					onSidebarResizeStart={onSettingsSidebarResizeStart}
-					contentClassName={cn(
-						'min-h-0 flex-1',
-						isAccountPanel ? 'overflow-hidden p-0' : 'overflow-auto p-5',
-					)}
-				>
-						{panel.kind === 'app' && (
-							<AppSettingsGeneralPanel
-								settings={settings}
-								autoUpdateState={autoUpdateState}
-								updateActionBusy={updateActionBusy}
-								isDefaultEmailClient={isDefaultEmailClient}
-								defaultEmailClientBusy={defaultEmailClientBusy}
-								effectiveHardwareAcceleration={effectiveHardwareAcceleration}
-								describeUpdatePhase={describeUpdatePhase}
-								onInstallUpdate={onInstallUpdate}
-								onDownloadUpdate={onDownloadUpdate}
-								onCheckForUpdates={onCheckForUpdates}
-								onSetDefaultEmailClient={onSetDefaultEmailClient}
-								onHardwareAccelerationChange={onHardwareAccelerationChange}
-								applySettingsPatch={applySettingsPatch}
-							/>
-						)}
+    return (
+        <div className="ui-surface-content h-full w-full overflow-hidden">
+            <div className="flex h-full flex-col">
+                {!embedded && <WindowTitleBar title="App Settings"/>}
+                <WorkspaceLayout
+                    className="ui-surface-content"
+                    menubar={menubar}
+                    showMenuBar
+                    sidebar={
+                        <DynamicSidebar
+                            sections={sidebarSections}
+                            selectedItemId={selectedSidebarItemId}
+                            onSelectItem={onSidebarSelect}
+                        />
+                    }
+                    showFooter={shouldShowFooter}
+                    footer={footerActions}
+                    showStatusBar={false}
+                    sidebarWidth={settingsSidebarWidth}
+                    onSidebarResizeStart={onSettingsSidebarResizeStart}
+                    contentClassName={cn(
+                        'min-h-0 flex-1',
+                        isAccountPanel ? 'overflow-hidden p-0' : 'overflow-auto p-5',
+                    )}
+                >
+                    {panel.kind === 'app' && (
+                        <AppSettingsGeneralPanel
+                            settings={settings}
+                            autoUpdateState={autoUpdateState}
+                            updateActionBusy={updateActionBusy}
+                            isDefaultEmailClient={isDefaultEmailClient}
+                            defaultEmailClientBusy={defaultEmailClientBusy}
+                            effectiveHardwareAcceleration={effectiveHardwareAcceleration}
+                            describeUpdatePhase={describeUpdatePhase}
+                            onInstallUpdate={onInstallUpdate}
+                            onDownloadUpdate={onDownloadUpdate}
+                            onCheckForUpdates={onCheckForUpdates}
+                            onSetDefaultEmailClient={onSetDefaultEmailClient}
+                            onHardwareAccelerationChange={onHardwareAccelerationChange}
+                            applySettingsPatch={applySettingsPatch}
+                        />
+                    )}
 
-						{panel.kind === 'allowlist' && (
-							<div className="mx-auto w-full max-w-5xl space-y-4">
-								<div className="lm-card space-y-3 rounded-xl p-4">
-									<h2 className="lm-text-primary text-base font-semibold">
-										Remote Content Whitelist
-									</h2>
-									<p className="lm-text-muted text-sm">
-										Control remote image loading and sender/domain exceptions used while viewing emails.
-									</p>
-									<label className="lm-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<div className="pr-3">
-											<span className="lm-text-secondary">
+                    {panel.kind === 'allowlist' && (
+                        <div className="mx-auto w-full max-w-5xl space-y-4">
+                            <div className="panel space-y-3 rounded-xl p-4">
+                                <h2 className="ui-text-primary text-base font-semibold">
+                                    Remote Content Whitelist
+                                </h2>
+                                <p className="ui-text-muted text-sm">
+                                    Control remote image loading and sender/domain exceptions used while viewing emails.
+                                </p>
+                                <label
+                                    className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <div className="pr-3">
+											<span className="ui-text-secondary">
 												Block remote content in emails
 											</span>
-											<p className="lm-text-muted mt-1 text-xs">
-												Protects privacy by blocking external images and trackers until explicitly allowed.
-											</p>
-										</div>
-										<FormCheckbox
-											checked={settings.blockRemoteContent}
-											onChange={(event) =>
-												void applySettingsPatch({
-													blockRemoteContent: event.target.checked,
-												})
-											}
-										/>
-									</label>
-									<div className="pt-1">
-										<span className="lm-text-muted mb-1 block text-xs font-medium uppercase tracking-wide">
+                                        <p className="ui-text-muted mt-1 text-xs">
+                                            Protects privacy by blocking external images and trackers until explicitly
+                                            allowed.
+                                        </p>
+                                    </div>
+                                    <FormCheckbox
+                                        checked={settings.blockRemoteContent}
+                                        onChange={(event) =>
+                                            void applySettingsPatch({
+                                                blockRemoteContent: event.target.checked,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <div className="pt-1">
+										<span
+                                            className="ui-text-muted mb-1 block text-xs font-medium uppercase tracking-wide">
 											Allowlist senders/domains
 										</span>
-										<div className="flex flex-wrap items-center gap-2">
-											<FormInput
-												type="text"
-												value={remoteAllowlistInput}
-												onChange={(event) => setRemoteAllowlistInput(event.target.value)}
-												onKeyDown={(event) => {
-													if (event.key === 'Enter' || event.key === ',') {
-														event.preventDefault();
-														void addRemoteAllowlistEntry();
-													}
-												}}
-												placeholder="example.com or sender@example.com"
-												className="h-9 min-w-[260px] flex-1"
-											/>
-											<Button
-												type="button"
-												onClick={() => void addRemoteAllowlistEntry()}
-												className="lm-btn-primary rounded-md px-3 py-2 text-xs font-medium"
-											>
-												Add
-											</Button>
-										</div>
-										<div className="mt-2 flex flex-wrap items-center gap-2">
-											{(settings.remoteContentAllowlist || []).length === 0 && (
-												<p className="lm-text-muted text-xs">
-													No allowlist entries yet.
-												</p>
-											)}
-											{(settings.remoteContentAllowlist || []).map((entry) => (
-												<Button
-													key={entry}
-													type="button"
-													className="lm-btn-secondary inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs"
-													onClick={() => void removeRemoteAllowlistEntry(entry)}
-													title="Remove from allowlist"
-												>
-													<span>{entry}</span>
-													<span aria-hidden>×</span>
-												</Button>
-											))}
-										</div>
-									</div>
-								</div>
-							</div>
-						)}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <FormInput
+                                            type="text"
+                                            value={remoteAllowlistInput}
+                                            onChange={(event) => setRemoteAllowlistInput(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ',') {
+                                                    event.preventDefault();
+                                                    void addRemoteAllowlistEntry();
+                                                }
+                                            }}
+                                            placeholder="example.com or sender@example.com"
+                                            className="h-9 min-w-[260px] flex-1"
+                                        />
+                                        <Button
+                                            type="button"
+                                            onClick={() => void addRemoteAllowlistEntry()}
+                                            className="button-primary rounded-md px-3 py-2 text-xs font-medium"
+                                        >
+                                            Add
+                                        </Button>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        {(settings.remoteContentAllowlist || []).length === 0 && (
+                                            <p className="ui-text-muted text-xs">
+                                                No allowlist entries yet.
+                                            </p>
+                                        )}
+                                        {(settings.remoteContentAllowlist || []).map((entry) => (
+                                            <Button
+                                                key={entry}
+                                                type="button"
+                                                className="button-secondary inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs"
+                                                onClick={() => void removeRemoteAllowlistEntry(entry)}
+                                                title="Remove from allowlist"
+                                            >
+                                                <span>{entry}</span>
+                                                <span aria-hidden>×</span>
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-					{panel.kind === 'layout' && (
-						<div className="mx-auto w-full max-w-5xl space-y-4">
-							<div className="lm-card space-y-3 rounded-xl p-4">
-								<div className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+                    {panel.kind === 'layout' && (
+                        <div className="mx-auto w-full max-w-5xl space-y-4">
+                            <div className="panel space-y-3 rounded-xl p-4">
+                                <div className="block text-sm">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Theme
 									</span>
-									<div className="lm-border-default inline-flex w-full overflow-hidden rounded-md border">
-										{APP_THEME_OPTIONS.map((option) => {
-											const active = settings.theme === option.value;
-											return (
-												<Button
-													key={option.value}
-													type="button"
-													className={cn(
-														'h-10 flex-1 border-r lm-border-default text-sm transition-colors last:border-r-0',
-														active
-															? 'lm-btn-primary'
-															: 'lm-btn-secondary',
-													)}
-													onClick={() => void applySettingsPatch({theme: option.value})}
-												>
-													{option.label}
-												</Button>
-											);
-										})}
-									</div>
-								</div>
-								<div className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+                                    <div
+                                        className="ui-border-default inline-flex w-full overflow-hidden rounded-md border">
+                                        {APP_THEME_OPTIONS.map((option) => {
+                                            const active = settings.theme === option.value;
+                                            return (
+                                                <Button
+                                                    key={option.value}
+                                                    type="button"
+                                                    className={cn(
+                                                        'h-10 flex-1 border-r ui-border-default text-sm transition-colors last:border-r-0',
+                                                        active
+                                                            ? 'button-primary'
+                                                            : 'button-secondary',
+                                                    )}
+                                                    onClick={() => void applySettingsPatch({theme: option.value})}
+                                                >
+                                                    {option.label}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="block text-sm">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Titlebar
 									</span>
-									<div className="lm-border-default inline-flex w-full overflow-hidden rounded-md border">
-										<Button
-											type="button"
-											className={cn(
-												'h-10 flex-1 border-r lm-border-default text-sm transition-colors',
-												!effectiveUseNativeTitleBar
-													? 'lm-btn-primary'
-													: 'lm-btn-secondary',
-											)}
-											onClick={() => void onTitlebarModeChange(false)}
-										>
-											Custom titlebar
-										</Button>
-										<Button
-											type="button"
-											className={cn(
-												'h-10 flex-1 text-sm transition-colors',
-												effectiveUseNativeTitleBar
-													? 'lm-btn-primary'
-													: 'lm-btn-secondary',
-											)}
-											onClick={() => void onTitlebarModeChange(true)}
-										>
-											Native titlebar
-										</Button>
-									</div>
-									<p className="mt-2 lm-text-muted text-xs">
-										Changing titlebar mode requires restarting the app.
-									</p>
-									{settings.pendingUseNativeTitleBar !== null && (
-										<p className="mt-2 text-xs text-amber-700">
-											Restart queued: will switch to {settings.pendingUseNativeTitleBar ? 'native' : 'custom'} titlebar.
-										</p>
-									)}
-								</div>
-							</div>
-							<div className="lm-card space-y-3 rounded-xl p-4">
-								<div className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+                                    <div
+                                        className="ui-border-default inline-flex w-full overflow-hidden rounded-md border">
+                                        <Button
+                                            type="button"
+                                            className={cn(
+                                                'h-10 flex-1 border-r ui-border-default text-sm transition-colors',
+                                                !effectiveUseNativeTitleBar
+                                                    ? 'button-primary'
+                                                    : 'button-secondary',
+                                            )}
+                                            onClick={() => void onTitlebarModeChange(false)}
+                                        >
+                                            Custom titlebar
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            className={cn(
+                                                'h-10 flex-1 text-sm transition-colors',
+                                                effectiveUseNativeTitleBar
+                                                    ? 'button-primary'
+                                                    : 'button-secondary',
+                                            )}
+                                            onClick={() => void onTitlebarModeChange(true)}
+                                        >
+                                            Native titlebar
+                                        </Button>
+                                    </div>
+                                    <p className="mt-2 ui-text-muted text-xs">
+                                        Changing titlebar mode requires restarting the app.
+                                    </p>
+                                    {settings.pendingUseNativeTitleBar !== null && (
+                                        <p className="notice-warning mt-2 rounded px-2 py-1 text-xs">
+                                            Restart queued: will switch
+                                            to {settings.pendingUseNativeTitleBar ? 'native' : 'custom'} titlebar.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="panel space-y-3 rounded-xl p-4">
+                                <div className="block text-sm">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Mail view
 									</span>
-									<div className="lm-border-default inline-flex w-full overflow-hidden rounded-md border">
-										{MAIL_VIEW_OPTIONS.map((option) => {
-											const active = settings.mailView === option.value;
-											return (
-												<Button
-													key={option.value}
-													type="button"
-													className={cn(
-														'h-10 flex-1 border-r lm-border-default text-sm transition-colors last:border-r-0',
-														active
-															? 'lm-btn-primary'
-															: 'lm-btn-secondary',
-													)}
-													onClick={() => void applySettingsPatch({mailView: option.value})}
-												>
-													{option.label}
-												</Button>
-											);
-										})}
-									</div>
-									<p className="mt-2 lm-text-muted text-xs">
-										Side List keeps folders and message list side-by-side. Top Table places a
-										compact table above message preview.
-									</p>
-								</div>
-							</div>
-							</div>
-						)}
+                                    <div
+                                        className="ui-border-default inline-flex w-full overflow-hidden rounded-md border">
+                                        {MAIL_VIEW_OPTIONS.map((option) => {
+                                            const active = settings.mailView === option.value;
+                                            return (
+                                                <Button
+                                                    key={option.value}
+                                                    type="button"
+                                                    className={cn(
+                                                        'h-10 flex-1 border-r ui-border-default text-sm transition-colors last:border-r-0',
+                                                        active
+                                                            ? 'button-primary'
+                                                            : 'button-secondary',
+                                                    )}
+                                                    onClick={() => void applySettingsPatch({mailView: option.value})}
+                                                >
+                                                    {option.label}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-2 ui-text-muted text-xs">
+                                        Side List keeps folders and message list side-by-side. Top Table places a
+                                        compact table above message preview.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-					{panel.kind === 'developer' && (
-						<div className="mx-auto w-full max-w-5xl space-y-4">
-							<section className="lm-card rounded-xl p-4">
-								<h2 className="lm-text-primary text-base font-semibold">
-									Developer Settings
-								</h2>
-								<p className="mt-1 lm-text-muted text-sm">
-									Enable runtime diagnostics for in-app overlays and debug features.
-								</p>
-									<label className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<span className="lm-text-secondary">Developer mode</span>
-										<FormCheckbox
-											checked={settings.developerMode}
-											onChange={(e) => void applySettingsPatch({developerMode: e.target.checked})}
-										/>
-									</label>
-									<label className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<div className="pr-3">
-											<span className="lm-text-secondary">Show Debug in main nav</span>
-											<p className="mt-1 lm-text-muted text-xs">
-												Adds or removes the Debug item from the left navigation rail.
-											</p>
-										</div>
-										<FormCheckbox
-											checked={settings.developerShowDebugNavItem}
-											disabled={!settings.developerMode}
-											onChange={(e) =>
-												void applySettingsPatch({
-													developerShowDebugNavItem: e.target.checked,
-												})
-											}
-										/>
-									</label>
-									<label className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<div className="pr-3">
-											<span className="lm-text-secondary">Show route overlay</span>
-											<p className="mt-1 lm-text-muted text-xs">
-												Displays current route hash in the bottom-right for navigation/debugging.
-											</p>
-										</div>
-										<FormCheckbox
-											checked={settings.developerShowRouteOverlay}
-											onChange={(e) =>
-												void applySettingsPatch({developerShowRouteOverlay: e.target.checked})
-											}
-										/>
-									</label>
-									<label className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<div className="pr-3">
-											<span className="lm-text-secondary">Show send notifications</span>
-											<p className="mt-1 lm-text-muted text-xs">
-												Shows bottom-right progress cards for background email sending.
-											</p>
-										</div>
-										<FormCheckbox
-											checked={settings.developerShowSendNotifications}
-											onChange={(e) =>
-												void applySettingsPatch({
-													developerShowSendNotifications: e.target.checked,
-												})
-											}
-										/>
-									</label>
-									<label className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<div className="pr-3">
-											<span className="lm-text-secondary">
+                    {panel.kind === 'developer' && (
+                        <div className="mx-auto w-full max-w-5xl space-y-4">
+                            <section className="panel rounded-xl p-4">
+                                <h2 className="ui-text-primary text-base font-semibold">
+                                    Developer Settings
+                                </h2>
+                                <p className="mt-1 ui-text-muted text-sm">
+                                    Enable runtime diagnostics for in-app overlays and debug features.
+                                </p>
+                                <label
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <span className="ui-text-secondary">Developer mode</span>
+                                    <FormCheckbox
+                                        checked={settings.developerMode}
+                                        onChange={(e) => void applySettingsPatch({developerMode: e.target.checked})}
+                                    />
+                                </label>
+                                <label
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <div className="pr-3">
+                                        <span className="ui-text-secondary">Show Debug in main nav</span>
+                                        <p className="mt-1 ui-text-muted text-xs">
+                                            Adds or removes the Debug item from the left navigation rail.
+                                        </p>
+                                    </div>
+                                    <FormCheckbox
+                                        checked={settings.developerShowDebugNavItem}
+                                        disabled={!settings.developerMode}
+                                        onChange={(e) =>
+                                            void applySettingsPatch({
+                                                developerShowDebugNavItem: e.target.checked,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <label
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <div className="pr-3">
+                                        <span className="ui-text-secondary">Show route overlay</span>
+                                        <p className="mt-1 ui-text-muted text-xs">
+                                            Displays current route hash in the bottom-right for navigation/debugging.
+                                        </p>
+                                    </div>
+                                    <FormCheckbox
+                                        checked={settings.developerShowRouteOverlay}
+                                        onChange={(e) =>
+                                            void applySettingsPatch({developerShowRouteOverlay: e.target.checked})
+                                        }
+                                    />
+                                </label>
+                                <label
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <div className="pr-3">
+                                        <span className="ui-text-secondary">Show send notifications</span>
+                                        <p className="mt-1 ui-text-muted text-xs">
+                                            Shows bottom-right progress cards for background email sending.
+                                        </p>
+                                    </div>
+                                    <FormCheckbox
+                                        checked={settings.developerShowSendNotifications}
+                                        onChange={(e) =>
+                                            void applySettingsPatch({
+                                                developerShowSendNotifications: e.target.checked,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <label
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <div className="pr-3">
+											<span className="ui-text-secondary">
 												Show system failure notifications
 											</span>
-											<p className="mt-1 lm-text-muted text-xs">
-												Shows bottom-right error cards for sync/authentication failures.
-											</p>
-										</div>
-										<FormCheckbox
-											checked={settings.developerShowSystemFailureNotifications}
-											onChange={(e) =>
-												void applySettingsPatch({
-													developerShowSystemFailureNotifications: e.target.checked,
-												})
-											}
-										/>
-									</label>
-									<label className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-										<div className="pr-3">
-											<span className="lm-text-secondary">Demo mode</span>
-											<p className="mt-1 lm-text-muted text-xs">
-												Loads screenshot-friendly demo accounts and sample emails locally.
-											</p>
-										</div>
-										<FormCheckbox
-											checked={settings.developerDemoMode}
-											onChange={(e) =>
-												void applySettingsPatch({
-													developerDemoMode: e.target.checked,
-												})
-											}
-										/>
-									</label>
-                                <div className="lm-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                        <p className="mt-1 ui-text-muted text-xs">
+                                            Shows bottom-right error cards for sync/authentication failures.
+                                        </p>
+                                    </div>
+                                    <FormCheckbox
+                                        checked={settings.developerShowSystemFailureNotifications}
+                                        onChange={(e) =>
+                                            void applySettingsPatch({
+                                                developerShowSystemFailureNotifications: e.target.checked,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <label
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+                                    <div className="pr-3">
+                                        <span className="ui-text-secondary">Demo mode</span>
+                                        <p className="mt-1 ui-text-muted text-xs">
+                                            Loads screenshot-friendly demo accounts and sample emails locally.
+                                        </p>
+                                    </div>
+                                    <FormCheckbox
+                                        checked={settings.developerDemoMode}
+                                        onChange={(e) =>
+                                            void applySettingsPatch({
+                                                developerDemoMode: e.target.checked,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <div
+                                    className="ui-border-default mt-3 flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
                                     <div>
-                                        <p className="lm-text-secondary">Send notification preview</p>
-                                        <p className="mt-0.5 lm-text-muted text-xs">
+                                        <p className="ui-text-secondary">Send notification preview</p>
+                                        <p className="mt-0.5 ui-text-muted text-xs">
                                             Show a mock background send notification for design/debug.
                                         </p>
                                     </div>
                                     <Button
                                         type="button"
-                                        className="lm-btn-secondary rounded-md px-3 py-1.5 text-xs font-medium"
+                                        className="button-secondary rounded-md px-3 py-1.5 text-xs font-medium"
                                         onClick={() => {
                                             window.dispatchEvent(new CustomEvent('llamamail:preview-send-notification'));
                                             setDeveloperStatus('Previewing send notification in main window.');
@@ -1023,977 +1035,1009 @@ export default function AppSettingsPage({
                                         Preview
                                     </Button>
                                 </div>
-							</section>
+                            </section>
 
-							<section className="lm-card rounded-xl p-4">
-								<h2 className="lm-text-primary text-base font-semibold">
-									Test Actions
-								</h2>
-								<p className="mt-1 lm-text-muted text-sm">
-									Trigger desktop notifications, updater UI, and debugging tools.
-								</p>
-								<div className="mt-4 flex flex-wrap items-center gap-2">
-									<Button
-										type="button"
-										className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-										onClick={() => {
-											window.dispatchEvent(new CustomEvent('llamamail:preview-sync-failure'));
-											setDeveloperStatus('Previewing sync failure notification in main window.');
-										}}
-									>
-										Preview Sync Failure
-									</Button>
-									<Button
-										type="button"
-										className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-										onClick={() => {
-											window.dispatchEvent(new CustomEvent('llamamail:preview-auth-failure'));
-											setDeveloperStatus('Previewing authentication failure notification in main window.');
-										}}
-									>
-										Preview Auth Failure
-									</Button>
-									<Button
-										type="button"
-										className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-										onClick={() => void onTriggerTestNotification()}
-									>
-										Send Test Notification
-									</Button>
-									<Button
-										type="button"
-										className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-										onClick={() => void onPlayNotificationSound()}
-									>
-										Play Notification Sound
-									</Button>
-									<Button
-										type="button"
-										className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-										onClick={() => void onShowUpdaterWindow()}
-									>
-										Show Updater Window
-									</Button>
-									<Button
-										type="button"
-										className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-										onClick={() => void ipcClient.openDevTools()}
-									>
-										Open DevTools
-									</Button>
-								</div>
-							</section>
+                            <section className="panel rounded-xl p-4">
+                                <h2 className="ui-text-primary text-base font-semibold">
+                                    Test Actions
+                                </h2>
+                                <p className="mt-1 ui-text-muted text-sm">
+                                    Trigger desktop notifications, updater UI, and debugging tools.
+                                </p>
+                                <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        className="button-secondary rounded-md px-3 py-2 text-sm"
+                                        onClick={() => {
+                                            window.dispatchEvent(new CustomEvent('llamamail:preview-sync-failure'));
+                                            setDeveloperStatus('Previewing sync failure notification in main window.');
+                                        }}
+                                    >
+                                        Preview Sync Failure
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="button-secondary rounded-md px-3 py-2 text-sm"
+                                        onClick={() => {
+                                            window.dispatchEvent(new CustomEvent('llamamail:preview-auth-failure'));
+                                            setDeveloperStatus('Previewing authentication failure notification in main window.');
+                                        }}
+                                    >
+                                        Preview Auth Failure
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="button-secondary rounded-md px-3 py-2 text-sm"
+                                        onClick={() => void onTriggerTestNotification()}
+                                    >
+                                        Send Test Notification
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="button-secondary rounded-md px-3 py-2 text-sm"
+                                        onClick={() => void onPlayNotificationSound()}
+                                    >
+                                        Play Notification Sound
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="button-secondary rounded-md px-3 py-2 text-sm"
+                                        onClick={() => void onShowUpdaterWindow()}
+                                    >
+                                        Show Updater Window
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="button-secondary rounded-md px-3 py-2 text-sm"
+                                        onClick={() => void ipcClient.openDevTools()}
+                                    >
+                                        Open DevTools
+                                    </Button>
+                                </div>
+                            </section>
 
-							{showUpdaterModal && (
-								<div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 p-4">
-									<div className="lm-overlay w-full max-w-xl rounded-xl p-4 shadow-2xl">
-										<div className="flex items-start justify-between gap-3">
-											<div>
-												<h3 className="lm-text-primary text-base font-semibold">
-													Updater Window
-												</h3>
-												<p className="mt-1 lm-text-muted text-xs">
-													Current version: {autoUpdateState.currentVersion}
-												</p>
-												<p className="mt-1 lm-text-muted text-xs">
-													{autoUpdateState.message || describeUpdatePhase(autoUpdateState)}
-												</p>
-											</div>
-											<Button
-												type="button"
-												className="lm-btn-secondary rounded-md px-2 py-1 text-xs"
-												onClick={() => setShowUpdaterModal(false)}
-											>
-												Close
-											</Button>
-										</div>
-										<div className="mt-4 flex items-center gap-2">
-											{autoUpdateState.phase === 'downloaded' ? (
-												<Button
-													type="button"
-													className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-													onClick={() => void onInstallUpdate()}
-												>
-													Restart to Update
-												</Button>
-											) : autoUpdateState.phase === 'available' ||
-											  autoUpdateState.phase === 'downloading' ? (
-												<Button
-													type="button"
-													className="lm-btn-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-													onClick={() => void onDownloadUpdate()}
-													disabled={
-														updateActionBusy || autoUpdateState.phase === 'downloading'
-													}
-												>
-													{autoUpdateState.phase === 'downloading'
-														? `Downloading${autoUpdateState.percent !== null ? ` ${Math.round(autoUpdateState.percent)}%` : '...'}`
-														: 'Download Update'}
-												</Button>
-											) : (
-												<Button
-													type="button"
-													className="lm-btn-secondary rounded-md px-3 py-2 text-sm disabled:opacity-50"
-													onClick={() => void onCheckForUpdates()}
-													disabled={updateActionBusy || !autoUpdateState.enabled}
-												>
-													Check for Updates
-												</Button>
-											)}
-										</div>
-									</div>
-								</div>
-							)}
-						</div>
-					)}
+                            {showUpdaterModal && (
+                                <Modal
+                                    open
+                                    onClose={() => setShowUpdaterModal(false)}
+                                    backdropClassName="z-[1200]"
+                                    contentClassName="max-w-xl p-4"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <h3 className="ui-text-primary text-base font-semibold">
+                                                Updater Window
+                                            </h3>
+                                            <p className="mt-1 ui-text-muted text-xs">
+                                                Current version: {autoUpdateState.currentVersion}
+                                            </p>
+                                            <p className="mt-1 ui-text-muted text-xs">
+                                                {autoUpdateState.message || describeUpdatePhase(autoUpdateState)}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            className="button-secondary rounded-md px-2 py-1 text-xs"
+                                            onClick={() => setShowUpdaterModal(false)}
+                                        >
+                                            Close
+                                        </Button>
+                                    </div>
+                                    <div className="mt-4 flex items-center gap-2">
+                                        {autoUpdateState.phase === 'downloaded' ? (
+                                            <Button
+                                                type="button"
+                                                variant="success"
+                                                className="rounded-md px-3 py-2 text-sm font-medium"
+                                                onClick={() => void onInstallUpdate()}
+                                            >
+                                                Restart to Update
+                                            </Button>
+                                        ) : autoUpdateState.phase === 'available' ||
+                                        autoUpdateState.phase === 'downloading' ? (
+                                            <Button
+                                                type="button"
+                                                className="button-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+                                                onClick={() => void onDownloadUpdate()}
+                                                disabled={
+                                                    updateActionBusy || autoUpdateState.phase === 'downloading'
+                                                }
+                                            >
+                                                {autoUpdateState.phase === 'downloading'
+                                                    ? `Downloading${autoUpdateState.percent !== null ? ` ${Math.round(autoUpdateState.percent)}%` : '...'}`
+                                                    : 'Download Update'}
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                type="button"
+                                                className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-50"
+                                                onClick={() => void onCheckForUpdates()}
+                                                disabled={updateActionBusy || !autoUpdateState.enabled}
+                                            >
+                                                Check for Updates
+                                            </Button>
+                                        )}
+                                    </div>
+                                </Modal>
+                            )}
+                        </div>
+                    )}
 
-					{isAccountPanel && (
-						<div className="h-full min-h-0 w-full">
-							{!editor && (
-								<div className="lm-text-muted text-sm">Select an account.</div>
-							)}
-							{editor && (
-								<>
-									<div className="flex h-full min-h-[620px] flex-col">
-										<div className="min-h-0 flex-1">
-											<WorkspaceLayout
-												className="h-full bg-transparent"
-												showMenuBar={false}
-												showFooter={false}
-												showStatusBar={false}
-												sidebar={
-													<aside className="lm-sidebar h-full min-h-0 p-3">
-												<p className="px-2 pb-2 lm-text-muted text-xs font-semibold uppercase tracking-wide">
-													Account Sections
-												</p>
-												<div className="space-y-1">
-													<Button
-														type="button"
-														className={cn(
-															'block w-full rounded-md px-3 py-2 text-left text-sm transition-colors',
-															accountSection === 'identity'
-																? 'lm-bg-active lm-text-primary'
-																: 'lm-menu-item',
-														)}
-														onClick={() => setAccountSection('identity')}
-													>
-														Identity
-														<span className="lm-text-muted block truncate text-[11px] font-normal">
+                    {isAccountPanel && (
+                        <div className="h-full min-h-0 w-full">
+                            {!editor && (
+                                <div className="ui-text-muted text-sm">Select an account.</div>
+                            )}
+                            {editor && (
+                                <>
+                                    <div className="flex h-full min-h-[620px] flex-col">
+                                        <div className="min-h-0 flex-1">
+                                            <WorkspaceLayout
+                                                className="h-full bg-transparent"
+                                                showMenuBar={false}
+                                                showFooter={false}
+                                                showStatusBar={false}
+                                                sidebar={
+                                                    <aside className="sidebar h-full min-h-0 p-3">
+                                                        <p className="px-2 pb-2 ui-text-muted text-xs font-semibold uppercase tracking-wide">
+                                                            Account Sections
+                                                        </p>
+                                                        <div className="space-y-1">
+                                                            <Button
+                                                                type="button"
+                                                                className={cn(
+                                                                    'block w-full rounded-md px-3 py-2 text-left text-sm transition-colors',
+                                                                    accountSection === 'identity'
+                                                                        ? 'ui-surface-active ui-text-primary'
+                                                                        : 'account-item',
+                                                                )}
+                                                                onClick={() => setAccountSection('identity')}
+                                                            >
+                                                                Identity
+                                                                <span
+                                                                    className="ui-text-muted block truncate text-[11px] font-normal">
 															Name, address, signature
 														</span>
-													</Button>
-													<Button
-														type="button"
-														className={cn(
-															'block w-full rounded-md px-3 py-2 text-left text-sm transition-colors',
-															accountSection === 'server'
-																? 'lm-bg-active lm-text-primary'
-																: 'lm-menu-item',
-														)}
-														onClick={() => setAccountSection('server')}
-													>
-														Server Settings
-														<span className="lm-text-muted block truncate text-[11px] font-normal">
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                className={cn(
+                                                                    'block w-full rounded-md px-3 py-2 text-left text-sm transition-colors',
+                                                                    accountSection === 'server'
+                                                                        ? 'ui-surface-active ui-text-primary'
+                                                                        : 'account-item',
+                                                                )}
+                                                                onClick={() => setAccountSection('server')}
+                                                            >
+                                                                Server Settings
+                                                                <span
+                                                                    className="ui-text-muted block truncate text-[11px] font-normal">
 															IMAP/SMTP and credentials
 														</span>
-													</Button>
-													<Button
-														type="button"
-														className={cn(
-															'block w-full rounded-md px-3 py-2 text-left text-sm transition-colors',
-															accountSection === 'filters'
-																? 'lm-bg-active lm-text-primary'
-																: 'lm-menu-item',
-														)}
-														onClick={() => setAccountSection('filters')}
-													>
-														Filters
-														<span className="lm-text-muted block truncate text-[11px] font-normal">
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                className={cn(
+                                                                    'block w-full rounded-md px-3 py-2 text-left text-sm transition-colors',
+                                                                    accountSection === 'filters'
+                                                                        ? 'ui-surface-active ui-text-primary'
+                                                                        : 'account-item',
+                                                                )}
+                                                                onClick={() => setAccountSection('filters')}
+                                                            >
+                                                                Filters
+                                                                <span
+                                                                    className="ui-text-muted block truncate text-[11px] font-normal">
 															Automatic message rules
 														</span>
-													</Button>
-												</div>
-													</aside>
-												}
-												sidebarWidth={accountSectionSidebarWidth}
-												onSidebarResizeStart={onAccountSectionResizeStart}
-												contentClassName="min-h-0 flex-1 overflow-y-auto bg-transparent p-5"
-											>
-											{accountSection === 'identity' && (
-												<section className="lm-card rounded-xl p-4">
-													<h2 className="lm-text-primary text-base font-semibold">
-														Default Identity
-													</h2>
-													<p className="mt-1 lm-text-muted text-sm">
-														Each account has an identity that recipients see when reading
-														your messages.
-													</p>
+                                                            </Button>
+                                                        </div>
+                                                    </aside>
+                                                }
+                                                sidebarWidth={accountSectionSidebarWidth}
+                                                onSidebarResizeStart={onAccountSectionResizeStart}
+                                                contentClassName="min-h-0 flex-1 overflow-y-auto bg-transparent p-5"
+                                            >
+                                                {accountSection === 'identity' && (
+                                                    <section className="panel rounded-xl p-4">
+                                                        <h2 className="ui-text-primary text-base font-semibold">
+                                                            Default Identity
+                                                        </h2>
+                                                        <p className="mt-1 ui-text-muted text-sm">
+                                                            Each account has an identity that recipients see when
+                                                            reading
+                                                            your messages.
+                                                        </p>
 
-													<div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr] md:items-center">
-														<Label>Your Name:</Label>
-														<Field
-															value={editor.display_name || ''}
-															onChange={(v) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				display_name: v,
-																			}
-																		: p,
-																)
-															}
-														/>
-														<Label>Email Address:</Label>
-														<Field
-															value={editor.email}
-															onChange={(v) =>
-																setEditor((p) => (p ? {...p, email: v} : p))
-															}
-														/>
-														<Label>Reply-to Address:</Label>
-														<Field
-															value={editor.reply_to || ''}
-															onChange={(v) =>
-																setEditor((p) => (p ? {...p, reply_to: v} : p))
-															}
-															placeholder="Recipients will reply to this address"
-														/>
-														<Label>Organization:</Label>
-														<Field
-															value={editor.organization || ''}
-															onChange={(v) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				organization: v,
-																			}
-																		: p,
-																)
-															}
-														/>
-														<Label>Signature text:</Label>
-														<div className="space-y-2">
-															<div className="lm-text-muted text-xs">
-																Signature is HTML-enabled and will be appended to sent
-																messages for this account.
-															</div>
-															<div className="lm-border-default h-56 min-h-56 overflow-hidden rounded-md border">
-																<HtmlLexicalEditor
-																	key={`account-signature-${editor.id}`}
-																	value={editor.signature_text || ''}
-																	placeholder="Write your signature..."
-																	appearance="embedded"
-																	onChange={(html) =>
-																		setEditor((p) =>
-																			p
-																				? {
-																						...p,
-																						signature_text: html,
-																						signature_is_html: 1,
-																					}
-																				: p,
-																		)
-																	}
-																/>
-															</div>
-															<label className="inline-flex items-center gap-2 lm-text-secondary text-sm">
-																<FormCheckbox
-																	checked={!!editor.attach_vcard}
-																	onChange={(e) =>
-																		setEditor((p) =>
-																			p
-																				? {
-																						...p,
-																						attach_vcard: e.target.checked
-																							? 1
-																							: 0,
-																					}
-																				: p,
-																		)
-																	}
-																/>
-																Attach my vCard to messages
-															</label>
-														</div>
-													</div>
-												</section>
-											)}
+                                                        <div
+                                                            className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr] md:items-center">
+                                                            <Label>Your Name:</Label>
+                                                            <Field
+                                                                value={editor.display_name || ''}
+                                                                onChange={(v) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                display_name: v,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                            />
+                                                            <Label>Email Address:</Label>
+                                                            <Field
+                                                                value={editor.email}
+                                                                onChange={(v) =>
+                                                                    setEditor((p) => (p ? {...p, email: v} : p))
+                                                                }
+                                                            />
+                                                            <Label>Reply-to Address:</Label>
+                                                            <Field
+                                                                value={editor.reply_to || ''}
+                                                                onChange={(v) =>
+                                                                    setEditor((p) => (p ? {...p, reply_to: v} : p))
+                                                                }
+                                                                placeholder="Recipients will reply to this address"
+                                                            />
+                                                            <Label>Organization:</Label>
+                                                            <Field
+                                                                value={editor.organization || ''}
+                                                                onChange={(v) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                organization: v,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                            />
+                                                            <Label>Signature text:</Label>
+                                                            <div className="space-y-2">
+                                                                <div className="ui-text-muted text-xs">
+                                                                    Signature is HTML-enabled and will be appended to
+                                                                    sent
+                                                                    messages for this account.
+                                                                </div>
+                                                                <div
+                                                                    className="ui-border-default h-56 min-h-56 overflow-hidden rounded-md border">
+                                                                    <HtmlLexicalEditor
+                                                                        key={`account-signature-${editor.id}`}
+                                                                        value={editor.signature_text || ''}
+                                                                        placeholder="Write your signature..."
+                                                                        appearance="embedded"
+                                                                        onChange={(html) =>
+                                                                            setEditor((p) =>
+                                                                                p
+                                                                                    ? {
+                                                                                        ...p,
+                                                                                        signature_text: html,
+                                                                                        signature_is_html: 1,
+                                                                                    }
+                                                                                    : p,
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                                <label
+                                                                    className="inline-flex items-center gap-2 ui-text-secondary text-sm">
+                                                                    <FormCheckbox
+                                                                        checked={!!editor.attach_vcard}
+                                                                        onChange={(e) =>
+                                                                            setEditor((p) =>
+                                                                                p
+                                                                                    ? {
+                                                                                        ...p,
+                                                                                        attach_vcard: e.target.checked
+                                                                                            ? 1
+                                                                                            : 0,
+                                                                                    }
+                                                                                    : p,
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                    Attach my vCard to messages
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    </section>
+                                                )}
 
-											{accountSection === 'server' && (
-												<section className="lm-card rounded-xl p-4">
-													<h2 className="lm-text-primary text-base font-semibold">
-														Server Settings
-													</h2>
-													<div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-														<Field
-															label="User"
-															value={editor.user}
-															onChange={(v) =>
-																setEditor((p) => (p ? {...p, user: v} : p))
-															}
-														/>
-														<Field
-															label="Provider"
-															value={editor.provider || ''}
-															onChange={(v) =>
-																setEditor((p) => (p ? {...p, provider: v} : p))
-															}
-														/>
-														<Field
-															type="password"
-															label="New password (optional)"
-															value={editor.password || ''}
-															onChange={(v) =>
-																setEditor((p) => (p ? {...p, password: v} : p))
-															}
-														/>
-													</div>
-													<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-														<ServiceSettingsCard
-															title="IMAP Incoming"
-															host={editor.imap_host}
-															port={editor.imap_port}
-															security={editor.imap_secure ? 'ssl' : 'starttls'}
-															onHostChange={(value) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				imap_host: value,
-																			}
-																		: p,
-																)
-															}
-															onPortChange={(value) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				imap_port: value,
-																			}
-																		: p,
-																)
-															}
-															onSecurityChange={(value) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				imap_secure: value === 'ssl' ? 1 : 0,
-																			}
-																		: p,
-																)
-															}
-														/>
-														<ServiceSettingsCard
-															title="SMTP Outgoing"
-															host={editor.smtp_host}
-															port={editor.smtp_port}
-															security={editor.smtp_secure ? 'ssl' : 'starttls'}
-															onHostChange={(value) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				smtp_host: value,
-																			}
-																		: p,
-																)
-															}
-															onPortChange={(value) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				smtp_port: value,
-																			}
-																		: p,
-																)
-															}
-															onSecurityChange={(value) =>
-																setEditor((p) =>
-																	p
-																		? {
-																				...p,
-																				smtp_secure: value === 'ssl' ? 1 : 0,
-																			}
-																		: p,
-																)
-															}
-														/>
-													</div>
-												</section>
-											)}
+                                                {accountSection === 'server' && (
+                                                    <>
+                                                        <section className="panel rounded-xl p-4">
+                                                            <h2 className="ui-text-primary text-base font-semibold">
+                                                                Server Settings
+                                                            </h2>
+                                                            <div className="mt-4 gap-4 flex flex-col">
+                                                                <Field
+                                                                    label="User"
+                                                                    value={editor.user}
+                                                                    onChange={(v) =>
+                                                                        setEditor((p) => (p ? {...p, user: v} : p))
+                                                                    }
+                                                                />
+                                                                <Field
+                                                                    label="Provider"
+                                                                    value={editor.provider || ''}
+                                                                    onChange={(v) =>
+                                                                        setEditor((p) => (p ? {...p, provider: v} : p))
+                                                                    }
+                                                                />
+                                                                <Field
+                                                                    type="password"
+                                                                    label="New password (optional)"
+                                                                    value={editor.password || ''}
+                                                                    onChange={(v) =>
+                                                                        setEditor((p) => (p ? {...p, password: v} : p))
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </section>
+                                                        <div className="mt-4">
+                                                            <ServiceSettingsCard
+                                                                title="IMAP Incoming"
+                                                                host={editor.imap_host}
+                                                                port={editor.imap_port}
+                                                                security={editor.imap_secure ? 'ssl' : 'starttls'}
+                                                                onHostChange={(value) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                imap_host: value,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                                onPortChange={(value) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                imap_port: value,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                                onSecurityChange={(value) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                imap_secure: value === 'ssl' ? 1 : 0,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                            />
+                                                        </div>
+                                                        <div className="mt-4">
+                                                            <ServiceSettingsCard
+                                                                title="SMTP Outgoing"
+                                                                host={editor.smtp_host}
+                                                                port={editor.smtp_port}
+                                                                security={editor.smtp_secure ? 'ssl' : 'starttls'}
+                                                                onHostChange={(value) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                smtp_host: value,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                                onPortChange={(value) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                smtp_port: value,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                                onSecurityChange={(value) =>
+                                                                    setEditor((p) =>
+                                                                        p
+                                                                            ? {
+                                                                                ...p,
+                                                                                smtp_secure: value === 'ssl' ? 1 : 0,
+                                                                            }
+                                                                            : p,
+                                                                    )
+                                                                }
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
 
-											{accountSection === 'filters' && (
-												<section className="lm-card rounded-xl p-4">
-													<div className="flex items-start justify-between gap-3">
-														<div>
-															<h2 className="lm-text-primary text-base font-semibold">
-																Message Filters
-															</h2>
-															<p className="mt-1 lm-text-muted text-sm">
-																Thunderbird-style account filters that can run on new
-																incoming mail or manually.
-															</p>
-														</div>
-														<div className="flex items-center gap-2">
-															<Button
-																type="button"
-																onClick={() => void onRunMailFilter()}
-																disabled={
-																	runningFilterId !== null ||
-																	mailFilterBusy ||
-																	!!mailFilterModal
-																}
-																className="lm-btn-secondary rounded-md px-3 py-2 text-xs disabled:opacity-50"
-															>
-																{runningFilterId === -1 ? 'Running...' : 'Run All'}
-															</Button>
-															<Button
-																type="button"
-																onClick={onOpenCreateMailFilter}
-																disabled={mailFilterBusy || !!mailFilterModal}
-																className="lm-btn-primary rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
-															>
-																Add Filter
-															</Button>
-														</div>
-													</div>
+                                                {accountSection === 'filters' && (
+                                                    <section className="panel rounded-xl p-4">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div>
+                                                                <h2 className="ui-text-primary text-base font-semibold">
+                                                                    Message Filters
+                                                                </h2>
+                                                                <p className="mt-1 ui-text-muted text-sm">
+                                                                    Thunderbird-style account filters that can run on
+                                                                    new
+                                                                    incoming mail or manually.
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Button
+                                                                    type="button"
+                                                                    onClick={() => void onRunMailFilter()}
+                                                                    disabled={
+                                                                        runningFilterId !== null ||
+                                                                        mailFilterBusy ||
+                                                                        !!mailFilterModal
+                                                                    }
+                                                                    className="button-secondary rounded-md px-3 py-2 text-xs disabled:opacity-50"
+                                                                >
+                                                                    {runningFilterId === -1 ? 'Running...' : 'Run All'}
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    onClick={onOpenCreateMailFilter}
+                                                                    disabled={mailFilterBusy || !!mailFilterModal}
+                                                                    className="button-primary rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
+                                                                >
+                                                                    Add Filter
+                                                                </Button>
+                                                            </div>
+                                                        </div>
 
-													<div className="mt-4 space-y-4">
-														{mailFilters.length === 0 && (
-															<div className="lm-border-default lm-text-muted rounded-md border border-dashed px-3 py-4 text-sm">
-																No filters yet.
-															</div>
-														)}
-														{mailFilters.map((filter) => (
-															<div
-																key={filter.id}
-																className="lm-card rounded-lg p-3"
-															>
-																<div className="flex items-start justify-between gap-3">
-																	<div>
-																		<div className="lm-text-primary text-sm font-semibold">
-																			{filter.name}
-																		</div>
-																		<div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                                        <div className="mt-4 space-y-4">
+                                                            {mailFilters.length === 0 && (
+                                                                <div
+                                                                    className="ui-border-default ui-text-muted rounded-md border border-dashed px-3 py-4 text-sm">
+                                                                    No filters yet.
+                                                                </div>
+                                                            )}
+                                                            {mailFilters.map((filter) => (
+                                                                <div
+                                                                    key={filter.id}
+                                                                    className="panel rounded-lg p-3"
+                                                                >
+                                                                    <div
+                                                                        className="flex items-start justify-between gap-3">
+                                                                        <div>
+                                                                            <div
+                                                                                className="ui-text-primary text-sm font-semibold">
+                                                                                {filter.name}
+                                                                            </div>
+                                                                            <div
+                                                                                className="mt-1 flex flex-wrap items-center gap-2 text-xs">
 																			<span
-																				className={cn(
-																					'rounded px-2 py-0.5',
-																					filter.enabled
-																						? 'bg-emerald-100 text-emerald-700'
-																						: 'lm-bg-hover lm-text-secondary',
-																				)}
-																			>
+                                                                                className={cn(
+                                                                                    'rounded px-2 py-0.5',
+                                                                                    filter.enabled
+                                                                                        ? 'chip-success'
+                                                                                        : 'ui-surface-hover ui-text-secondary',
+                                                                                )}
+                                                                            >
 																				{filter.enabled
-																					? 'Enabled'
-																					: 'Disabled'}
+                                                                                    ? 'Enabled'
+                                                                                    : 'Disabled'}
 																			</span>
-																			<span className="lm-bg-hover lm-text-secondary rounded px-2 py-0.5">
+                                                                                <span
+                                                                                    className="ui-surface-hover ui-text-secondary rounded px-2 py-0.5">
 																				{filter.run_on_incoming
-																					? 'Runs on new mail'
-																					: 'Manual only'}
+                                                                                    ? 'Runs on new mail'
+                                                                                    : 'Manual only'}
 																			</span>
-																			<span className="lm-bg-hover lm-text-secondary rounded px-2 py-0.5">
+                                                                                <span
+                                                                                    className="ui-surface-hover ui-text-secondary rounded px-2 py-0.5">
 																				Match:{' '}
-																				{filter.match_mode.replace('_', ' ')}
+                                                                                    {filter.match_mode.replace('_', ' ')}
 																			</span>
-																		</div>
-																		<div className="mt-2 lm-text-muted text-xs">
-																			{filter.match_mode === 'all_messages'
-																				? 'Applies to all messages.'
-																				: `${filter.conditions.length} condition${filter.conditions.length === 1 ? '' : 's'}`}
-																			{' · '}
-																			{filter.actions.length} action
-																			{filter.actions.length === 1 ? '' : 's'}
-																		</div>
-																	</div>
-																</div>
-																<div className="mt-3 flex items-center gap-2">
-																	<Button
-																		type="button"
-																		onClick={() => onOpenEditMailFilter(filter)}
-																		disabled={mailFilterBusy || !!mailFilterModal}
-																		className="lm-btn-primary rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
-																	>
-																		Edit
-																	</Button>
-																	<Button
-																		type="button"
-																		onClick={() => void onRunMailFilter(filter.id)}
-																		disabled={
-																			runningFilterId !== null ||
-																			mailFilterBusy ||
-																			!!mailFilterModal
-																		}
-																		className="lm-btn-secondary rounded-md px-3 py-2 text-xs disabled:opacity-50"
-																	>
-																		{runningFilterId === filter.id
-																			? 'Running...'
-																			: 'Run Filter'}
-																	</Button>
-																	<Button
-																		type="button"
-																		onClick={() =>
-																			void onDeleteMailFilter(filter.id)
-																		}
-																		disabled={mailFilterBusy}
-																		className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
-																	>
-																		Delete
-																	</Button>
-																</div>
-															</div>
-														))}
-													</div>
-												</section>
-											)}
-											</WorkspaceLayout>
-										</div>
-										<div className="lm-footer shrink-0 px-5 py-3">
-											<div className="flex items-center justify-between">
-												<div className="flex items-center gap-2">
-													{Boolean((accountStatus || '').trim()) && (
-														<span className="lm-text-muted text-xs">
+                                                                            </div>
+                                                                            <div className="mt-2 ui-text-muted text-xs">
+                                                                                {filter.match_mode === 'all_messages'
+                                                                                    ? 'Applies to all messages.'
+                                                                                    : `${filter.conditions.length} condition${filter.conditions.length === 1 ? '' : 's'}`}
+                                                                                {' · '}
+                                                                                {filter.actions.length} action
+                                                                                {filter.actions.length === 1 ? '' : 's'}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="mt-3 flex items-center gap-2">
+                                                                        <Button
+                                                                            type="button"
+                                                                            onClick={() => onOpenEditMailFilter(filter)}
+                                                                            disabled={mailFilterBusy || !!mailFilterModal}
+                                                                            className="button-primary rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
+                                                                        >
+                                                                            Edit
+                                                                        </Button>
+                                                                        <Button
+                                                                            type="button"
+                                                                            onClick={() => void onRunMailFilter(filter.id)}
+                                                                            disabled={
+                                                                                runningFilterId !== null ||
+                                                                                mailFilterBusy ||
+                                                                                !!mailFilterModal
+                                                                            }
+                                                                            className="button-secondary rounded-md px-3 py-2 text-xs disabled:opacity-50"
+                                                                        >
+                                                                            {runningFilterId === filter.id
+                                                                                ? 'Running...'
+                                                                                : 'Run Filter'}
+                                                                        </Button>
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="danger"
+                                                                            onClick={() =>
+                                                                                void onDeleteMailFilter(filter.id)
+                                                                            }
+                                                                            disabled={mailFilterBusy}
+                                                                            className="rounded-md px-3 py-2 text-xs disabled:opacity-50"
+                                                                        >
+                                                                            Delete
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </section>
+                                                )}
+                                            </WorkspaceLayout>
+                                        </div>
+                                        <div className="app-footer shrink-0 px-5 py-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    {Boolean((accountStatus || '').trim()) && (
+                                                        <span className="ui-text-muted text-xs">
 															{accountStatus}
 														</span>
-													)}
-												</div>
-												<div className="flex items-center gap-2">
-													<Button
-														type="button"
-														onClick={() => void onDeleteAccount()}
-														disabled={!editor || deletingAccount}
-														className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
-													>
-														{deletingAccount ? 'Deleting...' : 'Delete Account'}
-													</Button>
-													{!embedded && (
-														<Button
-															type="button"
-															className="lm-btn-secondary rounded-md px-3 py-2 text-sm"
-															onClick={() => window.close()}
-														>
-															Close
-														</Button>
-													)}
-													<Button
-														type="button"
-														onClick={() => void onSaveAccount()}
-														disabled={!editor || savingAccount}
-														className="lm-btn-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-													>
-														{savingAccount ? 'Saving...' : 'Save'}
-													</Button>
-												</div>
-											</div>
-										</div>
-									</div>
-									{mailFilterModal && (
-										<div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 p-4">
-											<div className="lm-overlay w-full max-w-3xl rounded-xl p-4 shadow-2xl">
-												<div className="flex items-start justify-between gap-3">
-													<div>
-														<h3 className="lm-text-primary text-base font-semibold">
-															{mailFilterModal.mode === 'create'
-																? 'Create Filter'
-																: 'Edit Filter'}
-														</h3>
-														<p className="mt-1 lm-text-muted text-xs">
-															Save the filter before running it.
-														</p>
-													</div>
-													<Button
-														type="button"
-														className="lm-btn-secondary rounded-md px-2 py-1 text-xs"
-														onClick={() => setMailFilterModal(null)}
-														disabled={mailFilterBusy}
-													>
-														Close
-													</Button>
-												</div>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        variant="danger"
+                                                        onClick={() => void onDeleteAccount()}
+                                                        disabled={!editor || deletingAccount}
+                                                        className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+                                                    >
+                                                        {deletingAccount ? 'Deleting...' : 'Delete Account'}
+                                                    </Button>
+                                                    {!embedded && (
+                                                        <Button
+                                                            type="button"
+                                                            className="button-secondary rounded-md px-3 py-2 text-sm"
+                                                            onClick={() => window.close()}
+                                                        >
+                                                            Close
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        type="button"
+                                                        onClick={() => void onSaveAccount()}
+                                                        disabled={!editor || savingAccount}
+                                                        className="button-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+                                                    >
+                                                        {savingAccount ? 'Saving...' : 'Save'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {mailFilterModal && (
+                                        <Modal
+                                            open
+                                            onClose={() => setMailFilterModal(null)}
+                                            backdropClassName="z-[1200]"
+                                            contentClassName="max-w-3xl p-4"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <h3 className="ui-text-primary text-base font-semibold">
+                                                        {mailFilterModal.mode === 'create'
+                                                            ? 'Create Filter'
+                                                            : 'Edit Filter'}
+                                                    </h3>
+                                                    <p className="mt-1 ui-text-muted text-xs">
+                                                        Save the filter before running it.
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    className="button-secondary rounded-md px-2 py-1 text-xs"
+                                                    onClick={() => setMailFilterModal(null)}
+                                                    disabled={mailFilterBusy}
+                                                >
+                                                    Close
+                                                </Button>
+                                            </div>
 
-												<div className="mt-4 space-y-3">
-													<div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-														<Field
-															label="Filter name"
-															value={mailFilterModal.draft.name}
-															onChange={(next) =>
-																updateMailFilterDraft((prev) => ({
-																	...prev,
-																	name: next,
-																}))
-															}
-														/>
-														<label className="inline-flex h-10 items-center gap-2 text-sm lm-text-secondary">
-															<FormCheckbox
-																checked={mailFilterModal.draft.enabled}
-																onChange={(e) =>
-																	updateMailFilterDraft((prev) => ({
-																		...prev,
-																		enabled: e.target.checked,
-																	}))
-																}
-															/>
-															Enabled
-														</label>
-														<label className="inline-flex h-10 items-center gap-2 text-sm lm-text-secondary">
-															<FormCheckbox
-																checked={mailFilterModal.draft.run_on_incoming}
-																onChange={(e) =>
-																	updateMailFilterDraft((prev) => ({
-																		...prev,
-																		run_on_incoming: e.target.checked,
-																	}))
-																}
-															/>
-															Getting new mail
-														</label>
-													</div>
+                                            <div className="mt-4 space-y-3">
+                                                <div
+                                                    className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+                                                    <Field
+                                                        label="Filter name"
+                                                        value={mailFilterModal.draft.name}
+                                                        onChange={(next) =>
+                                                            updateMailFilterDraft((prev) => ({
+                                                                ...prev,
+                                                                name: next,
+                                                            }))
+                                                        }
+                                                    />
+                                                    <label
+                                                        className="inline-flex h-10 items-center gap-2 text-sm ui-text-secondary">
+                                                        <FormCheckbox
+                                                            checked={mailFilterModal.draft.enabled}
+                                                            onChange={(e) =>
+                                                                updateMailFilterDraft((prev) => ({
+                                                                    ...prev,
+                                                                    enabled: e.target.checked,
+                                                                }))
+                                                            }
+                                                        />
+                                                        Enabled
+                                                    </label>
+                                                    <label
+                                                        className="inline-flex h-10 items-center gap-2 text-sm ui-text-secondary">
+                                                        <FormCheckbox
+                                                            checked={mailFilterModal.draft.run_on_incoming}
+                                                            onChange={(e) =>
+                                                                updateMailFilterDraft((prev) => ({
+                                                                    ...prev,
+                                                                    run_on_incoming: e.target.checked,
+                                                                }))
+                                                            }
+                                                        />
+                                                        Getting new mail
+                                                    </label>
+                                                </div>
 
-													<div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-														<label className="block text-sm">
-															<span className="lm-text-secondary mb-1 block font-medium">
+                                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                    <label className="block text-sm">
+															<span className="ui-text-secondary mb-1 block font-medium">
 																Match mode
 															</span>
-															<FormSelect
-																value={mailFilterModal.draft.match_mode}
-																onChange={(e) =>
-																	updateMailFilterDraft((prev) => ({
-																		...prev,
-																		match_mode: e.target
-																			.value as MailFilterMatchMode,
-																	}))
-																}
-															>
-																<option value="all">Match all of the following</option>
-																<option value="any">Match any of the following</option>
-																<option value="all_messages">Match all messages</option>
-															</FormSelect>
-														</label>
-														<label className="inline-flex items-end gap-2 text-sm lm-text-secondary">
-															<FormCheckbox
-																checked={mailFilterModal.draft.stop_processing}
-																onChange={(e) =>
-																	updateMailFilterDraft((prev) => ({
-																		...prev,
-																		stop_processing: e.target.checked,
-																	}))
-																}
-															/>
-															Stop processing after this filter
-														</label>
-													</div>
+                                                        <FormSelect
+                                                            value={mailFilterModal.draft.match_mode}
+                                                            onChange={(e) =>
+                                                                updateMailFilterDraft((prev) => ({
+                                                                    ...prev,
+                                                                    match_mode: e.target
+                                                                        .value as MailFilterMatchMode,
+                                                                }))
+                                                            }
+                                                        >
+                                                            <option value="all">Match all of the following</option>
+                                                            <option value="any">Match any of the following</option>
+                                                            <option value="all_messages">Match all messages</option>
+                                                        </FormSelect>
+                                                    </label>
+                                                    <label
+                                                        className="inline-flex items-end gap-2 text-sm ui-text-secondary">
+                                                        <FormCheckbox
+                                                            checked={mailFilterModal.draft.stop_processing}
+                                                            onChange={(e) =>
+                                                                updateMailFilterDraft((prev) => ({
+                                                                    ...prev,
+                                                                    stop_processing: e.target.checked,
+                                                                }))
+                                                            }
+                                                        />
+                                                        Stop processing after this filter
+                                                    </label>
+                                                </div>
 
-													{mailFilterModal.draft.match_mode !== 'all_messages' && (
-														<div className="space-y-2">
-															<p className="lm-text-muted text-xs font-semibold uppercase tracking-wide">
-																Conditions
-															</p>
-															{mailFilterModal.draft.conditions.map(
-																(condition, index) => (
-																	<div
-																		key={index}
-																		className="grid grid-cols-[140px_140px_1fr_auto] gap-2"
-																	>
-																		<FormSelect
-																			value={condition.field}
-																			onChange={(e) =>
-																				updateMailFilterDraft((prev) => ({
-																					...prev,
-																					conditions: prev.conditions.map(
-																						(row, rowIndex) =>
-																							rowIndex === index
-																								? {
-																										...row,
-																										field: e.target
-																											.value as MailFilterField,
-																									}
-																								: row,
-																					),
-																				}))
-																			}
-																			className="h-9 px-2"
-																		>
-																			<option value="subject">Subject</option>
-																			<option value="from">From</option>
-																			<option value="to">To</option>
-																			<option value="body">Body</option>
-																		</FormSelect>
-																		<FormSelect
-																			value={condition.operator}
-																			onChange={(e) =>
-																				updateMailFilterDraft((prev) => ({
-																					...prev,
-																					conditions: prev.conditions.map(
-																						(row, rowIndex) =>
-																							rowIndex === index
-																								? {
-																										...row,
-																										operator: e
-																											.target
-																											.value as MailFilterOperator,
-																									}
-																								: row,
-																					),
-																				}))
-																			}
-																			className="h-9 px-2"
-																		>
-																			<option value="contains">contains</option>
-																			<option value="not_contains">
-																				does not contain
-																			</option>
-																			<option value="equals">is</option>
-																			<option value="starts_with">
-																				starts with
-																			</option>
-																			<option value="ends_with">ends with</option>
-																		</FormSelect>
-																		<FormInput
-																			type="text"
-																			value={condition.value || ''}
-																			onChange={(e) =>
-																				updateMailFilterDraft((prev) => ({
-																					...prev,
-																					conditions: prev.conditions.map(
-																						(row, rowIndex) =>
-																							rowIndex === index
-																								? {
-																										...row,
-																										value: e.target
-																											.value,
-																									}
-																								: row,
-																					),
-																				}))
-																			}
-																			className="h-9 px-2"
-																		/>
-																		<Button
-																			type="button"
-																			onClick={() =>
-																				updateMailFilterDraft((prev) => ({
-																					...prev,
-																					conditions: prev.conditions.filter(
-																						(_, rowIndex) =>
-																							rowIndex !== index,
-																					),
-																				}))
-																			}
-																			className="lm-btn-secondary rounded-md px-2 text-xs"
-																		>
-																			-
-																		</Button>
-																	</div>
-																),
-															)}
-															<Button
-																type="button"
-																onClick={() =>
-																	updateMailFilterDraft((prev) => ({
-																		...prev,
-																		conditions: [
-																			...prev.conditions,
-																			{
-																				field: 'subject',
-																				operator: 'contains',
-																				value: '',
-																			},
-																		],
-																	}))
-																}
-																className="lm-btn-secondary rounded-md px-2 py-1 text-xs"
-															>
-																+ Add condition
-															</Button>
-														</div>
-													)}
+                                                {mailFilterModal.draft.match_mode !== 'all_messages' && (
+                                                    <div className="space-y-2">
+                                                        <p className="ui-text-muted text-xs font-semibold uppercase tracking-wide">
+                                                            Conditions
+                                                        </p>
+                                                        {mailFilterModal.draft.conditions.map(
+                                                            (condition, index) => (
+                                                                <div
+                                                                    key={index}
+                                                                    className="grid grid-cols-[140px_140px_1fr_auto] gap-2"
+                                                                >
+                                                                    <FormSelect
+                                                                        value={condition.field}
+                                                                        onChange={(e) =>
+                                                                            updateMailFilterDraft((prev) => ({
+                                                                                ...prev,
+                                                                                conditions: prev.conditions.map(
+                                                                                    (row, rowIndex) =>
+                                                                                        rowIndex === index
+                                                                                            ? {
+                                                                                                ...row,
+                                                                                                field: e.target
+                                                                                                    .value as MailFilterField,
+                                                                                            }
+                                                                                            : row,
+                                                                                ),
+                                                                            }))
+                                                                        }
+                                                                        className="h-9 px-2"
+                                                                    >
+                                                                        <option value="subject">Subject</option>
+                                                                        <option value="from">From</option>
+                                                                        <option value="to">To</option>
+                                                                        <option value="body">Body</option>
+                                                                    </FormSelect>
+                                                                    <FormSelect
+                                                                        value={condition.operator}
+                                                                        onChange={(e) =>
+                                                                            updateMailFilterDraft((prev) => ({
+                                                                                ...prev,
+                                                                                conditions: prev.conditions.map(
+                                                                                    (row, rowIndex) =>
+                                                                                        rowIndex === index
+                                                                                            ? {
+                                                                                                ...row,
+                                                                                                operator: e
+                                                                                                    .target
+                                                                                                    .value as MailFilterOperator,
+                                                                                            }
+                                                                                            : row,
+                                                                                ),
+                                                                            }))
+                                                                        }
+                                                                        className="h-9 px-2"
+                                                                    >
+                                                                        <option value="contains">contains</option>
+                                                                        <option value="not_contains">
+                                                                            does not contain
+                                                                        </option>
+                                                                        <option value="equals">is</option>
+                                                                        <option value="starts_with">
+                                                                            starts with
+                                                                        </option>
+                                                                        <option value="ends_with">ends with</option>
+                                                                    </FormSelect>
+                                                                    <FormInput
+                                                                        type="text"
+                                                                        value={condition.value || ''}
+                                                                        onChange={(e) =>
+                                                                            updateMailFilterDraft((prev) => ({
+                                                                                ...prev,
+                                                                                conditions: prev.conditions.map(
+                                                                                    (row, rowIndex) =>
+                                                                                        rowIndex === index
+                                                                                            ? {
+                                                                                                ...row,
+                                                                                                value: e.target
+                                                                                                    .value,
+                                                                                            }
+                                                                                            : row,
+                                                                                ),
+                                                                            }))
+                                                                        }
+                                                                        className="h-9 px-2"
+                                                                    />
+                                                                    <Button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            updateMailFilterDraft((prev) => ({
+                                                                                ...prev,
+                                                                                conditions: prev.conditions.filter(
+                                                                                    (_, rowIndex) =>
+                                                                                        rowIndex !== index,
+                                                                                ),
+                                                                            }))
+                                                                        }
+                                                                        className="button-secondary rounded-md px-2 text-xs"
+                                                                    >
+                                                                        -
+                                                                    </Button>
+                                                                </div>
+                                                            ),
+                                                        )}
+                                                        <Button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                updateMailFilterDraft((prev) => ({
+                                                                    ...prev,
+                                                                    conditions: [
+                                                                        ...prev.conditions,
+                                                                        {
+                                                                            field: 'subject',
+                                                                            operator: 'contains',
+                                                                            value: '',
+                                                                        },
+                                                                    ],
+                                                                }))
+                                                            }
+                                                            className="button-secondary rounded-md px-2 py-1 text-xs"
+                                                        >
+                                                            + Add condition
+                                                        </Button>
+                                                    </div>
+                                                )}
 
-													<div className="space-y-2">
-														<p className="lm-text-muted text-xs font-semibold uppercase tracking-wide">
-															Actions
-														</p>
-														{mailFilterModal.draft.actions.map((action, index) => (
-															<div
-																key={index}
-																className="grid grid-cols-[180px_1fr_auto] gap-2"
-															>
-																<FormSelect
-																	value={action.type}
-																	onChange={(e) =>
-																		updateMailFilterDraft((prev) => ({
-																			...prev,
-																			actions: prev.actions.map(
-																				(row, rowIndex) =>
-																					rowIndex === index
-																						? {
-																								...row,
-																								type: e.target
-																									.value as MailFilterActionType,
-																							}
-																						: row,
-																			),
-																		}))
-																	}
-																	className="h-9 px-2"
-																>
-																	<option value="move_to_folder">
-																		Move to folder
-																	</option>
-																	<option value="mark_read">Mark read</option>
-																	<option value="mark_unread">Mark unread</option>
-																	<option value="star">Star</option>
-																	<option value="unstar">Unstar</option>
-																</FormSelect>
-																{action.type === 'move_to_folder' ? (
-																	<FormSelect
-																		value={action.value || ''}
-																		onChange={(e) =>
-																			updateMailFilterDraft((prev) => ({
-																				...prev,
-																				actions: prev.actions.map(
-																					(row, rowIndex) =>
-																						rowIndex === index
-																							? {
-																									...row,
-																									value: e.target
-																										.value,
-																								}
-																							: row,
-																				),
-																			}))
-																		}
-																		className="h-9 px-2"
-																	>
-																		<option value="">Choose folder...</option>
-																		{accountFolders.map((folder) => (
-																			<option key={folder.id} value={folder.path}>
-																				{folder.name} ({folder.path})
-																			</option>
-																		))}
-																	</FormSelect>
-																) : (
-																	<FormInput
-																		type="text"
-																		disabled
-																		value=""
-																		className="lm-input-subtle lm-text-muted h-9 px-2"
-																	/>
-																)}
-																<Button
-																	type="button"
-																	onClick={() =>
-																		updateMailFilterDraft((prev) => ({
-																			...prev,
-																			actions: prev.actions.filter(
-																				(_, rowIndex) => rowIndex !== index,
-																			),
-																		}))
-																	}
-																	className="lm-btn-secondary rounded-md px-2 text-xs"
-																>
-																	-
-																</Button>
-															</div>
-														))}
-														<Button
-															type="button"
-															onClick={() =>
-																updateMailFilterDraft((prev) => ({
-																	...prev,
-																	actions: [
-																		...prev.actions,
-																		{type: 'move_to_folder', value: ''},
-																	],
-																}))
-															}
-															className="lm-btn-secondary rounded-md px-2 py-1 text-xs"
-														>
-															+ Add action
-														</Button>
-													</div>
-												</div>
+                                                <div className="space-y-2">
+                                                    <p className="ui-text-muted text-xs font-semibold uppercase tracking-wide">
+                                                        Actions
+                                                    </p>
+                                                    {mailFilterModal.draft.actions.map((action, index) => (
+                                                        <div
+                                                            key={index}
+                                                            className="grid grid-cols-[180px_1fr_auto] gap-2"
+                                                        >
+                                                            <FormSelect
+                                                                value={action.type}
+                                                                onChange={(e) =>
+                                                                    updateMailFilterDraft((prev) => ({
+                                                                        ...prev,
+                                                                        actions: prev.actions.map(
+                                                                            (row, rowIndex) =>
+                                                                                rowIndex === index
+                                                                                    ? {
+                                                                                        ...row,
+                                                                                        type: e.target
+                                                                                            .value as MailFilterActionType,
+                                                                                    }
+                                                                                    : row,
+                                                                        ),
+                                                                    }))
+                                                                }
+                                                                className="h-9 px-2"
+                                                            >
+                                                                <option value="move_to_folder">
+                                                                    Move to folder
+                                                                </option>
+                                                                <option value="mark_read">Mark read</option>
+                                                                <option value="mark_unread">Mark unread</option>
+                                                                <option value="star">Star</option>
+                                                                <option value="unstar">Unstar</option>
+                                                            </FormSelect>
+                                                            {action.type === 'move_to_folder' ? (
+                                                                <FormSelect
+                                                                    value={action.value || ''}
+                                                                    onChange={(e) =>
+                                                                        updateMailFilterDraft((prev) => ({
+                                                                            ...prev,
+                                                                            actions: prev.actions.map(
+                                                                                (row, rowIndex) =>
+                                                                                    rowIndex === index
+                                                                                        ? {
+                                                                                            ...row,
+                                                                                            value: e.target
+                                                                                                .value,
+                                                                                        }
+                                                                                        : row,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                    className="h-9 px-2"
+                                                                >
+                                                                    <option value="">Choose folder...</option>
+                                                                    {accountFolders.map((folder) => (
+                                                                        <option key={folder.id} value={folder.path}>
+                                                                            {folder.name} ({folder.path})
+                                                                        </option>
+                                                                    ))}
+                                                                </FormSelect>
+                                                            ) : (
+                                                                <FormInput
+                                                                    type="text"
+                                                                    disabled
+                                                                    value=""
+                                                                    className="field-input-subtle ui-text-muted h-9 px-2"
+                                                                />
+                                                            )}
+                                                            <Button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    updateMailFilterDraft((prev) => ({
+                                                                        ...prev,
+                                                                        actions: prev.actions.filter(
+                                                                            (_, rowIndex) => rowIndex !== index,
+                                                                        ),
+                                                                    }))
+                                                                }
+                                                                className="button-secondary rounded-md px-2 text-xs"
+                                                            >
+                                                                -
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    <Button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            updateMailFilterDraft((prev) => ({
+                                                                ...prev,
+                                                                actions: [
+                                                                    ...prev.actions,
+                                                                    {type: 'move_to_folder', value: ''},
+                                                                ],
+                                                            }))
+                                                        }
+                                                        className="button-secondary rounded-md px-2 py-1 text-xs"
+                                                    >
+                                                        + Add action
+                                                    </Button>
+                                                </div>
+                                            </div>
 
-												<div className="mt-4 flex items-center gap-2">
-													<Button
-														type="button"
-														onClick={() => void onSaveMailFilterModal()}
-														disabled={mailFilterBusy}
-														className="lm-btn-primary rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
-													>
-														{mailFilterBusy
-															? 'Saving...'
-															: mailFilterModal.mode === 'create'
-																? 'Create Filter'
-																: 'Save Filter'}
-													</Button>
-													<Button
-														type="button"
-														onClick={() => setMailFilterModal(null)}
-														disabled={mailFilterBusy}
-														className="lm-btn-secondary rounded-md px-3 py-2 text-xs disabled:opacity-50"
-													>
-														Cancel
-													</Button>
-												</div>
-											</div>
-										</div>
-									)}
-								</>
-							)}
-						</div>
-					)}
-				</WorkspaceLayout>
-			</div>
-		</div>
-	);
+                                            <div className="mt-4 flex items-center gap-2">
+                                                <Button
+                                                    type="button"
+                                                    onClick={() => void onSaveMailFilterModal()}
+                                                    disabled={mailFilterBusy}
+                                                    className="button-primary rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
+                                                >
+                                                    {mailFilterBusy
+                                                        ? 'Saving...'
+                                                        : mailFilterModal.mode === 'create'
+                                                            ? 'Create Filter'
+                                                            : 'Save Filter'}
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    onClick={() => setMailFilterModal(null)}
+                                                    disabled={mailFilterBusy}
+                                                    className="button-secondary rounded-md px-3 py-2 text-xs disabled:opacity-50"
+                                                >
+                                                    Cancel
+                                                </Button>
+                                            </div>
+                                        </Modal>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+                </WorkspaceLayout>
+            </div>
+        </div>
+    );
 }
 
 function describeUpdatePhase(state: AutoUpdateState): string {
-	if (!state.enabled) return 'Auto-update disabled for this build.';
-	if (state.phase === 'available') return `Update ${state.latestVersion ?? ''} is available.`;
-	if (state.phase === 'not-available') return 'You are up to date.';
-	if (state.phase === 'checking') return 'Checking for updates...';
-	if (state.phase === 'downloading') return 'Downloading update...';
-	if (state.phase === 'downloaded')
-		return `Update ${state.downloadedVersion ?? state.latestVersion ?? ''} is ready to install.`;
-	if (state.phase === 'error') return 'Update check failed.';
-	return 'Ready to check for updates.';
+    if (!state.enabled) return 'Auto-update disabled for this build.';
+    if (state.phase === 'available') return `Update ${state.latestVersion ?? ''} is available.`;
+    if (state.phase === 'not-available') return 'You are up to date.';
+    if (state.phase === 'checking') return 'Checking for updates...';
+    if (state.phase === 'downloading') return 'Downloading update...';
+    if (state.phase === 'downloaded')
+        return `Update ${state.downloadedVersion ?? state.latestVersion ?? ''} is ready to install.`;
+    if (state.phase === 'error') return 'Update check failed.';
+    return 'Ready to check for updates.';
 }
 
 function createDefaultMailFilterDraft(index: number): MailFilterDraft {
-	return {
-		id: null,
-		name: `New filter ${index}`,
-		enabled: true,
-		run_on_incoming: true,
-		match_mode: 'all',
-		stop_processing: true,
-		conditions: [{field: 'subject', operator: 'contains', value: ''}],
-		actions: [{type: 'move_to_folder', value: ''}],
-	};
+    return {
+        id: null,
+        name: `New filter ${index}`,
+        enabled: true,
+        run_on_incoming: true,
+        match_mode: 'all',
+        stop_processing: true,
+        conditions: [{field: 'subject', operator: 'contains', value: ''}],
+        actions: [{type: 'move_to_folder', value: ''}],
+    };
 }
 
 function mapMailFilterToDraft(filter: MailFilter): MailFilterDraft {
-	return {
-		id: filter.id,
-		name: filter.name,
-		enabled: !!filter.enabled,
-		run_on_incoming: !!filter.run_on_incoming,
-		match_mode: filter.match_mode,
-		stop_processing: !!filter.stop_processing,
-		conditions: filter.conditions.map((condition) => ({
-			field: condition.field,
-			operator: condition.operator,
-			value: condition.value || '',
-		})),
-		actions: filter.actions.map((action) => ({
-			type: action.type,
-			value: action.value || '',
-		})),
-	};
+    return {
+        id: filter.id,
+        name: filter.name,
+        enabled: !!filter.enabled,
+        run_on_incoming: !!filter.run_on_incoming,
+        match_mode: filter.match_mode,
+        stop_processing: !!filter.stop_processing,
+        conditions: filter.conditions.map((condition) => ({
+            field: condition.field,
+            operator: condition.operator,
+            value: condition.value || '',
+        })),
+        actions: filter.actions.map((action) => ({
+            type: action.type,
+            value: action.value || '',
+        })),
+    };
 }

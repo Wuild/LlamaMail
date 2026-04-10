@@ -46,7 +46,7 @@ export function buildReplyQuoteHtml(
     const from = escapeHtml(message.from_name || message.from_address || 'Unknown');
     const date = escapeHtml(formatSystemDateTime(message.date, systemLocale));
     const original = (html || '').trim() || textToHtmlBlock(text || '');
-    return `<p><br/></p><div><p>On ${date}, ${from} wrote:</p><blockquote style="margin:0 0 0 .8ex;border-left:2px solid #d0d7de;padding-left:1em;">${original}</blockquote></div>`;
+    return `<p><br/></p><div><p>On ${date}, ${from} wrote:</p><blockquote style="margin:0 0 0 .8ex;border-left:2px solid currentColor;padding-left:1em;">${original}</blockquote></div>`;
 }
 
 export function buildForwardQuoteText(message: ComposeMessageLike, text: string | null, systemLocale?: string): string {
@@ -74,7 +74,7 @@ export function buildForwardQuoteHtml(
     const subject = escapeHtml(message.subject || '(No subject)');
     const date = escapeHtml(formatSystemDateTime(message.date, systemLocale));
     const original = (html || '').trim() || textToHtmlBlock(text || '');
-    return `<p><br/></p><div><p>---------- Forwarded message ----------<br/>From: ${from}<br/>Date: ${date}<br/>Subject: ${subject}<br/>To: ${to}</p><blockquote style="margin:0 0 0 .8ex;border-left:2px solid #d0d7de;padding-left:1em;">${original}</blockquote></div>`;
+    return `<p><br/></p><div><p>---------- Forwarded message ----------<br/>From: ${from}<br/>Date: ${date}<br/>Subject: ${subject}<br/>To: ${to}</p><blockquote style="margin:0 0 0 .8ex;border-left:2px solid currentColor;padding-left:1em;">${original}</blockquote></div>`;
 }
 
 export function htmlToText(html: string | null | undefined): string {

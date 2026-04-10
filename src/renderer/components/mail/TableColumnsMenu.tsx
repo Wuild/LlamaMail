@@ -1,6 +1,6 @@
-import {Button} from '../ui/button';
 import React from 'react';
 import {cn} from '../../lib/utils';
+import {ContextMenu, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator} from '../ui/ContextMenu';
 
 type TableColumnOption<TColumn extends string> = {
     key: TColumn;
@@ -21,51 +21,45 @@ function TableColumnsMenuInner<TColumn extends string>(
     ref: React.ForwardedRef<HTMLDivElement>,
 ) {
     return (
-        <div
+        <ContextMenu
             ref={ref}
-            className="fixed z-[1015] min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-menu-dark)]"
-            style={{
-                left: position.left,
-                top: position.top,
-                visibility: ready ? 'visible' : 'hidden',
-            }}
+            size="lg"
+            layer="1015"
+            position={position}
+            ready={ready}
             onClick={(event) => event.stopPropagation()}
         >
-            <div
-                className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Table Columns
-            </div>
+            <ContextMenuLabel>Table Columns</ContextMenuLabel>
             {options.map((column) => {
                 const checked = selectedColumns.includes(column.key);
                 return (
-                    <Button
+                    <ContextMenuItem
                         key={column.key}
                         type="button"
-                        className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-active-dark)]"
+                        align="between"
                         onClick={() => onToggleColumn(column.key)}
                     >
                         <span>{column.label}</span>
                         <span
                             className={cn(
-                                'inline-flex h-4 w-4 items-center justify-center text-xs',
-                                checked ? 'text-emerald-600 dark:text-emerald-300' : 'text-transparent',
+                                'context-menu-checkmark',
+                                checked ? 'text-success' : 'text-transparent',
                             )}
                             aria-hidden={!checked}
                         >
 							✓
 						</span>
-                    </Button>
+                    </ContextMenuItem>
                 );
             })}
-            <div className="my-1 h-px bg-slate-200 dark:bg-[var(--lm-border-default-dark)]"/>
-            <Button
+            <ContextMenuSeparator/>
+            <ContextMenuItem
                 type="button"
-                className="flex w-full items-center rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-active-dark)]"
                 onClick={onResetColumns}
             >
                 Reset Columns
-            </Button>
-        </div>
+            </ContextMenuItem>
+        </ContextMenu>
     );
 }
 

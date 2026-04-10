@@ -15,13 +15,12 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantStyles: Record<ButtonVariant, string> = {
     unstyled: '',
-    default: 'lm-btn-primary shadow-sm',
-    secondary: 'lm-btn-secondary shadow-sm',
-    outline: 'border lm-border-default lm-bg-card lm-text-primary shadow-sm lm-bg-hover',
-    ghost: 'lm-btn-ghost',
-    danger: 'lm-btn-danger shadow-sm',
-    success:
-        'border border-transparent bg-emerald-600 text-[var(--text-inverse)] shadow-sm hover:bg-emerald-700',
+    default: 'button button-primary shadow-sm',
+    secondary: 'button button-secondary shadow-sm',
+    outline: 'button border ui-border-default ui-surface-card ui-text-primary shadow-sm ui-surface-hover',
+    ghost: 'button button-ghost',
+    danger: 'button button-danger shadow-sm',
+    success: 'button button-success shadow-sm',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -60,7 +59,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             <button
                 ref={ref}
                 className={cn(
-                    'lm-focus-ring inline-flex items-center transition-colors disabled:pointer-events-none disabled:opacity-50',
+                    'focus-ring inline-flex items-center transition-colors disabled:pointer-events-none disabled:opacity-50',
                     wantsLeftAlignedContent ? 'justify-start' : 'justify-center',
                     (leftIcon || rightIcon) && 'gap-2',
                     variantStyles[variant],

@@ -74,19 +74,19 @@ export default function CloudSortableHeaderCell({
 	return (
 		<th
 			ref={headerRef}
-			className={`relative border-b border-slate-200 bg-slate-100 px-3 py-2 select-none dark:border-[#3a3d44] dark:bg-[#32353c] ${
-				index < visibleColumnCount - 1 ? "border-r border-r-slate-200 dark:border-r-[#3a3d44]" : ""
+			className={`cloud-table-head-cell relative px-3 py-2 select-none ${
+				index < visibleColumnCount - 1 ? "has-divider" : ""
 			}`}
 		>
 			{dragPlaceholder?.column === columnKey && dragPlaceholder.side === "before" && (
 				<span
-					className="pointer-events-none absolute bottom-0 left-0 top-0 w-0.5 bg-sky-600 dark:bg-sky-400"
+					className="cloud-table-divider pointer-events-none absolute bottom-0 left-0 top-0 w-0.5"
 					aria-hidden="true"
 				/>
 			)}
 			<Button
 				type="button"
-				className="inline-flex max-w-full items-center gap-1 truncate text-left hover:text-slate-900 dark:hover:text-slate-100"
+				className="cloud-table-sort-toggle inline-flex max-w-full items-center gap-1 truncate text-left"
 				onClick={() => onToggleSort(columnKey)}
 			>
 				<span className="truncate">{label}</span>
@@ -107,7 +107,7 @@ export default function CloudSortableHeaderCell({
 			)}
 			{dragPlaceholder?.column === columnKey && dragPlaceholder.side === "after" && (
 				<span
-					className="pointer-events-none absolute bottom-0 right-0 top-0 w-0.5 bg-sky-600 dark:bg-sky-400"
+					className="cloud-table-divider pointer-events-none absolute bottom-0 right-0 top-0 w-0.5"
 					aria-hidden="true"
 				/>
 			)}

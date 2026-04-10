@@ -31,29 +31,27 @@ export default function DynamicSidebar({sections, selectedItemId, onSelectItem, 
     return (
         <aside
             className={cn(
-                'lm-sidebar h-full min-h-0 w-full shrink-0 p-3',
+                'sidebar h-full min-h-0 w-full shrink-0 p-3',
                 className,
             )}
         >
-            <div className="h-full overflow-y-auto space-y-2">
+            <div className="sidebar-group h-full overflow-y-auto space-y-2">
                 {sections.map((section) => (
                     <div
                         key={section.id}
-                        className={cn(section.title && 'border-t lm-border-default pt-2')}
+                        className={cn('sidebar-section', section.title && 'border-t pt-2')}
                     >
                         {section.title && (
-                            <p className="lm-text-muted px-2 pb-1 text-xs font-semibold uppercase tracking-wide">
+                            <p className="sidebar-header px-2 pb-1 text-xs font-semibold uppercase tracking-wide">
                                 {section.title}
                             </p>
                         )}
-                        <div className="space-y-1">
+                        <div className="sidebar-group space-y-1">
                             {section.items.map((item) => {
                                 const active = item.id === selectedItemId;
                                 const itemClassName = cn(
-                                    'block w-full rounded-md px-3 py-2 text-left text-sm no-underline transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-                                    active
-                                        ? 'lm-interactive-active lm-text-primary'
-                                        : 'lm-menu-item',
+                                    'account-item block w-full rounded-md px-3 py-2 text-left text-sm no-underline transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                                    active && 'is-active',
                                 );
 
                                 if (item.to && !item.disabled) {
@@ -70,13 +68,13 @@ export default function DynamicSidebar({sections, selectedItemId, onSelectItem, 
                                                 {item.avatar ? (
                                                     <span className="shrink-0">{item.avatar}</span>
                                                 ) : item.icon ? (
-                                                    <span className="lm-text-muted shrink-0">{item.icon}</span>
+                                                    <span className="account-item-meta shrink-0">{item.icon}</span>
                                                 ) : null}
-                                                <span className="min-w-0 flex-1">
+                                                <span className="account-item-label min-w-0 flex-1">
                                                     <span className="block truncate">{item.label}</span>
                                                     {item.description && (
                                                         <span
-                                                            className="lm-text-muted block truncate text-[11px] font-normal">
+                                                            className="account-item-meta block truncate text-[11px] font-normal">
 															{item.description}
 														</span>
                                                     )}
@@ -98,13 +96,13 @@ export default function DynamicSidebar({sections, selectedItemId, onSelectItem, 
                                             {item.avatar ? (
                                                 <span className="shrink-0">{item.avatar}</span>
                                             ) : item.icon ? (
-                                                <span className="lm-text-muted shrink-0">{item.icon}</span>
+                                                <span className="account-item-meta shrink-0">{item.icon}</span>
                                             ) : null}
-                                            <span className="min-w-0 flex-1">
+                                            <span className="account-item-label min-w-0 flex-1">
                                                 <span className="block truncate">{item.label}</span>
                                                 {item.description && (
                                                     <span
-                                                        className="lm-text-muted block truncate text-[11px] font-normal">
+                                                        className="account-item-meta block truncate text-[11px] font-normal">
 														{item.description}
 													</span>
                                                 )}
@@ -114,7 +112,7 @@ export default function DynamicSidebar({sections, selectedItemId, onSelectItem, 
                                 );
                             })}
                             {section.items.length === 0 && section.emptyLabel && (
-                                <p className="lm-text-muted px-2 py-2 text-sm">
+                                <p className="account-item-meta px-2 py-2 text-sm">
                                     {section.emptyLabel}
                                 </p>
                             )}

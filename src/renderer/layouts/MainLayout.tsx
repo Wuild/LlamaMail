@@ -25,11 +25,11 @@ import {
 } from '../lib/mailMessageFormat';
 import {getFolderColorClass, getFolderIcon, getFolderSwatchClass} from '../lib/mail/folderPresentation';
 import {
-	DEFAULT_TABLE_COLUMNS,
 	DEFAULT_TABLE_COLUMN_WIDTHS,
+	DEFAULT_TABLE_COLUMNS,
+	type MailTableColumnKey,
 	normalizeColumnWidth,
 	TABLE_COLUMN_OPTIONS,
-	type MailTableColumnKey,
 } from '../lib/mail/tableConfig';
 import {getTagDotClass, getTagLabel} from '../lib/mail/tagPresentation';
 import {useResizableSidebar} from '../hooks/useResizableSidebar';
@@ -132,18 +132,18 @@ const FOLDER_TYPE_OPTIONS = [
 const ACCOUNT_COLLAPSE_STORAGE_KEY = 'llamamail.accountCollapseState.v1';
 const MAIL_TABLE_COLUMNS_STORAGE_KEY = 'llamamail.mailTableColumns.v1';
 const MAIL_TABLE_COLUMN_WIDTHS_STORAGE_KEY = 'llamamail.mailTableColumnWidths.v1';
-const MAIL_TABLE_RESIZE_HANDLE_CLASS = 'absolute inset-y-0 right-[-8px] z-10 w-4 cursor-col-resize hover:bg-sky-400/20';
+const MAIL_TABLE_RESIZE_HANDLE_CLASS = 'mail-table-resize-hover absolute inset-y-0 right-[-8px] z-10 w-4 cursor-col-resize';
 const SIDE_LIST_SPLIT_BREAKPOINT_PX = 1320;
 const SIDE_LIST_SIDEBAR_WINDOW_FRACTION = 0.5;
 const SIDE_LIST_MIN_SIDEBAR_WIDTH_PX = 180;
 const TOP_TABLE_COMPACT_BREAKPOINT_PX = 860;
 
 const MESSAGE_TAG_OPTIONS: Array<{ value: string; label: string; dotClass: string }> = [
-	{value: 'important', label: 'Important', dotClass: 'bg-red-500'},
-	{value: 'work', label: 'Work', dotClass: 'bg-blue-500'},
-	{value: 'personal', label: 'Personal', dotClass: 'bg-emerald-500'},
-	{value: 'todo', label: 'To Do', dotClass: 'bg-amber-500'},
-	{value: 'later', label: 'Later', dotClass: 'bg-violet-500'},
+	{value: 'important', label: 'Important', dotClass: 'tag-dot-important'},
+	{value: 'work', label: 'Work', dotClass: 'tag-dot-work'},
+	{value: 'personal', label: 'Personal', dotClass: 'tag-dot-personal'},
+	{value: 'todo', label: 'To Do', dotClass: 'tag-dot-todo'},
+	{value: 'later', label: 'Later', dotClass: 'tag-dot-later'},
 ];
 
 const MainLayout: React.FC<MainLayoutProps> = ({
@@ -375,11 +375,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 	);
 	const isGlobalSearchActive = searchQuery.trim().length > 0;
 	const filteredSearchMessages = React.useMemo(() => {
-		const normalizedFrom = fromFilter.trim().toLowerCase();
-		const normalizedSubject = subjectFilter.trim().toLowerCase();
-		const normalizedTo = toFilter.trim().toLowerCase();
-		const minSizeKb = Number(minSizeKbFilter);
-		const maxSizeKb = Number(maxSizeKbFilter);
+		const baseResults = searchResults.length > 0 ? searchResults : messages;
+		const normalizedFrom = advancedSearchOpen ? fromFilter.trim().toLowerCase() : '';
+		const normalizedSubject = advancedSearchOpen ? subjectFilter.trim().toLowerCase() : '';
+		const normalizedTo = advancedSearchOpen ? toFilter.trim().toLowerCase() : '';
+		const effectiveReadFilter = advancedSearchOpen ? readFilter : 'all';
+		const effectiveStarFilter = advancedSearchOpen ? starFilter : 'all';
+		const effectiveDateRangeFilter = advancedSearchOpen ? dateRangeFilter : 'all';
+		const minSizeKb = advancedSearchOpen ? Number(minSizeKbFilter) : Number.NaN;
+		const maxSizeKb = advancedSearchOpen ? Number(maxSizeKbFilter) : Number.NaN;
 		const nowMs = Date.now();
 		if (
 			!normalizedFrom &&
@@ -387,15 +391,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 			!normalizedTo &&
 			accountFilter === 'all' &&
 			folderFilter === 'all' &&
-			readFilter === 'all' &&
-			starFilter === 'all' &&
-			dateRangeFilter === 'all' &&
+			effectiveReadFilter === 'all' &&
+			effectiveStarFilter === 'all' &&
+			effectiveDateRangeFilter === 'all' &&
 			!Number.isFinite(minSizeKb) &&
 			!Number.isFinite(maxSizeKb)
 		) {
-			return searchResults;
+			return baseResults;
 		}
-		return searchResults.filter((message) => {
+		return baseResults.filter((message) => {
 			if (normalizedFrom) {
 				const fromName = (message.from_name || '').toLowerCase();
 				const fromAddress = (message.from_address || '').toLowerCase();
@@ -411,16 +415,20 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 			}
 			if (accountFilter !== 'all' && String(message.account_id) !== accountFilter) return false;
 			if (folderFilter !== 'all' && String(message.folder_id) !== folderFilter) return false;
-			if (readFilter === 'read' && !message.is_read) return false;
-			if (readFilter === 'unread' && Boolean(message.is_read)) return false;
-			if (starFilter === 'starred' && !message.is_flagged) return false;
-			if (starFilter === 'unstarred' && Boolean(message.is_flagged)) return false;
-			if (dateRangeFilter !== 'all') {
+			if (effectiveReadFilter === 'read' && !message.is_read) return false;
+			if (effectiveReadFilter === 'unread' && Boolean(message.is_read)) return false;
+			if (effectiveStarFilter === 'starred' && !message.is_flagged) return false;
+			if (effectiveStarFilter === 'unstarred' && Boolean(message.is_flagged)) return false;
+			if (effectiveDateRangeFilter !== 'all') {
 				const messageTime = message.date ? Date.parse(message.date) : 0;
 				if (!messageTime) return false;
 				const dayMs = 24 * 60 * 60 * 1000;
 				const maxAgeMs =
-					dateRangeFilter === '7d' ? 7 * dayMs : dateRangeFilter === '30d' ? 30 * dayMs : 365 * dayMs;
+					effectiveDateRangeFilter === '7d'
+						? 7 * dayMs
+						: effectiveDateRangeFilter === '30d'
+							? 30 * dayMs
+							: 365 * dayMs;
 				if (nowMs - messageTime > maxAgeMs) return false;
 			}
 			const sizeKb = (Number(message.size) || 0) / 1024;
@@ -430,6 +438,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 		});
 	}, [
 		searchResults,
+		messages,
 		fromFilter,
 		subjectFilter,
 		toFilter,
@@ -440,7 +449,27 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 		dateRangeFilter,
 		minSizeKbFilter,
 		maxSizeKbFilter,
+		advancedSearchOpen,
 	]);
+
+	React.useEffect(() => {
+		if (accountFilter === 'all') return;
+		const accountExists = accounts.some((account) => String(account.id) === accountFilter);
+		if (accountExists) return;
+		setAccountFilter('all');
+		setFolderFilter('all');
+	}, [accountFilter, accounts]);
+
+	React.useEffect(() => {
+		if (accountFilter === 'all' || folderFilter === 'all') return;
+		const accountId = Number(accountFilter);
+		if (!Number.isFinite(accountId)) {
+			setFolderFilter('all');
+			return;
+		}
+		const folderExists = (accountFoldersById[accountId] ?? []).some((folder) => String(folder.id) === folderFilter);
+		if (!folderExists) setFolderFilter('all');
+	}, [accountFilter, folderFilter, accountFoldersById]);
 
 	const searchFoldersForSelectedAccount = React.useMemo(() => {
 		if (accountFilter === 'all') return [];
@@ -456,6 +485,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
 	const isCompactSideList = mailView === 'side-list' && viewportWidth < SIDE_LIST_SPLIT_BREAKPOINT_PX;
 	const isCompactTopTable = mailView === 'top-table' && viewportHeight < TOP_TABLE_COMPACT_BREAKPOINT_PX;
+	const closeSearchModal = React.useCallback(() => {
+		setSearchModalOpen(false);
+		onSearchQueryChange('');
+	}, [onSearchQueryChange]);
 	const effectiveSidebarWidth = React.useMemo(() => {
 		if (!isCompactSideList) return sidebarWidth;
 		const maxCompactSidebarWidth = Math.max(
@@ -617,6 +650,18 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
 	React.useEffect(() => {
 		if (!searchModalOpen) return;
+		// Reset advanced filters on open so stale criteria cannot silently hide all matches.
+		setAdvancedSearchOpen(false);
+		setFromFilter('');
+		setSubjectFilter('');
+		setToFilter('');
+		setAccountFilter('all');
+		setFolderFilter('all');
+		setReadFilter('all');
+		setStarFilter('all');
+		setDateRangeFilter('all');
+		setMinSizeKbFilter('');
+		setMaxSizeKbFilter('');
 		const raf = window.requestAnimationFrame(() => {
 			mailSearchModalInputRef.current?.focus();
 			mailSearchModalInputRef.current?.select();
@@ -624,14 +669,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== 'Escape') return;
 			event.preventDefault();
-			setSearchModalOpen(false);
+			closeSearchModal();
 		};
 		window.addEventListener('keydown', onKeyDown);
 		return () => {
 			window.cancelAnimationFrame(raf);
 			window.removeEventListener('keydown', onKeyDown);
 		};
-	}, [searchModalOpen]);
+	}, [searchModalOpen, closeSearchModal]);
 
 	React.useEffect(() => {
 		if (!menu) {
@@ -883,7 +928,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
 	function renderTableCell(message: MessageItem, column: MailTableColumnKey): React.ReactNode {
 		const withBorder = lastVisibleTableColumn !== column;
-		const baseCell = cn('relative px-3 py-2 dark:border-r-[#3a3d44]', withBorder && 'border-r border-r-slate-200');
+		const baseCell = cn('relative px-3 py-2', withBorder && 'border-r ui-border-default');
 
 		switch (column) {
 			case 'subject':
@@ -893,14 +938,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 						className={cn(
 							baseCell,
 							message.is_read
-								? 'font-medium text-slate-700 dark:text-slate-300'
-								: 'font-semibold text-slate-950 dark:text-white',
+								? 'mail-list-subject-read font-medium'
+								: 'mail-list-subject-unread font-semibold',
 						)}
 					>
 						<div className="flex min-w-0 items-center gap-2">
 							{!message.is_read && (
 								<span
-									className="inline-flex h-2 w-2 shrink-0 rounded-full bg-sky-500 dark:bg-[#8ab4ff]"
+									className="mail-list-unread-dot inline-flex h-2 w-2 shrink-0 rounded-full"
 									title="Unread"
 									aria-label="Unread"
 								/>
@@ -908,7 +953,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 							<span className="truncate">{message.subject || '(No subject)'}</span>
 							{getThreadCount(message) > 1 && (
 								<span
-									className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-200 px-1.5 text-[11px] font-semibold leading-none text-slate-700 dark:bg-[#454a55] dark:text-slate-100">
+									className="mail-list-thread-count inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-none">
 									{getThreadCount(message)}
 								</span>
 							)}
@@ -919,7 +964,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				return (
 					<td
 						key={`${message.id}-from`}
-						className={cn(baseCell, 'truncate text-slate-600 dark:text-slate-300')}
+						className={cn(baseCell, 'ui-text-secondary truncate')}
 					>
 						{formatMessageSender(message)}
 					</td>
@@ -928,7 +973,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				return (
 					<td
 						key={`${message.id}-recipient`}
-						className={cn(baseCell, 'truncate text-slate-600 dark:text-slate-300')}
+						className={cn(baseCell, 'ui-text-secondary truncate')}
 					>
 						{formatMessageRecipient(message)}
 					</td>
@@ -937,7 +982,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				return (
 					<td
 						key={`${message.id}-date`}
-						className={cn(baseCell, 'truncate text-slate-600 dark:text-slate-300')}
+						className={cn(baseCell, 'ui-text-secondary truncate')}
 					>
 						{formatSystemDateTime(message.date, dateLocale)}
 					</td>
@@ -946,16 +991,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				return (
 					<td
 						key={`${message.id}-read-status`}
-						className={cn(baseCell, 'text-slate-600 dark:text-slate-300')}
+						className={cn(baseCell, 'ui-text-secondary')}
 					>
 						{message.is_read ? 'Read' : 'Unread'}
 					</td>
 				);
 			case 'flagged':
 				return (
-					<td key={`${message.id}-flagged`} className={cn(baseCell, 'text-slate-600 dark:text-slate-300')}>
+					<td key={`${message.id}-flagged`} className={cn(baseCell, 'ui-text-secondary')}>
 						{message.is_flagged ? (
-							<Star size={12} className="fill-current text-amber-500 dark:text-amber-300"/>
+							<Star size={12} className="mail-list-starred fill-current"/>
 						) : (
 							''
 						)}
@@ -963,7 +1008,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				);
 			case 'tag':
 				return (
-					<td key={`${message.id}-tag`} className={cn(baseCell, 'text-slate-600 dark:text-slate-300')}>
+					<td key={`${message.id}-tag`} className={cn(baseCell, 'ui-text-secondary')}>
 						{renderTagCell((message as MessageItem & { tag?: string | null }).tag ?? null)}
 					</td>
 				);
@@ -971,7 +1016,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				return (
 					<td
 						key={`${message.id}-account`}
-						className={cn(baseCell, 'truncate text-slate-600 dark:text-slate-300')}
+						className={cn(baseCell, 'ui-text-secondary truncate')}
 					>
 						{formatMessageAccount(message, accounts)}
 					</td>
@@ -980,14 +1025,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 				return (
 					<td
 						key={`${message.id}-location`}
-						className={cn(baseCell, 'truncate text-slate-600 dark:text-slate-300')}
+						className={cn(baseCell, 'ui-text-secondary truncate')}
 					>
 						{formatMessageLocation(message, folders)}
 					</td>
 				);
 			case 'size':
 				return (
-					<td key={`${message.id}-size`} className={cn(baseCell, 'text-slate-600 dark:text-slate-300')}>
+					<td key={`${message.id}-size`} className={cn(baseCell, 'ui-text-secondary')}>
 						{formatMessageSize(message.size)}
 					</td>
 				);
@@ -999,7 +1044,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 	return (
 		<>
 			<WorkspaceLayout
-				className="bg-slate-100 dark:bg-[#2f3136]"
+				className="ui-surface-content"
 				showMenuBar={!hideHeader}
 				menubar={
 					<MainLayoutMenubar
@@ -1165,7 +1210,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
 			<MailSearchModal
 				open={searchModalOpen}
-				onClose={() => setSearchModalOpen(false)}
+				onClose={closeSearchModal}
 				inputRef={mailSearchModalInputRef}
 				searchQuery={searchQuery}
 				onSearchQueryChange={onSearchQueryChange}
@@ -1308,7 +1353,7 @@ function renderTagCell(tag: string | null): React.ReactNode {
 	if (!label) return '';
 	return (
 		<span
-			className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-700 dark:border-[#4a4d55] dark:text-slate-200">
+			className="mail-list-tag-chip inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px]">
 			<span className={cn('inline-flex h-2 w-2 shrink-0 rounded-full', getTagDotClass(tag))}/>
 			<span className="truncate">{label}</span>
 		</span>

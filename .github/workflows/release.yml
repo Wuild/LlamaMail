@@ -41,15 +41,6 @@ jobs:
               dist/*.nsis.7z.blockmap
               dist/latest*.yml
               dist/*.blockmap
-          - name: macOS Intel
-            os: macos-15-intel
-            target_args: --mac dmg zip --x64
-            artifact_name: dist-macos-x64
-            artifact_glob: |
-              dist/*-mac.zip
-              dist/*.dmg
-              dist/latest-mac.yml
-              dist/*.blockmap
           - name: macOS Apple Silicon
             os: macos-15
             target_args: --mac dmg zip --arm64

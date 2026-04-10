@@ -3,7 +3,12 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {loadWindowContent} from './loadWindowContent.js';
 import {getAppSettingsSync} from '../settings/store.js';
-import {attachWindowShortcuts, buildSecureWebPreferences, createAppWindow, createFramelessAppWindow} from './windowFactory.js';
+import {
+    attachWindowShortcuts,
+    buildSecureWebPreferences,
+    createAppWindow,
+    createFramelessAppWindow
+} from './windowFactory.js';
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -12,7 +17,7 @@ const __dirname = path.dirname(__filename);
 let messageWin: BrowserWindow | null = null;
 let messageTargetId: number | null = null;
 
-export function openMessageWindow(parentWindow?: BrowserWindow, messageId?: number | null): void {
+export function openMessageWindow(messageId?: number | null): void {
     messageTargetId = typeof messageId === 'number' ? messageId : null;
 
     if (messageWin && !messageWin.isDestroyed()) {
@@ -23,12 +28,9 @@ export function openMessageWindow(parentWindow?: BrowserWindow, messageId?: numb
 
     const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
 
-    const parent = parentWindow && !parentWindow.isDestroyed() ? parentWindow : undefined;
-
     const useNativeTitleBar = Boolean(getAppSettingsSync().useNativeTitleBar);
     const createWindow = useNativeTitleBar ? createAppWindow : createFramelessAppWindow;
     messageWin = createWindow({
-        parent,
         modal: false,
         width: 980,
         height: 760,

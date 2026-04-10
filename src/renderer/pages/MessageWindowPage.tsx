@@ -1,4 +1,5 @@
 import {Button} from '../components/ui/button';
+import {ContextMenu, ContextMenuItem} from '../components/ui/ContextMenu';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {FileText, Forward, MailOpen, Paperclip, Reply, ReplyAll, Star, Tag, Trash2} from 'lucide-react';
 import type {MessageBodyResult, MessageDetails} from '../../preload';
@@ -18,6 +19,7 @@ import {
 } from '../features/mail/composeDraft';
 import {clampToViewport, formatBytes} from '../lib/format';
 import WindowTitleBar from '../components/WindowTitleBar';
+import {Modal, ModalHeader} from '../components/ui/Modal';
 import {useAppTheme} from '../hooks/useAppTheme';
 import {
 	buildSourceDocCsp,
@@ -29,6 +31,7 @@ import {ipcClient} from '../lib/ipcClient';
 import {useIpcEvent} from '../hooks/ipc/useIpcEvent';
 import {useAppSettings as useIpcAppSettings} from '../hooks/ipc/useAppSettings';
 import {DEFAULT_APP_SETTINGS} from '../../shared/defaults';
+import {buildMessageIframeSrcDoc} from './mailPageHelpers';
 
 export default function MessageWindowPage() {
 	useAppTheme();
@@ -143,22 +146,12 @@ export default function MessageWindowPage() {
 
 	const iframeSrcDoc = useMemo(() => {
 		if (!body?.html) return null;
-		const csp = buildSourceDocCsp(allowRemoteForMessage);
-		const html = enrichAnchorTitles(body.html);
-		return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="${csp}" />
-    <base target="_blank" />
-    <style>
-      html, body { width: 100%; margin: 0; box-sizing: border-box; }
-      #llamamail-frame-content { box-sizing: border-box; padding: 16px; }
-    </style>
-  </head>
-  <body><div id="llamamail-frame-content">${html}</div></body>
-</html>`;
+		return buildMessageIframeSrcDoc(
+			body.html,
+			allowRemoteForMessage,
+			enrichAnchorTitles,
+			buildSourceDocCsp,
+		);
 	}, [allowRemoteForMessage, body]);
 	const attachments = body?.attachments ?? [];
 
@@ -177,20 +170,6 @@ export default function MessageWindowPage() {
 		setShowMessageDetails(false);
 	}, [messageId]);
 
-	useEffect(() => {
-		if (!showSourceModal) return;
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') {
-				event.preventDefault();
-				setShowSourceModal(false);
-			}
-		};
-		window.addEventListener('keydown', onKeyDown);
-		return () => {
-			window.removeEventListener('keydown', onKeyDown);
-		};
-	}, [showSourceModal]);
-
 	function composeWithDraft(draft: {
 		to?: string | null;
 		cc?: string | null;
@@ -198,6 +177,9 @@ export default function MessageWindowPage() {
 		body?: string | null;
 		bodyHtml?: string | null;
 		bodyText?: string | null;
+		quotedBodyHtml?: string | null;
+		quotedBodyText?: string | null;
+		quotedAllowRemote?: boolean;
 		inReplyTo?: string | null;
 		references?: string[] | string | null;
 	}) {
@@ -215,8 +197,11 @@ export default function MessageWindowPage() {
 		composeWithDraft({
 			to: replyTo,
 			subject,
-			bodyHtml: quoteHtml,
-			bodyText: `\n\n${buildReplyQuoteText(message, quoteText, systemLocale)}`,
+			bodyHtml: '',
+			bodyText: '',
+			quotedBodyHtml: quoteHtml,
+			quotedBodyText: `\n\n${buildReplyQuoteText(message, quoteText, systemLocale)}`,
+			quotedAllowRemote: allowRemoteForMessage,
 			inReplyTo,
 			references,
 		});
@@ -234,8 +219,11 @@ export default function MessageWindowPage() {
 			to: replyTo,
 			cc: message.to_address || '',
 			subject,
-			bodyHtml: quoteHtml,
-			bodyText: `\n\n${buildReplyQuoteText(message, quoteText, systemLocale)}`,
+			bodyHtml: '',
+			bodyText: '',
+			quotedBodyHtml: quoteHtml,
+			quotedBodyText: `\n\n${buildReplyQuoteText(message, quoteText, systemLocale)}`,
+			quotedAllowRemote: allowRemoteForMessage,
 			inReplyTo,
 			references,
 		});
@@ -251,8 +239,11 @@ export default function MessageWindowPage() {
 			to: '',
 			cc: '',
 			subject,
-			bodyHtml: buildForwardQuoteHtml(message, body?.html, originalText, systemLocale),
-			bodyText: forwarded,
+			bodyHtml: '',
+			bodyText: '',
+			quotedBodyHtml: buildForwardQuoteHtml(message, body?.html, originalText, systemLocale),
+			quotedBodyText: forwarded,
+			quotedAllowRemote: allowRemoteForMessage,
 		});
 	}
 
@@ -296,13 +287,13 @@ export default function MessageWindowPage() {
 	}
 
 	return (
-		<div className="lm-shell h-screen w-screen overflow-hidden">
+		<div className="app-shell h-screen w-screen overflow-hidden">
 			<div className="flex h-full flex-col">
 				<WindowTitleBar title={message?.subject || 'Message'} showMaximize/>
 				<div
 					role="toolbar"
 					aria-label="Message actions"
-					className="lm-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
+					className="mail-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
 				>
 					<Button
 						type="button"
@@ -340,7 +331,7 @@ export default function MessageWindowPage() {
 						<FileText size={14}/>
 						<span>View source</span>
 					</Button>
-					<span className="mx-1 h-6 w-px bg-[var(--border-default)]"/>
+					<span className="divider-default mx-1 h-6 w-px"/>
 					<Button
 						type="button"
 						variant="danger"
@@ -352,29 +343,29 @@ export default function MessageWindowPage() {
 					</Button>
 				</div>
 				<header
-					className="lm-message-header shrink-0 px-4 py-3">
+					className="mail-message-header shrink-0 px-4 py-3">
 					{message && (
 						<>
 							<div className="mb-2 flex flex-wrap items-center gap-1.5">
 								<span
-									className="inline-flex h-5 items-center rounded-md bg-[var(--surface-hover)] px-2 text-[11px] font-medium text-[var(--text-secondary)]">
+									className="chip-muted inline-flex h-5 items-center rounded-md px-2 text-[11px] font-medium">
 									Message
 								</span>
 								{Boolean(message.is_flagged) && (
 									<span
-										className="inline-flex h-5 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 text-[11px] font-medium text-amber-800">
+										className="chip-warning inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-medium">
 										<Star size={11} className="fill-current"/>
 										Starred
 									</span>
 								)}
 								<span
-									className="inline-flex h-5 items-center gap-1 rounded-md border lm-border-default lm-bg-card px-2 text-[11px] font-medium lm-text-secondary">
+									className="inline-flex h-5 items-center gap-1 rounded-md border ui-border-default ui-surface-card px-2 text-[11px] font-medium ui-text-secondary">
 									<MailOpen size={11}/>
 									{message.is_read ? 'Read' : 'Unread'}
 								</span>
 								{Boolean((message as MessageDetails & { tag?: string | null }).tag) && (
 									<span
-										className="inline-flex h-5 items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 text-[11px] font-medium text-sky-800">
+										className="chip-info inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-medium">
 										<Tag size={11}/>
 										{formatMessageTagLabel(
 											(
@@ -387,26 +378,26 @@ export default function MessageWindowPage() {
 								)}
 								{attachments.length > 0 && (
 									<span
-										className="inline-flex h-5 items-center gap-1 rounded-md border lm-border-default lm-bg-card px-2 text-[11px] font-medium lm-text-secondary">
+										className="inline-flex h-5 items-center gap-1 rounded-md border ui-border-default ui-surface-card px-2 text-[11px] font-medium ui-text-secondary">
 										<Paperclip size={11}/>
 										{attachments.length} attachment{attachments.length > 1 ? 's' : ''}
 									</span>
 								)}
 							</div>
-							<h2 className="lm-text-primary truncate text-xl font-semibold tracking-tight">
+							<h2 className="ui-text-primary truncate text-xl font-semibold tracking-tight">
 								{message.subject || '(No subject)'}
 							</h2>
-							<div className="lm-text-secondary mt-2 grid gap-1 text-xs">
+							<div className="ui-text-secondary mt-2 grid gap-1 text-xs">
 								<div className="select-text">
-									<span className="lm-text-muted font-medium">From:</span>{' '}
+									<span className="ui-text-muted font-medium">From:</span>{' '}
 									<span className="select-text">{formatFromDisplay(message)}</span>
 								</div>
 								<div className="select-text">
-									<span className="lm-text-muted font-medium">To:</span>{' '}
+									<span className="ui-text-muted font-medium">To:</span>{' '}
 									<span className="select-text">{message.to_address || '-'}</span>
 								</div>
 								<div>
-									<span className="lm-text-muted font-medium">Date:</span>{' '}
+									<span className="ui-text-muted font-medium">Date:</span>{' '}
 									{formatSystemDateTime(message.date, systemLocale)}
 								</div>
 							</div>
@@ -419,7 +410,7 @@ export default function MessageWindowPage() {
 							</Button>
 							{showMessageDetails && (
 								<div
-									className="mt-3 rounded-md border lm-border-default bg-[var(--surface-content)] p-3 text-xs lm-text-secondary">
+									className="surface-muted mt-3 rounded-md border ui-border-default p-3 text-xs ui-text-secondary">
 									<div>
 										<span className="font-medium">From name:</span> {message.from_name || '-'}
 									</div>
@@ -453,22 +444,21 @@ export default function MessageWindowPage() {
 					)}
 				</header>
 
-				<main className="lm-bg-card min-h-0 flex flex-1 flex-col">
+				<main className="ui-surface-card min-h-0 flex flex-1 flex-col">
 					{Boolean(iframeSrcDoc && message && appSettings.blockRemoteContent && !allowRemoteForMessage) && (
-						<div
-							className="w-full shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+						<div className="notice-warning w-full shrink-0 border-b px-4 py-2 text-xs">
 							<div className="flex flex-wrap items-center gap-2">
 								<span>Remote content blocked for privacy.</span>
 								<Button
 									type="button"
-									className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200"
+									className="notice-button-warning rounded px-2 py-1 text-[11px] font-medium"
 									onClick={() => setSessionRemoteAllowed(true)}
 								>
 									Load once
 								</Button>
 								<Button
 									type="button"
-									className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200"
+									className="notice-button-warning rounded px-2 py-1 text-[11px] font-medium"
 									onClick={allowRemoteContentForSender}
 								>
 									Always allow sender
@@ -478,7 +468,7 @@ export default function MessageWindowPage() {
 					)}
 					<div className="min-h-0 flex-1">
 						{loading && (
-							<div className="lm-text-muted flex h-full items-center justify-center">
+							<div className="ui-text-muted flex h-full items-center justify-center">
 								Loading message...
 							</div>
 						)}
@@ -487,7 +477,10 @@ export default function MessageWindowPage() {
 								title={`message-window-body-${message?.id || 'unknown'}`}
 								srcDoc={iframeSrcDoc}
 								sandbox="allow-popups allow-popups-to-escape-sandbox"
-								className="h-full w-full border-0 bg-[var(--surface-card)]"
+								className="surface-card h-full w-full border-0"
+								onContextMenu={(event) => {
+									event.stopPropagation();
+								}}
 								onMouseEnter={() => setIsPointerOverMessageFrame(true)}
 								onMouseLeave={() => {
 									setIsPointerOverMessageFrame(false);
@@ -496,7 +489,7 @@ export default function MessageWindowPage() {
 							/>
 						)}
 						{!loading && !iframeSrcDoc && (
-							<div className="lm-bg-card h-full overflow-auto p-4 lm-text-primary">
+							<div className="ui-surface-card h-full overflow-auto p-4 ui-text-primary">
 								<pre
 									className="select-text whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
 									{body?.text || 'No body content available for this message.'}
@@ -507,7 +500,7 @@ export default function MessageWindowPage() {
 				</main>
 				{!loading && attachments.length > 0 && (
 					<div
-						className="shrink-0 border-t lm-border-default bg-[color-mix(in_srgb,var(--surface-content)_80%,transparent)] px-4 py-3">
+						className="shrink-0 border-t ui-border-default bg-[color-mix(in_srgb,var(--surface-content)_80%,transparent)] px-4 py-3">
 						<div className="overflow-x-auto overflow-y-hidden">
 							<div className="flex min-w-full w-max gap-2 pb-1">
 								{attachments.map((attachment, index) => (
@@ -528,7 +521,7 @@ export default function MessageWindowPage() {
 										}}
 									>
 										<span
-											className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border lm-border-default bg-[var(--surface-content)] lm-text-muted">
+											className="surface-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ui-border-default ui-text-muted">
 											<Paperclip size={15}/>
 										</span>
 										<span className="min-w-0 flex-1">
@@ -536,7 +529,7 @@ export default function MessageWindowPage() {
 												{attachment.filename || 'Attachment'}
 											</span>
 											<span
-												className="lm-text-muted block truncate text-[11px]">
+												className="ui-text-muted block truncate text-[11px]">
 												{attachment.contentType || 'FILE'}
 												{typeof attachment.size === 'number'
 													? ` • ${formatBytes(attachment.size)}`
@@ -551,22 +544,21 @@ export default function MessageWindowPage() {
 				)}
 				{isPointerOverMessageFrame && Boolean(hoveredLinkUrl) && (
 					<div
-						className="pointer-events-none fixed bottom-3 left-3 z-[1210] max-w-[min(60vw,56rem)] rounded-md border lm-border-default bg-[color-mix(in_srgb,var(--surface-card)_95%,transparent)] px-2.5 py-1.5 text-xs lm-text-secondary shadow-md backdrop-blur">
+						className="pointer-events-none fixed bottom-3 left-3 z-[1210] max-w-[min(60vw,56rem)] rounded-md border ui-border-default bg-[color-mix(in_srgb,var(--surface-card)_95%,transparent)] px-2.5 py-1.5 text-xs ui-text-secondary shadow-md backdrop-blur">
 						<span className="block truncate">{hoveredLinkUrl}</span>
 					</div>
 				)}
 				{attachmentMenu && (
-					<div
-						className="lm-context-menu fixed z-[1100] min-w-44 rounded-md p-1 shadow-xl"
-						style={{
+					<ContextMenu
+						size="sm"
+						layer="1100"
+						position={{
 							left: clampToViewport(attachmentMenu.x, 184, window.innerWidth),
 							top: clampToViewport(attachmentMenu.y, 108, window.innerHeight),
 						}}
 						onClick={(event) => event.stopPropagation()}
 					>
-						<Button
-							variant="ghost"
-							className="block w-full rounded px-2 py-1.5 text-left text-sm"
+						<ContextMenuItem
 							onClick={() => {
 								if (!message) return;
 								void ipcClient
@@ -576,10 +568,8 @@ export default function MessageWindowPage() {
 							}}
 						>
 							Open
-						</Button>
-						<Button
-							variant="ghost"
-							className="block w-full rounded px-2 py-1.5 text-left text-sm"
+						</ContextMenuItem>
+						<ContextMenuItem
 							onClick={() => {
 								if (!message) return;
 								void ipcClient
@@ -589,56 +579,48 @@ export default function MessageWindowPage() {
 							}}
 						>
 							Save As...
-						</Button>
-					</div>
+						</ContextMenuItem>
+					</ContextMenu>
 				)}
-				{showSourceModal && (
-					<div
-						className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 px-4 py-6"
-						onClick={() => setShowSourceModal(false)}
-					>
-						<div
-							role="dialog"
-							aria-modal="true"
-							aria-label="Message source"
-							className="lm-overlay flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl shadow-2xl"
-							onClick={(event) => event.stopPropagation()}
+				<Modal
+					open={showSourceModal}
+					onClose={() => setShowSourceModal(false)}
+					ariaLabel="Message source"
+					backdropClassName="z-[1200] px-4 py-6"
+					contentClassName="overlay flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl p-0"
+				>
+					<ModalHeader className="border-b ui-border-default px-4 py-3">
+						<h2 className="ui-text-primary text-sm font-semibold">
+							Message source
+						</h2>
+						<Button
+							type="button"
+							variant="outline"
+							className="rounded-md px-2 py-1 text-xs"
+							onClick={() => setShowSourceModal(false)}
 						>
-							<div
-								className="flex items-center justify-between border-b lm-border-default px-4 py-3">
-								<h2 className="lm-text-primary text-sm font-semibold">
-									Message source
-								</h2>
-								<Button
-									type="button"
-									variant="outline"
-									className="rounded-md px-2 py-1 text-xs"
-									onClick={() => setShowSourceModal(false)}
-								>
-									Close
-								</Button>
-							</div>
-							<div className="lm-bg-content min-h-0 flex-1 overflow-auto p-3">
-								{sourceLoading && (
-									<p className="lm-text-muted text-sm">
-										Loading message source...
-									</p>
-								)}
-								{!sourceLoading && sourceError && (
-									<p className="text-sm text-red-700">
-										Failed to load source: {sourceError}
-									</p>
-								)}
-								{!sourceLoading && !sourceError && (
-									<pre
-										className="lm-card select-text whitespace-pre-wrap break-words rounded-md p-3 font-mono text-xs leading-5 lm-text-primary">
-										{messageSource || '(No source available)'}
-									</pre>
-								)}
-							</div>
-						</div>
+							Close
+						</Button>
+					</ModalHeader>
+					<div className="ui-surface-content min-h-0 flex-1 overflow-auto p-3">
+						{sourceLoading && (
+							<p className="ui-text-muted text-sm">
+								Loading message source...
+							</p>
+						)}
+						{!sourceLoading && sourceError && (
+							<p className="text-danger text-sm">
+								Failed to load source: {sourceError}
+							</p>
+						)}
+						{!sourceLoading && !sourceError && (
+							<pre
+								className="panel select-text whitespace-pre-wrap break-words rounded-md p-3 font-mono text-xs leading-5 ui-text-primary">
+								{messageSource || '(No source available)'}
+							</pre>
+						)}
 					</div>
-				)}
+				</Modal>
 			</div>
 		</div>
 	);

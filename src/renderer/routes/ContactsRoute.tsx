@@ -8,6 +8,7 @@ import {useResizableSidebar} from '../hooks/useResizableSidebar';
 import {ipcClient} from '../lib/ipcClient';
 import {Button} from '../components/ui/button';
 import {FormInput, FormSelect, FormTextarea} from '../components/ui/FormControls';
+import {Modal} from '../components/ui/Modal';
 import {
     statusAutoSyncFailed,
     statusNoAccountSelected,
@@ -70,8 +71,16 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
     const {sidebarWidth, onResizeStart} = useResizableSidebar();
 
     const loadContacts = React.useCallback(async (targetAccountId: number, q: string, bookId: number | null) => {
-        const rows = await ipcClient.getContacts(targetAccountId, q.trim() || null, 600, bookId ?? null);
-        setContacts(rows);
+        const trimmedQuery = q.trim();
+        const rows = await ipcClient.getContacts(targetAccountId, trimmedQuery || null, 600, bookId ?? null);
+        if (!trimmedQuery || rows.length > 0) {
+            setContacts(rows);
+            return;
+        }
+        // Fallback for any backend search regression: filter locally from the same book/account scope.
+        const unfilteredRows = await ipcClient.getContacts(targetAccountId, null, 600, bookId ?? null);
+        const needle = trimmedQuery.toLowerCase();
+        setContacts(unfilteredRows.filter((contact) => contactMatchesQuery(contact, needle)));
     }, []);
 
     useEffect(() => {
@@ -357,9 +366,9 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
     }
 
     const accountSidebar = (
-        <aside className="lm-sidebar flex h-full min-h-0 shrink-0 flex-col">
+        <aside className="sidebar flex h-full min-h-0 shrink-0 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <p className="lm-text-muted px-2 pb-2 text-xs font-semibold uppercase tracking-wide">
+                <p className="ui-text-muted px-2 pb-2 text-xs font-semibold uppercase tracking-wide">
                     Accounts
                 </p>
                 <div className="space-y-1">
@@ -372,8 +381,8 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 className={cn(
                                     'group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
                                     accountId === account.id
-                                        ? 'lm-bg-active lm-text-primary'
-                                        : 'lm-menu-item',
+                                        ? 'ui-surface-active ui-text-primary'
+                                        : 'account-item',
                                 )}
                             >
                                 <Button
@@ -382,7 +391,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                                 >
                                     <span
-                                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ring-1 ring-black/10"
+                                        className="avatar-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold"
                                         style={{
                                             backgroundColor: avatarColors.background,
                                             color: avatarColors.foreground,
@@ -396,7 +405,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
 										</span>
                                         {account.display_name?.trim() && (
                                             <span
-                                                className="lm-text-muted block truncate text-[11px] font-normal">
+                                                className="ui-text-muted block truncate text-[11px] font-normal">
 												{account.email}
 											</span>
                                         )}
@@ -411,7 +420,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                     <Button
                                         type="button"
                                         variant="ghost"
-                                        className="rounded p-1 lm-text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                                        className="ui-surface-hover ui-hover-text-primary rounded p-1 ui-text-muted transition-colors"
                                         onClick={() => void onManualSync(account.id)}
                                         title="Sync account"
                                         aria-label="Sync account"
@@ -422,7 +431,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                     <Button
                                         type="button"
                                         variant="ghost"
-                                        className="rounded p-1 lm-text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                                        className="ui-surface-hover ui-hover-text-primary rounded p-1 ui-text-muted transition-colors"
                                         onClick={() => navigate(`/settings/account?accountId=${account.id}`)}
                                         title="Edit account"
                                         aria-label="Edit account"
@@ -434,7 +443,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                         );
                     })}
                     {accounts.length === 0 && (
-                        <p className="lm-text-muted px-2 py-2 text-sm">No accounts available.</p>
+                        <p className="ui-text-muted px-2 py-2 text-sm">No accounts available.</p>
                     )}
                 </div>
             </div>
@@ -528,18 +537,18 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
         >
             <div className="mx-auto max-w-5xl">
                 {!accountId && (
-                    <p className="lm-text-muted text-sm">{statusNoAccountSelected()}</p>
+                    <p className="ui-text-muted text-sm">{statusNoAccountSelected()}</p>
                 )}
                 {accountId && (
                     <>
-                        {contactError && <p className="mb-3 text-sm text-red-600">{contactError}</p>}
-                        {loading && <p className="lm-text-muted text-sm">Loading contacts...</p>}
+                        {contactError && <p className="text-danger mb-3 text-sm">{contactError}</p>}
+                        {loading && <p className="ui-text-muted text-sm">Loading contacts...</p>}
                         {!loading && contacts.length === 0 && (
-                            <p className="lm-text-muted text-sm">No contacts found.</p>
+                            <p className="ui-text-muted text-sm">No contacts found.</p>
                         )}
                         {!loading && contacts.length > 0 && (
-                            <div className="lm-card mt-4 overflow-hidden rounded-lg">
-                                <ul className="divide-y lm-border-default">
+                            <div className="panel mt-4 overflow-hidden rounded-lg">
+                                <ul className="contacts-list">
                                     {contacts.map((contact) => (
                                         <li key={contact.id} className="px-4 py-3">
                                             {(() => {
@@ -550,7 +559,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="flex min-w-0 items-start gap-3">
                                                     <span
-                                                        className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xs font-semibold ring-1 ring-black/10"
+                                                        className="avatar-ring mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xs font-semibold"
                                                         style={{
                                                             backgroundColor: avatarColors.background,
                                                             color: avatarColors.foreground,
@@ -560,15 +569,15 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                                         {getContactInitials(contact.full_name, preview.primaryEmail)}
                                                     </span>
                                                     <div className="min-w-0">
-                                                    <p className="lm-text-primary text-sm font-medium">
+                                                        <p className="ui-text-primary text-sm font-medium">
                                                         {contact.full_name || '(No name)'}
                                                     </p>
-                                                    <p className="lm-text-secondary mt-0.5 text-xs">
+                                                        <p className="ui-text-secondary mt-0.5 text-xs">
                                                         {preview.primaryEmail}
                                                         {preview.extraEmails > 0 ? ` (+${preview.extraEmails} more)` : ''}
                                                     </p>
                                                     {(preview.primaryPhone || contact.organization || contact.title) && (
-                                                        <p className="lm-text-muted mt-0.5 text-xs">
+                                                        <p className="ui-text-muted mt-0.5 text-xs">
                                                             {[preview.primaryPhone, contact.organization, contact.title]
                                                                 .filter(Boolean)
                                                                 .join(' • ')}
@@ -598,7 +607,8 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                                     </Button>
                                                     <Button
                                                         type="button"
-                                                        className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                                        variant="danger"
+                                                        className="rounded-md px-2 py-1 text-xs disabled:opacity-50"
                                                         onClick={() => void onDeleteContact(contact.id)}
                                                         disabled={
                                                             !contact.source.startsWith('local:') &&
@@ -627,28 +637,26 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
             </div>
 
             {showAddContactModal && accountId && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
-                    onClick={() => setShowAddContactModal(false)}
+                <Modal
+                    open
+                    onClose={() => setShowAddContactModal(false)}
+                    backdropClassName="z-50"
+                    contentClassName="max-w-5xl"
                 >
-                    <div
-                        className="lm-overlay w-full max-w-5xl rounded-xl p-5 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 void onAddContact();
                             }}
                         >
-                            <h3 className="lm-text-primary text-base font-semibold">Add Contact</h3>
-                            <p className="lm-text-muted mt-1 text-xs">
+                            <h3 className="ui-text-primary text-base font-semibold">Add Contact</h3>
+                            <p className="ui-text-muted mt-1 text-xs">
                                 Create a contact for the selected account.
                             </p>
                             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="space-y-3">
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Full name
 									</span>
                                         <FormInput
@@ -679,7 +687,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 </div>
                                 <div className="space-y-3">
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Organization
 									</span>
                                         <FormInput
@@ -691,7 +699,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                         />
                                     </label>
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Title
 									</span>
                                         <FormInput
@@ -703,7 +711,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                         />
                                     </label>
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Address book
 									</span>
                                         <FormSelect
@@ -722,7 +730,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                         </FormSelect>
                                     </label>
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Notes
 									</span>
                                         <FormTextarea
@@ -753,30 +761,27 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 </Button>
                             </div>
                         </form>
-                    </div>
-                </div>
+                </Modal>
             )}
 
             {editingContact && accountId && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
-                    onClick={() => setEditingContact(null)}
+                <Modal
+                    open
+                    onClose={() => setEditingContact(null)}
+                    backdropClassName="z-50"
+                    contentClassName="max-w-5xl"
                 >
-                    <div
-                        className="lm-overlay w-full max-w-5xl rounded-xl p-5 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 void onSaveEditedContact();
                             }}
                         >
-                            <h3 className="lm-text-primary text-base font-semibold">Edit Contact</h3>
+                            <h3 className="ui-text-primary text-base font-semibold">Edit Contact</h3>
                             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="space-y-3">
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Full name
 									</span>
                                         <FormInput
@@ -806,7 +811,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 </div>
                                 <div className="space-y-3">
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Organization
 									</span>
                                         <FormInput
@@ -817,7 +822,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                         />
                                     </label>
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Title
 									</span>
                                         <FormInput
@@ -828,7 +833,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                         />
                                     </label>
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Address book
 									</span>
                                         <FormSelect
@@ -848,7 +853,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                         </FormSelect>
                                     </label>
                                     <label className="block text-sm">
-									<span className="lm-text-secondary mb-1 block font-medium">
+									<span className="ui-text-secondary mb-1 block font-medium">
 										Notes
 									</span>
                                         <FormTextarea
@@ -879,33 +884,30 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 </Button>
                             </div>
                         </form>
-                    </div>
-                </div>
+                </Modal>
             )}
 
             {showAddAddressBookModal && accountId && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
-                    onClick={() => setShowAddAddressBookModal(false)}
+                <Modal
+                    open
+                    onClose={() => setShowAddAddressBookModal(false)}
+                    backdropClassName="z-50"
+                    contentClassName="max-w-md"
                 >
-                    <div
-                        className="lm-overlay w-full max-w-md rounded-xl p-5 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 void onAddAddressBook();
                             }}
                         >
-                            <h3 className="lm-text-primary text-base font-semibold">
+                            <h3 className="ui-text-primary text-base font-semibold">
                                 Create Address Book
                             </h3>
-                            <p className="lm-text-muted mt-1 text-xs">
+                            <p className="ui-text-muted mt-1 text-xs">
                                 Local address books can be used to organize manual contacts.
                             </p>
                             <label className="mt-4 block text-sm">
-								<span className="lm-text-secondary mb-1 block font-medium">Name</span>
+                                <span className="ui-text-secondary mb-1 block font-medium">Name</span>
                                 <FormInput
                                     type="text"
                                     value={newAddressBookName}
@@ -934,23 +936,20 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 </Button>
                             </div>
                         </form>
-                    </div>
-                </div>
+                </Modal>
             )}
 
             {showExportContactsModal && accountId && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
-                    onClick={() => setShowExportContactsModal(false)}
+                <Modal
+                    open
+                    onClose={() => setShowExportContactsModal(false)}
+                    backdropClassName="z-50"
+                    contentClassName="max-w-md"
                 >
-                    <div
-                        className="lm-overlay w-full max-w-md rounded-xl p-5 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <h3 className="lm-text-primary text-base font-semibold">Export Contacts</h3>
+                    <h3 className="ui-text-primary text-base font-semibold">Export Contacts</h3>
                         <div className="mt-4 space-y-3">
                             <label className="block text-sm">
-								<span className="lm-text-secondary mb-1 block font-medium">
+								<span className="ui-text-secondary mb-1 block font-medium">
 									Format
 								</span>
                                 <FormSelect
@@ -963,7 +962,7 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 </FormSelect>
                             </label>
                             <label className="block text-sm">
-                                <span className="lm-text-secondary mb-1 block font-medium">Scope</span>
+                                <span className="ui-text-secondary mb-1 block font-medium">Scope</span>
                                 <FormSelect
                                     value={exportBookMode}
                                     onChange={(event) =>
@@ -996,11 +995,23 @@ export default function ContactsRoute({accountId, accounts, onSelectAccount}: Co
                                 {exportingContacts ? 'Exporting...' : 'Export'}
                             </Button>
                         </div>
-                    </div>
-                </div>
+                </Modal>
             )}
         </WorkspaceLayout>
     );
+}
+
+function contactMatchesQuery(contact: ContactItem, needle: string): boolean {
+    if (!needle) return true;
+    const haystacks = [
+        contact.full_name || '',
+        contact.email || '',
+        contact.phone || '',
+        contact.organization || '',
+        contact.title || '',
+        contact.note || '',
+    ];
+    return haystacks.some((value) => value.toLowerCase().includes(needle));
 }
 
 function normalizeContactValues(values: string[]): string[] {
@@ -1094,7 +1105,7 @@ function DynamicContactFieldList({
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between">
-                <span className="lm-text-secondary text-sm font-medium">{label}</span>
+                <span className="ui-text-secondary text-sm font-medium">{label}</span>
                 <Button
                     type="button"
                     variant="outline"

@@ -38,14 +38,14 @@ export default function AppSettingsGeneralPanel({
 }: AppSettingsGeneralPanelProps) {
 	return (
 		<div className="mx-auto w-full max-w-5xl">
-			<div className="lm-card mb-4 rounded-xl p-4">
+			<div className="panel mb-4 rounded-xl p-4">
 				<div className="flex items-start justify-between gap-3">
 					<div className="min-w-0">
-						<p className="lm-text-secondary text-sm font-medium">Updates</p>
-						<p className="lm-text-muted mt-1 text-xs">
+						<p className="ui-text-secondary text-sm font-medium">Updates</p>
+						<p className="ui-text-muted mt-1 text-xs">
 							Current version: {autoUpdateState.currentVersion}
 						</p>
-						<p className="lm-text-muted mt-1 text-xs">
+						<p className="ui-text-muted mt-1 text-xs">
 							{autoUpdateState.message || describeUpdatePhase(autoUpdateState)}
 						</p>
 					</div>
@@ -53,7 +53,8 @@ export default function AppSettingsGeneralPanel({
 						{autoUpdateState.phase === 'downloaded' ? (
 							<Button
 								type="button"
-								className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+								variant="success"
+								className="rounded-md px-3 py-2 text-sm font-medium"
 								onClick={() => void onInstallUpdate()}
 							>
 								Restart to Update
@@ -61,7 +62,7 @@ export default function AppSettingsGeneralPanel({
 						) : autoUpdateState.phase === 'available' || autoUpdateState.phase === 'downloading' ? (
 							<Button
 								type="button"
-								className="lm-btn-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+								className="button-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
 								onClick={() => void onDownloadUpdate()}
 								disabled={updateActionBusy || autoUpdateState.phase === 'downloading'}
 							>
@@ -72,7 +73,7 @@ export default function AppSettingsGeneralPanel({
 						) : (
 							<Button
 								type="button"
-								className="lm-btn-secondary rounded-md px-3 py-2 text-sm disabled:opacity-50"
+								className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-50"
 								onClick={() => void onCheckForUpdates()}
 								disabled={updateActionBusy || !autoUpdateState.enabled}
 							>
@@ -81,10 +82,11 @@ export default function AppSettingsGeneralPanel({
 						)}
 					</div>
 				</div>
-				<label className="lm-border-default mt-3 flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+				<label
+					className="ui-border-default mt-3 flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-sm">
 					<div className="pr-3">
-						<span className="lm-text-secondary">Auto update</span>
-						<p className="lm-text-muted mt-1 text-xs">
+						<span className="ui-text-secondary">Auto update</span>
+						<p className="ui-text-muted mt-1 text-xs">
 							Automatically checks for new versions and prepares update downloads.
 						</p>
 					</div>
@@ -94,15 +96,15 @@ export default function AppSettingsGeneralPanel({
 					/>
 				</label>
 			</div>
-			<div className="lm-card mb-4 rounded-xl p-4">
+			<div className="panel mb-4 rounded-xl p-4">
 				<div className="flex items-center justify-between gap-3">
 					<div className="min-w-0">
-						<p className="lm-text-secondary text-sm font-medium">Default Email App</p>
-						<p className="lm-text-muted mt-1 text-xs">
+						<p className="ui-text-secondary text-sm font-medium">Default Email App</p>
+						<p className="ui-text-muted mt-1 text-xs">
 							Use LlamaMail for `mailto:` links from browsers and other apps.
 						</p>
 						{isDefaultEmailClient === true && (
-							<p className="mt-1 text-xs text-emerald-700">
+							<p className="text-success mt-1 text-xs">
 								LlamaMail is already your default email app.
 							</p>
 						)}
@@ -110,7 +112,7 @@ export default function AppSettingsGeneralPanel({
 					{isDefaultEmailClient !== true && (
 						<Button
 							type="button"
-							className="lm-btn-secondary rounded-md px-3 py-2 text-sm disabled:opacity-60"
+							className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-60"
 							onClick={() => void onSetDefaultEmailClient()}
 							disabled={defaultEmailClientBusy}
 						>
@@ -120,15 +122,15 @@ export default function AppSettingsGeneralPanel({
 				</div>
 			</div>
 			<div className="space-y-4">
-				<section className="lm-card space-y-3 rounded-xl p-4">
-					<h2 className="lm-text-primary text-base font-semibold">General</h2>
+				<section className="panel space-y-3 rounded-xl p-4">
+					<h2 className="ui-text-primary text-base font-semibold">General</h2>
 					<label className="block text-sm">
-						<span className="lm-text-secondary mb-1 block font-medium">Language</span>
-						<p className="lm-text-muted mb-2 text-xs">
+						<span className="ui-text-secondary mb-1 block font-medium">Language</span>
+						<p className="ui-text-muted mb-2 text-xs">
 							Sets the app interface language for menus, labels, and settings.
 						</p>
 						<FormSelect
-							className="lm-select h-10 w-full rounded-md px-3 text-sm"
+							className="field-select h-10 w-full rounded-md px-3 text-sm"
 							value={settings.language}
 							onChange={(e) => void applySettingsPatch({language: parseAppLanguage(e.target.value)})}
 						>
@@ -140,14 +142,14 @@ export default function AppSettingsGeneralPanel({
 						</FormSelect>
 					</label>
 					<label className="block text-sm">
-						<span className="lm-text-secondary mb-1 block font-medium">
+						<span className="ui-text-secondary mb-1 block font-medium">
 							Auto sync interval (minutes)
 						</span>
-						<p className="lm-text-muted mb-2 text-xs">
+						<p className="ui-text-muted mb-2 text-xs">
 							How often the app checks mail and updates unread counts in the background.
 						</p>
 						<FormSelect
-							className="lm-select h-10 w-full rounded-md px-3 text-sm"
+							className="field-select h-10 w-full rounded-md px-3 text-sm"
 							value={settings.syncIntervalMinutes}
 							onChange={(e) =>
 								void applySettingsPatch({
@@ -164,12 +166,13 @@ export default function AppSettingsGeneralPanel({
 					</label>
 				</section>
 
-				<section className="lm-card space-y-3 rounded-xl p-4">
-					<h2 className="lm-text-primary text-base font-semibold">Window And Startup</h2>
-					<label className="lm-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+				<section className="panel space-y-3 rounded-xl p-4">
+					<h2 className="ui-text-primary text-base font-semibold">Window And Startup</h2>
+					<label
+						className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
 						<div className="pr-3">
-							<span className="lm-text-secondary">Minimize to tray</span>
-							<p className="lm-text-muted mt-1 text-xs">
+							<span className="ui-text-secondary">Minimize to tray</span>
+							<p className="ui-text-muted mt-1 text-xs">
 								Keeps LunaMail running in the background when minimized.
 							</p>
 						</div>
@@ -178,10 +181,11 @@ export default function AppSettingsGeneralPanel({
 							onChange={(e) => void applySettingsPatch({minimizeToTray: e.target.checked})}
 						/>
 					</label>
-					<label className="lm-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+					<label
+						className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
 						<div className="pr-3">
-							<span className="lm-text-secondary">Show unread in titlebar</span>
-							<p className="lm-text-muted mt-1 text-xs">
+							<span className="ui-text-secondary">Show unread in titlebar</span>
+							<p className="ui-text-muted mt-1 text-xs">
 								Adds unread count to the window title when new mail is available.
 							</p>
 						</div>
@@ -196,14 +200,15 @@ export default function AppSettingsGeneralPanel({
 					</label>
 				</section>
 
-				<section className="lm-card space-y-3 rounded-xl p-4">
-					<h2 className="lm-text-primary text-base font-semibold">
+				<section className="panel space-y-3 rounded-xl p-4">
+					<h2 className="ui-text-primary text-base font-semibold">
 						Composer And Notifications
 					</h2>
-					<label className="lm-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+					<label
+						className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
 						<div className="pr-3">
-							<span className="lm-text-secondary">Spell check</span>
-							<p className="lm-text-muted mt-1 text-xs">
+							<span className="ui-text-secondary">Spell check</span>
+							<p className="ui-text-muted mt-1 text-xs">
 								Highlights misspelled words in editors and compose fields.
 							</p>
 						</div>
@@ -212,10 +217,11 @@ export default function AppSettingsGeneralPanel({
 							onChange={(event) => void applySettingsPatch({spellcheckEnabled: event.target.checked})}
 						/>
 					</label>
-					<label className="lm-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+					<label
+						className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
 						<div className="pr-3">
-							<span className="lm-text-secondary">Notification sound</span>
-							<p className="lm-text-muted mt-1 text-xs">
+							<span className="ui-text-secondary">Notification sound</span>
+							<p className="ui-text-muted mt-1 text-xs">
 								Plays an alert sound for new mail notifications.
 							</p>
 						</div>
@@ -230,12 +236,13 @@ export default function AppSettingsGeneralPanel({
 					</label>
 				</section>
 
-				<section className="lm-card space-y-3 rounded-xl p-4">
-					<h2 className="lm-text-primary text-base font-semibold">Performance</h2>
-					<label className="lm-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+				<section className="panel space-y-3 rounded-xl p-4">
+					<h2 className="ui-text-primary text-base font-semibold">Performance</h2>
+					<label
+						className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
 						<div className="pr-3">
-							<span className="lm-text-secondary">Hardware acceleration</span>
-							<p className="lm-text-muted mt-1 text-xs">
+							<span className="ui-text-secondary">Hardware acceleration</span>
+							<p className="ui-text-muted mt-1 text-xs">
 								Uses your GPU to render the app. Disable if you see flickering, blank windows, or
 								driver issues.
 							</p>
@@ -246,7 +253,7 @@ export default function AppSettingsGeneralPanel({
 						/>
 					</label>
 					{settings.pendingHardwareAcceleration !== null && (
-						<p className="text-xs text-amber-700">
+						<p className="notice-warning rounded-md px-2 py-1 text-xs">
 							Restart queued: will switch to{' '}
 							{settings.pendingHardwareAcceleration ? 'enabled' : 'disabled'}.
 						</p>

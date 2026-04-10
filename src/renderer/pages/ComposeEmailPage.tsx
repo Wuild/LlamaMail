@@ -5,12 +5,12 @@ import {
     File,
     FileArchive,
     FileAudio2,
-    Folder,
     FileCode,
     FileImage,
     FileSpreadsheet,
     FileText,
     FileVideo,
+    Folder,
     Home,
     Loader2,
     Paperclip,
@@ -29,6 +29,7 @@ import type {
 import HtmlLexicalEditor from '../components/HtmlLexicalEditor';
 import AutoComplete, {type AutoCompleteRow} from '../components/inputs/AutoComplete';
 import {FormInput, FormSelect, type FormSelectOption} from '../components/ui/FormControls';
+import {Modal} from '../components/ui/Modal';
 import {Button, ButtonGroup} from '../components/ui/button';
 import WindowTitleBar from '../components/WindowTitleBar';
 import {formatSystemDateTime} from '../lib/dateTime';
@@ -37,6 +38,9 @@ import {useAppTheme} from '../hooks/useAppTheme';
 import {useIpcEvent} from '../hooks/ipc/useIpcEvent';
 import {ipcClient} from '../lib/ipcClient';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '../lib/accountAvatar';
+import {buildSourceDocCsp, enrichAnchorTitles} from '../features/mail/remoteContent';
+import {buildMessageIframeSrcDoc} from './mailPageHelpers';
+import {createDefaultAppSettings} from '../../shared/defaults';
 
 type ComposeAttachment = {
     id: string;
@@ -61,6 +65,11 @@ function ComposeEmailPage() {
     const [subject, setSubject] = useState('');
     const [body, setBody] = useState('');
     const [plainBody, setPlainBody] = useState('');
+    const [quotedBodyHtml, setQuotedBodyHtml] = useState('');
+    const [quotedBodyText, setQuotedBodyText] = useState('');
+    const [quotedAllowRemote, setQuotedAllowRemote] = useState(false);
+    const [showQuotedPreview, setShowQuotedPreview] = useState(false);
+    const [blockRemoteContent, setBlockRemoteContent] = useState<boolean>(createDefaultAppSettings().blockRemoteContent);
     const [threadMeta, setThreadMeta] = useState<{
         inReplyTo?: string | null;
         references?: string[] | string | null;
@@ -222,6 +231,9 @@ function ComposeEmailPage() {
         } else if (typeof draft.body === 'string') {
             setPlainBody(draft.body);
         }
+        setQuotedBodyHtml(typeof draft.quotedBodyHtml === 'string' ? draft.quotedBodyHtml : '');
+        setQuotedBodyText(typeof draft.quotedBodyText === 'string' ? draft.quotedBodyText : '');
+        setQuotedAllowRemote(Boolean(draft.quotedAllowRemote));
         setThreadMeta({
             inReplyTo: draft.inReplyTo ?? null,
             references: draft.references ?? null,
@@ -237,6 +249,24 @@ function ComposeEmailPage() {
 
     useIpcEvent(ipcClient.onComposeDraft, (draft) => {
         applyDraft(draft);
+    });
+
+    useEffect(() => {
+        let active = true;
+        ipcClient
+            .getAppSettings()
+            .then((settings) => {
+                if (!active) return;
+                setBlockRemoteContent(Boolean(settings.blockRemoteContent));
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    useIpcEvent(ipcClient.onAppSettingsUpdated, (settings) => {
+        setBlockRemoteContent(Boolean(settings.blockRemoteContent));
     });
 
     useEffect(() => {
@@ -387,6 +417,14 @@ function ComposeEmailPage() {
         if (hasMeaningfulBodyContent(body, plainBody, autoSignatureRef.current?.text || null)) return true;
         return false;
     }, [attachments.length, bccList.length, body, ccList.length, plainBody, subject, toList.length]);
+    const quotedPreviewSrcDoc = useMemo(() => {
+        const quotedHtml = quotedBodyHtml.trim();
+        if (!quotedHtml) return null;
+        const allowRemoteForQuotedPreview = !blockRemoteContent || quotedAllowRemote;
+        return buildMessageIframeSrcDoc(quotedHtml, allowRemoteForQuotedPreview, enrichAnchorTitles, buildSourceDocCsp);
+    }, [quotedBodyHtml, blockRemoteContent, quotedAllowRemote]);
+    const mergedHtmlBody = useMemo(() => mergeComposeHtml(body, quotedBodyHtml), [body, quotedBodyHtml]);
+    const mergedPlainBody = useMemo(() => mergeComposeText(plainBody, quotedBodyText), [plainBody, quotedBodyText]);
     const draftPayload = useMemo(() => {
         if (!fromAccountId) return null;
         return {
@@ -395,8 +433,8 @@ function ComposeEmailPage() {
             cc: ccList.length ? joinRecipients(ccList) : null,
             bcc: bccList.length ? joinRecipients(bccList) : null,
             subject: subject.trim() || null,
-            html: body.trim() || null,
-            text: plainBody.trim() || null,
+            html: mergedHtmlBody,
+            text: mergedPlainBody,
             inReplyTo: threadMeta.inReplyTo ?? null,
             references: threadMeta.references ?? null,
             attachments: attachments.length
@@ -414,8 +452,8 @@ function ComposeEmailPage() {
         ccList,
         bccList,
         subject,
-        body,
-        plainBody,
+        mergedHtmlBody,
+        mergedPlainBody,
         threadMeta.inReplyTo,
         threadMeta.references,
         attachments,
@@ -554,8 +592,8 @@ function ComposeEmailPage() {
                 cc: ccList.length ? joinRecipients(ccList) : null,
                 bcc: bccList.length ? joinRecipients(bccList) : null,
                 subject: subject || null,
-                html: body || null,
-                text: plainBody || '',
+                html: mergedHtmlBody,
+                text: mergedPlainBody || '',
                 inReplyTo: threadMeta.inReplyTo ?? null,
                 references: threadMeta.references ?? null,
                 attachments: attachments.length
@@ -752,7 +790,7 @@ function ComposeEmailPage() {
 
     return (
         <div
-            className="lm-shell relative h-screen w-screen overflow-hidden"
+            className="app-shell relative h-screen w-screen overflow-hidden"
             onDragEnterCapture={(event) => {
                 if (!isExternalDesktopFileDrag(event.dataTransfer)) return;
                 event.preventDefault();
@@ -787,7 +825,8 @@ function ComposeEmailPage() {
             }}
         >
             {windowDragActive && (
-                <div className="pointer-events-none absolute inset-x-3 bottom-3 top-[3.25rem] z-[90] flex items-center justify-center rounded-xl border-2 border-dashed border-sky-400 bg-sky-100/75 text-sm font-medium text-sky-900">
+                <div
+                    className="dropzone-info pointer-events-none absolute inset-x-3 bottom-3 top-[3.25rem] z-[90] flex items-center justify-center rounded-xl border-2 border-dashed text-sm font-medium">
                     Drop files to attach. Drop on editor body to insert images inline.
                 </div>
             )}
@@ -804,22 +843,21 @@ function ComposeEmailPage() {
                         return confirmed;
                     }}
                 />
-                <header
-                    className="lm-compose-header border-b px-5 py-3 text-[var(--text-inverse)]">
+                <header className="mail-compose-header text-inverse border-b px-5 py-3">
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                             <div
-                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow">
+                                className="compose-hero-icon flex h-9 w-9 items-center justify-center rounded-lg shadow">
                                 <PenSquare size={16}/>
                             </div>
                             <div>
-                                <h1 className="text-base font-semibold text-white">Compose</h1>
-                                <p className="text-xs text-white/70">{status || 'New message'}</p>
+                                <h1 className="compose-hero-title text-base font-semibold">Compose</h1>
+                                <p className="compose-hero-meta text-xs">{status || 'New message'}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-white/70">
+                        <div className="compose-hero-meta flex items-center gap-2 text-xs">
                             <span>{words} words</span>
-                            <span className="rounded-full border border-white/25 px-2 py-0.5 text-white/80">
+                            <span className="compose-hero-chip rounded-full px-2 py-0.5">
 									Draft
 								</span>
                         </div>
@@ -827,11 +865,11 @@ function ComposeEmailPage() {
                 </header>
 
                 <div className="min-h-0 flex-1">
-                    <div className="lm-bg-card flex h-full w-full flex-col overflow-hidden">
-                        <div className="border-b lm-border-default px-5 py-4">
+                    <div className="ui-surface-card flex h-full w-full flex-col overflow-hidden">
+                        <div className="border-b ui-border-default px-5 py-4">
                             <div className="grid grid-cols-1 gap-2 md:grid-cols-[220px_1fr]">
                                 <label className="block text-sm">
-									<span className="lm-text-muted mb-1 block text-xs font-medium">
+									<span className="ui-text-muted mb-1 block text-xs font-medium">
 										From
 									</span>
                                     <FormSelect
@@ -846,7 +884,8 @@ function ComposeEmailPage() {
                                                     <span className="block min-w-0 truncate">
                                                         {option.label}
                                                         {option.description ? (
-                                                            <span className="lm-text-muted"> · {option.description}</span>
+                                                            <span
+                                                                className="ui-text-muted"> · {option.description}</span>
                                                         ) : null}
                                                     </span>
                                                 </span>
@@ -856,7 +895,7 @@ function ComposeEmailPage() {
                                 </label>
 
                                 <label className="block text-sm">
-									<span className="lm-text-muted mb-1 block text-xs font-medium">
+									<span className="ui-text-muted mb-1 block text-xs font-medium">
 										To
 									</span>
                                     <div className="flex gap-2">
@@ -902,7 +941,7 @@ function ComposeEmailPage() {
                                 <div className="mt-2 grid grid-cols-2 gap-2">
                                     <label className="block min-w-0 text-sm">
 										<span
-                                            className="lm-text-muted mb-1 block text-xs font-medium">
+                                            className="ui-text-muted mb-1 block text-xs font-medium">
 											Cc
 										</span>
                                         <RecipientMultiInput
@@ -934,7 +973,7 @@ function ComposeEmailPage() {
 
                                     <label className="block min-w-0 text-sm">
 										<span
-                                            className="lm-text-muted mb-1 block text-xs font-medium">
+                                            className="ui-text-muted mb-1 block text-xs font-medium">
 											Bcc
 										</span>
                                         <RecipientMultiInput
@@ -968,7 +1007,7 @@ function ComposeEmailPage() {
 
                             <div className="mt-2">
                                 <label className="block text-sm">
-									<span className="lm-text-muted mb-1 block text-xs font-medium">
+									<span className="ui-text-muted mb-1 block text-xs font-medium">
 										Subject
 									</span>
                                     <FormInput
@@ -978,10 +1017,27 @@ function ComposeEmailPage() {
                                     />
                                 </label>
                             </div>
+                            {quotedBodyHtml.trim().length > 0 && (
+                                <div
+                                    className="surface-muted mt-2 flex items-center justify-between rounded-md border ui-border-default px-3 py-2">
+                                    <p className="ui-text-secondary text-xs">Quoted message will be included in this
+                                        reply/forward.</p>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-auto px-2 py-1 text-xs"
+                                        onClick={() => setShowQuotedPreview(true)}
+                                    >
+                                        Preview quote
+                                    </Button>
+                                </div>
+                            )}
                         </div>
 
                         <div className="min-h-0 flex-1">
-                            <div className="relative h-full w-full">
+                            <div className="flex h-full w-full flex-col">
+                                <div className="relative min-h-0 flex-1">
                                 <HtmlLexicalEditor
                                     value={body}
                                     placeholder="Write your message..."
@@ -991,10 +1047,11 @@ function ComposeEmailPage() {
                                         setPlainBody(plainText);
                                     }}
                                 />
+                                </div>
                             </div>
                         </div>
 
-                        <footer className="border-t lm-border-default bg-[var(--surface-content)] px-5 py-3">
+                        <footer className="surface-muted border-t ui-border-default px-5 py-3">
                             {attachments.length > 0 && (
                                 <div className="mb-3 overflow-x-auto overflow-y-hidden pr-1">
                                     <div className="flex min-w-full w-max gap-2 pb-1">
@@ -1073,6 +1130,40 @@ function ComposeEmailPage() {
                     onAttach={(item) => void onAttachCloudItem(item)}
                 />
             )}
+            {showQuotedPreview && quotedBodyHtml.trim().length > 0 && (
+                <Modal
+                    open
+                    onClose={() => setShowQuotedPreview(false)}
+                    ariaLabel="Quoted message preview"
+                    backdropClassName="z-50 px-4"
+                    contentClassName="overlay flex w-full max-w-4xl flex-col overflow-hidden rounded-xl p-0"
+                >
+                    <div className="flex items-center justify-between border-b ui-border-default px-4 py-3">
+                        <h2 className="ui-text-primary text-sm font-semibold">Quoted message preview</h2>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto px-2 py-1 text-xs"
+                            onClick={() => setShowQuotedPreview(false)}
+                        >
+                            Close
+                        </Button>
+                    </div>
+                    <div className="surface-muted max-h-[70vh] overflow-auto p-4">
+                        {quotedPreviewSrcDoc ? (
+                            <iframe
+                                title="quoted-message-preview"
+                                srcDoc={quotedPreviewSrcDoc}
+                                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                className="iframe-surface h-[64vh] w-full rounded-md border-0"
+                            />
+                        ) : (
+                            <div className="ui-text-muted text-sm">No quoted content available.</div>
+                        )}
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }
@@ -1116,10 +1207,15 @@ function CloudAttachmentPickerModal({
     const isAtRoot = currentPath === rootPath;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-            <div className="lm-overlay flex w-full max-w-3xl flex-col overflow-hidden rounded-xl shadow-2xl">
-                <div className="flex items-center justify-between border-b lm-border-default px-4 py-3">
-                    <h2 className="lm-text-primary text-sm font-semibold">Add file from cloud</h2>
+        <Modal
+            open
+            onClose={onClose}
+            ariaLabel="Add file from cloud"
+            backdropClassName="z-50 px-4"
+            contentClassName="overlay flex w-full max-w-3xl flex-col overflow-hidden rounded-xl p-0"
+        >
+            <div className="flex items-center justify-between border-b ui-border-default px-4 py-3">
+                <h2 className="ui-text-primary text-sm font-semibold">Add file from cloud</h2>
                     <Button
                         type="button"
                         variant="ghost"
@@ -1131,7 +1227,8 @@ function CloudAttachmentPickerModal({
                     </Button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 border-b lm-border-default px-4 py-3 md:grid-cols-[280px_1fr_auto_auto_auto]">
+            <div
+                className="grid grid-cols-1 gap-2 border-b ui-border-default px-4 py-3 md:grid-cols-[280px_1fr_auto_auto_auto]">
                     <FormSelect
                         className="h-9"
                         value={selectedAccountId}
@@ -1144,7 +1241,8 @@ function CloudAttachmentPickerModal({
                             </option>
                         ))}
                     </FormSelect>
-                    <div className="flex h-9 min-w-0 items-center gap-1 overflow-x-auto rounded-md border lm-border-default bg-[var(--surface-content)] px-2 text-xs lm-text-secondary">
+                <div
+                    className="surface-muted flex h-9 min-w-0 items-center gap-1 overflow-x-auto rounded-md border ui-border-default px-2 text-xs ui-text-secondary">
                         {breadcrumbs.map((crumb, index) => (
                             <React.Fragment key={`${crumb.path}-${index}`}>
                                 {index > 0 ? <ChevronRight size={12} className="shrink-0 opacity-70"/> : null}
@@ -1199,16 +1297,17 @@ function CloudAttachmentPickerModal({
 
                 <div className="min-h-[16rem] max-h-[24rem] overflow-y-auto">
                     {loading && cloudItems.length === 0 ? (
-                        <div className="lm-text-muted flex min-h-[16rem] items-center justify-center gap-2 px-2 py-3 text-sm">
+                        <div
+                            className="ui-text-muted flex min-h-[16rem] items-center justify-center gap-2 px-2 py-3 text-sm">
                             <Loader2 size={16} className="animate-spin"/>
                             <span>Loading cloud files...</span>
                         </div>
                     ) : cloudAccounts.length === 0 ? (
-                        <p className="lm-text-muted px-2 py-3 text-sm">
+                        <p className="ui-text-muted px-2 py-3 text-sm">
                             Add a cloud account in Cloud to attach files.
                         </p>
                     ) : cloudItems.length === 0 ? (
-                        <div className="lm-text-muted flex min-h-[16rem] items-center justify-center px-2 py-3 text-sm">
+                        <div className="ui-text-muted flex min-h-[16rem] items-center justify-center px-2 py-3 text-sm">
                             No files in this folder.
                         </div>
                     ) : (
@@ -1222,7 +1321,7 @@ function CloudAttachmentPickerModal({
                                 <col style={{width: '88px'}}/>
                             </colgroup>
                             <thead
-                                className="sticky top-0 z-10 border-b lm-border-default bg-[var(--surface-content)] text-xs uppercase tracking-wide lm-text-secondary">
+                                className="surface-muted sticky top-0 z-10 border-b ui-border-default text-xs uppercase tracking-wide ui-text-secondary">
                             <tr className="text-left">
                                 <th className="px-3 py-2">Name</th>
                                 <th className="px-3 py-2">Type</th>
@@ -1236,31 +1335,31 @@ function CloudAttachmentPickerModal({
                             {cloudItems.map((item) => (
                                 <tr
                                     key={item.id || item.path}
-                                    className="border-b lm-border-default hover:bg-[var(--surface-hover)]"
+                                    className="border-b ui-border-default ui-surface-hover"
                                 >
                                     <td className="px-3 py-2">
                                         <Button
                                             type="button"
-                                            className="lm-text-primary flex min-w-0 items-center gap-2 text-left hover:underline"
+                                            className="ui-text-primary flex min-w-0 items-center gap-2 text-left hover:underline"
                                             onClick={() => (item.isFolder ? onNavigate(item.path || item.id) : onAttach(item))}
                                             disabled={busy}
                                         >
-                                            <span className="lm-text-muted shrink-0">
+                                            <span className="ui-text-muted shrink-0">
                                                 {renderCloudItemIcon(item)}
                                             </span>
                                             <span className="truncate">{item.name}</span>
                                         </Button>
                                     </td>
-                                    <td className="lm-text-muted px-3 py-2 text-xs">
+                                    <td className="ui-text-muted px-3 py-2 text-xs">
                                         {item.isFolder ? 'Folder' : cloudFileTypeLabel(item)}
                                     </td>
-                                    <td className="lm-text-muted px-3 py-2 text-xs">
+                                    <td className="ui-text-muted px-3 py-2 text-xs">
                                         {item.isFolder ? '-' : formatBytes(item.size ?? 0)}
                                     </td>
-                                    <td className="lm-text-muted px-3 py-2 text-xs">
+                                    <td className="ui-text-muted px-3 py-2 text-xs">
                                         {formatSystemDateTime(item.modifiedAt) || '-'}
                                     </td>
-                                    <td className="lm-text-muted px-3 py-2 text-xs">
+                                    <td className="ui-text-muted px-3 py-2 text-xs">
                                         {formatSystemDateTime(item.createdAt) || '-'}
                                     </td>
                                     <td className="px-2 py-2 text-right">
@@ -1284,12 +1383,11 @@ function CloudAttachmentPickerModal({
                 </div>
 
                 {status && (
-                    <div className="border-t lm-border-default px-4 py-2 text-xs text-amber-600">
+                    <div className="notice-warning border-t px-4 py-2 text-xs">
                         {status}
                     </div>
                 )}
-            </div>
-        </div>
+        </Modal>
     );
 }
 
@@ -1324,7 +1422,7 @@ function RecipientMultiInput({
 }) {
     return (
         <div
-            className={`lm-input relative flex min-h-11 w-full flex-wrap items-center gap-1 rounded-lg px-3 py-1 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] transition-all ${className || ''}`}
+            className={`field-input relative flex min-h-11 w-full flex-wrap items-center gap-1 rounded-lg px-3 py-1 text-sm transition-all ${className || ''}`}
             onClick={(event) => {
                 const container = event.currentTarget;
                 const input = container.querySelector('input');
@@ -1332,15 +1430,13 @@ function RecipientMultiInput({
             }}
         >
             {recipients.map((recipient) => (
-                <span
-                    key={recipient}
-                    className="inline-flex h-7 max-w-full items-center gap-1 rounded-md bg-[var(--surface-hover)] px-2 text-xs lm-text-primary"
-                >
+                <span key={recipient}
+                      className="chip-muted ui-text-primary inline-flex h-7 max-w-full items-center gap-1 rounded-md px-2 text-xs">
                     <span className="truncate">{recipient}</span>
                     <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto min-w-0 p-0 lm-text-muted hover:text-[var(--text-primary)]"
+                        className="ui-hover-text-primary h-auto min-w-0 p-0 ui-text-muted"
                         onClick={(event) => {
                             event.stopPropagation();
                             onRemoveRecipient(recipient);
@@ -1376,7 +1472,7 @@ function RecipientMultiInput({
                 inputClassName="h-7 border-0 bg-transparent px-1 py-0 text-sm shadow-none focus:ring-0"
             />
             {invalidMessage ? (
-                <div className="w-full pl-1 text-[11px] text-rose-600">{invalidMessage}</div>
+                <div className="text-danger w-full pl-1 text-[11px]">{invalidMessage}</div>
             ) : null}
         </div>
     );
@@ -1414,9 +1510,9 @@ function AttachmentCard({attachment, onRemove}: { attachment: ComposeAttachment;
 
     return (
         <div
-            className="group relative flex w-[17rem] items-center gap-2 rounded-lg border lm-border-default bg-[var(--surface-content)] p-2 text-xs lm-text-secondary">
+            className="surface-muted group relative flex w-[17rem] items-center gap-2 rounded-lg border ui-border-default p-2 text-xs ui-text-secondary">
             <div
-                className="h-10 w-10 shrink-0 overflow-hidden rounded-md border lm-border-default lm-bg-card">
+                className="h-10 w-10 shrink-0 overflow-hidden rounded-md border ui-border-default ui-surface-card">
                 {isImage && !imageFailed ? (
                     <img
                         src={toFileUrl(attachment.path)}
@@ -1425,14 +1521,14 @@ function AttachmentCard({attachment, onRemove}: { attachment: ComposeAttachment;
                         onError={() => setImageFailed(true)}
                     />
                 ) : (
-                    <div className="lm-text-muted flex h-full w-full items-center justify-center">
+                    <div className="ui-text-muted flex h-full w-full items-center justify-center">
                         {renderAttachmentTypeIcon(attachment.filename, attachment.contentType)}
                     </div>
                 )}
             </div>
             <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{attachment.filename}</p>
-                <p className="lm-text-muted truncate text-[11px]">
+                <p className="ui-text-muted truncate text-[11px]">
                     {attachment.contentType || fileExtensionLabel(attachment.filename)}
                     {typeof attachment.size === 'number' ? ` • ${formatBytes(attachment.size)}` : ''}
                 </p>
@@ -1667,6 +1763,24 @@ function normalizeRecipientAddress(raw: string | null | undefined): string | nul
     const candidate = (angleMatch?.[1] || trimmed).trim().replace(/^"+|"+$/g, '');
     const normalized = candidate.toLowerCase();
     return EMAIL_ADDRESS_REGEX.test(normalized) ? normalized : null;
+}
+
+function mergeComposeHtml(bodyHtml: string, quotedHtml: string): string | null {
+    const editorHtml = String(bodyHtml || '').trim();
+    const quoteHtml = String(quotedHtml || '').trim();
+    if (editorHtml && quoteHtml) return `${editorHtml}${quoteHtml}`;
+    if (editorHtml) return editorHtml;
+    if (quoteHtml) return quoteHtml;
+    return null;
+}
+
+function mergeComposeText(plainBody: string, quotedText: string): string | null {
+    const editorText = String(plainBody || '').trim();
+    const quoteText = String(quotedText || '').trim();
+    if (editorText && quoteText) return `${editorText}\n\n${quoteText}`;
+    if (editorText) return editorText;
+    if (quoteText) return quoteText;
+    return null;
 }
 
 function htmlToPlainText(html: string): string {

@@ -19,8 +19,8 @@ export function getAccountAvatarColors(seed: string): { background: string; fore
 
     const [r, g, b] = hslToRgb(hue, saturation, lightness);
     const whiteContrast = contrastRatio([r, g, b], [255, 255, 255]);
-    const darkContrast = contrastRatio([r, g, b], [15, 23, 42]);
-    const foreground = whiteContrast >= darkContrast ? "#ffffff" : "#0f172a";
+    const darkContrast = contrastRatio([r, g, b], [0, 0, 0]);
+    const foreground = whiteContrast >= darkContrast ? "white" : "black";
     return {background, foreground};
 }
 

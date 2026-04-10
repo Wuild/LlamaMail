@@ -4,16 +4,14 @@ import path from "node:path";
 import {clearDebugLogs, createAppLogger, getDebugLogs} from "../debug/debugLog.js";
 import {type ComposeDraftPayload, getComposeDraft, openComposeWindow} from "../windows/composeWindow.js";
 import {getMessageWindowTargetId, openMessageWindow} from "../windows/messageWindow.js";
-import {openAddAccountWindow} from "../windows/addAccountWindow.js";
 import {openDebugWindow} from "../windows/debugWindow.js";
 
 const logger = createAppLogger("ipc:windows");
 
-export function registerWindowIpc(): void {
-    ipcMain.handle("open-add-account-window", async (event) => {
+export function registerWindowIpc(options?: { onOpenAddAccountRoute?: () => void }): void {
+    ipcMain.handle("open-add-account-window", async (_event) => {
         logger.info("IPC open-add-account-window");
-        const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-        openAddAccountWindow(parentWindow);
+        options?.onOpenAddAccountRoute?.();
         return {ok: true} as const;
     });
 
@@ -40,17 +38,15 @@ export function registerWindowIpc(): void {
         return {ok: true} as const;
     });
 
-    ipcMain.handle("open-message-window", async (event, messageId?: number | null) => {
+    ipcMain.handle("open-message-window", async (_event, messageId?: number | null) => {
         logger.info("IPC open-message-window messageId=%s", messageId ?? "");
-        const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-        openMessageWindow(parentWindow, messageId ?? null);
+        openMessageWindow(messageId ?? null);
         return {ok: true} as const;
     });
 
-    ipcMain.handle("open-debug-window", async (event) => {
+    ipcMain.handle("open-debug-window", async (_event) => {
         logger.info("IPC open-debug-window");
-        const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-        openDebugWindow(parentWindow);
+        openDebugWindow();
         return {ok: true} as const;
     });
 

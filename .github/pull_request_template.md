@@ -6,8 +6,8 @@
 ## Validation (Required)
 
 - [ ] `npm run build` completed successfully on this branch.
-- [ ] Smoke checklist executed: `docs/SMOKE_TEST_CHECKLIST.md`.
-- [ ] Smoke evidence included in this PR description (pass/fail notes + date).
+- [ ] `npm run check:architecture` completed successfully on this branch.
+- [ ] `npm run test:unit` completed successfully on this branch.
 
 ## Risk Review
 

@@ -7,6 +7,7 @@ import {useWindowControlsState} from '../hooks/ipc/useWindowControlsState';
 import {useAppSettings} from '../hooks/ipc/useAppSettings';
 import {DEFAULT_APP_SETTINGS} from '../../shared/defaults';
 import {APP_NAME} from '../../shared/appConfig';
+import {useAutoUpdateState} from "../hooks/ipc/useAutoUpdateState";
 
 interface WindowTitleBarProps {
     title: string;
@@ -31,10 +32,12 @@ export default function WindowTitleBar({
         return null;
     }
 
+    const {appVersion} = useAutoUpdateState();
+
     return (
         <div
             className={cn(
-                'lm-titlebar relative flex h-9 shrink-0 items-center justify-between px-2',
+                'titlebar relative flex h-9 shrink-0 items-center justify-between px-2',
                 className,
             )}
             style={{WebkitAppRegion: 'drag'} as React.CSSProperties}
@@ -43,30 +46,34 @@ export default function WindowTitleBar({
                 void toggleMaximize();
             }}
         >
-            <div className="pointer-events-none flex min-w-0 flex-1 items-center justify-start gap-3">
-                <div className="lm-text-titlebar flex shrink-0 items-center gap-2 text-xs font-medium">
+            <div className="titlebar-left pointer-events-none flex min-w-0 flex-1 items-center justify-start gap-3">
+                <div className="titlebar-title flex shrink-0 items-center gap-2 text-xs font-medium">
                     <img
                         src={llamaLogo}
                         alt=""
-                        className="h-5 w-5 object-contain contrast-125 saturate-125"
+                        className="h-7 w-7 object-contain contrast-125 saturate-125"
                         style={{imageRendering: '-webkit-optimize-contrast'}}
                         draggable={false}
                     />
                     <span>{APP_NAME}</span>
+                    <span className="titlebar-meta text-[10px] font-semibold uppercase tracking-wide">
+								{appVersion}
+							</span>
                 </div>
-                <span aria-hidden className="lm-titlebar-divider h-3.5 w-px shrink-0"/>
-                <span className="lm-text-titlebar block min-w-0 flex-1 truncate text-xs font-semibold tracking-wide">
-					{title}
-				</span>
+                <span aria-hidden className="titlebar-divider h-3.5 w-px shrink-0"/>
+                <span
+                    className="titlebar-title block min-w-0 flex-1 truncate text-xs font-semibold tracking-wide">
+                    {title}
+                </span>
             </div>
             <div
-                className="flex w-24 shrink-0 items-center justify-end gap-1"
+                className="titlebar-actions flex w-24 shrink-0 items-center justify-end gap-1"
                 style={{WebkitAppRegion: 'no-drag'} as React.CSSProperties}
             >
                 {showMinimize && (
                     <Button
                         type="button"
-                        className="lm-titlebar-btn inline-flex h-7 w-7 items-center justify-center rounded"
+                        className="titlebar-button inline-flex h-7 w-7 items-center justify-center rounded"
                         onClick={() => void minimize()}
                         aria-label="Minimize"
                         title="Minimize"
@@ -77,7 +84,7 @@ export default function WindowTitleBar({
                 {showMaximize && (
                     <Button
                         type="button"
-                        className="lm-titlebar-btn inline-flex h-7 w-7 items-center justify-center rounded"
+                        className="titlebar-button inline-flex h-7 w-7 items-center justify-center rounded"
                         onClick={() => void toggleMaximize()}
                         aria-label={isMaximized ? 'Restore' : 'Maximize'}
                         title={isMaximized ? 'Restore' : 'Maximize'}
@@ -88,7 +95,7 @@ export default function WindowTitleBar({
                 {showClose && (
                     <Button
                         type="button"
-                        className="inline-flex h-7 w-7 items-center justify-center rounded text-white/80 hover:bg-red-600 hover:text-white"
+                        className="titlebar-button-close inline-flex h-7 w-7 items-center justify-center rounded"
                         onClick={() => {
                             if (onRequestClose && !onRequestClose()) return;
                             void close();

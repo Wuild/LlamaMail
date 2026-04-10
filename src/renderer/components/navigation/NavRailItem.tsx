@@ -26,8 +26,8 @@ export default function NavRailItem({to, icon, label, badgeCount = 0, activePath
             draggable={false}
             className={({isActive}) =>
                 cn(
-                    'inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white',
-                    (isActive || hasPrefixMatch) && 'bg-white/15 text-white',
+                    'nav-rail-item inline-flex h-11 w-11 items-center justify-center rounded-lg transition-colors',
+                    (isActive || hasPrefixMatch) && 'is-active',
                 )
             }
         >

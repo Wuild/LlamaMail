@@ -4,7 +4,12 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {loadWindowContent} from './loadWindowContent.js';
 import {getAppSettingsSync, getSpellCheckerLanguages} from '../settings/store.js';
-import {attachWindowShortcuts, buildSecureWebPreferences, createAppWindow, createFramelessAppWindow} from './windowFactory.js';
+import {
+    attachWindowShortcuts,
+    buildSecureWebPreferences,
+    createAppWindow,
+    createFramelessAppWindow
+} from './windowFactory.js';
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +38,9 @@ export interface ComposeDraftPayload {
     body?: string | null;
     bodyHtml?: string | null;
     bodyText?: string | null;
+    quotedBodyHtml?: string | null;
+    quotedBodyText?: string | null;
+    quotedAllowRemote?: boolean;
     inReplyTo?: string | null;
     references?: string[] | string | null;
 }
@@ -53,7 +61,6 @@ export function openComposeWindow(parentWindow?: BrowserWindow, draft?: ComposeD
     const useNativeTitleBar = Boolean(getAppSettingsSync().useNativeTitleBar);
     const createWindow = useNativeTitleBar ? createAppWindow : createFramelessAppWindow;
     composeWin = createWindow({
-        parent: parentWindow && !parentWindow.isDestroyed() ? parentWindow : undefined,
         modal: false,
         width: normalizedState?.width ?? 920,
         height: normalizedState?.height ?? 760,
@@ -62,6 +69,7 @@ export function openComposeWindow(parentWindow?: BrowserWindow, draft?: ComposeD
             : {}),
         minWidth: COMPOSE_WINDOW_MIN_WIDTH,
         minHeight: COMPOSE_WINDOW_MIN_HEIGHT,
+        minimizable: true,
         maximizable: true,
         title: 'Compose Email',
         webPreferences: buildSecureWebPreferences({

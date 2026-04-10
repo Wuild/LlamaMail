@@ -45,7 +45,7 @@ function WindowBootstrap({kind}: { kind: WindowKind }): React.ReactElement {
     if (kind === 'add-account') {
         return (
             <React.Suspense fallback={null}>
-                <div className="h-screen w-screen bg-slate-50">
+                <div className="ui-surface-content h-screen w-screen">
                     <AddAccountWindow/>
                 </div>
             </React.Suspense>

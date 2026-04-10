@@ -1,5 +1,6 @@
 import {FormControlGroup, FormInput, FormSelect} from '../ui/FormControls';
 import {Button} from '../ui/button';
+import {Modal} from '../ui/Modal';
 import React, {useMemo} from 'react';
 import {Link} from 'react-router-dom';
 import {Search, Star, X} from 'lucide-react';
@@ -124,17 +125,10 @@ export default function MailSearchModal({
     );
 
     return (
-        <div
-            className="fixed inset-0 z-[1100] flex items-start justify-center bg-slate-950/45 p-4 pt-20"
-            onClick={onClose}
-        >
-            <div
-                className="lm-overlay w-full max-w-4xl rounded-2xl p-4 shadow-2xl"
-                onClick={(event) => event.stopPropagation()}
-            >
+        <Modal open onClose={onClose} align="top" contentClassName="max-w-4xl rounded-2xl p-4">
                 <div className="flex items-center gap-2">
                     <FormControlGroup className="flex min-w-0 flex-1">
-                        <div className="min-w-0 flex-1">
+                        <div className="relative min-w-0 flex-1">
                             <FormInput
                                 ref={inputRef}
                                 type="text"
@@ -143,8 +137,21 @@ export default function MailSearchModal({
                                 placeholder="Search sender, subject, or content across all accounts..."
                                 leftIcon={<Search size={16}/>}
                                 groupPosition="first"
-                                className="rounded-r-none"
+                                className="rounded-r-none pr-9"
                             />
+                            {searchQuery.trim().length > 0 && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="absolute right-1 top-1/2 z-20 h-7 w-7 -translate-y-1/2 rounded p-0"
+                                    onClick={() => onSearchQueryChange('')}
+                                    aria-label="Clear search"
+                                    title="Clear search"
+                                >
+                                    <X size={14}/>
+                                </Button>
+                            )}
                         </div>
                         <div className="-ml-px w-[11rem] shrink-0">
                             <FormSelect
@@ -169,7 +176,7 @@ export default function MailSearchModal({
                                             <span className="min-w-0 flex-1">
                                             <span className="block truncate">{option.label}</span>
                                             {option.description ? (
-                                                <span className="lm-text-muted block truncate text-[11px]">
+                                                <span className="ui-text-muted block truncate text-[11px]">
                                                     {option.description}
                                                 </span>
                                             ) : null}
@@ -179,19 +186,8 @@ export default function MailSearchModal({
                             />
                         </div>
                     </FormControlGroup>
-                    {searchQuery.trim().length > 0 && (
-                        <Button
-                            type="button"
-                            className="lm-btn-ghost inline-flex h-8 w-8 items-center justify-center rounded transition-colors"
-                            onClick={() => onSearchQueryChange('')}
-                            aria-label="Clear search"
-                            title="Clear search"
-                        >
-                            <X size={14}/>
-                        </Button>
-                    )}
                 </div>
-                <div className="lm-text-muted mt-2 flex items-center justify-between px-1 text-xs">
+            <div className="ui-text-muted mt-2 flex items-center justify-between px-1 text-xs">
 					<span>
 						{accountFilter === 'all'
                             ? 'Searching all accounts and folders'
@@ -200,14 +196,14 @@ export default function MailSearchModal({
                     <div className="flex items-center gap-1">
                         <Button
                             type="button"
-                            className="lm-btn-ghost rounded px-2 py-1 transition-colors"
+                            className="button-ghost rounded px-2 py-1 transition-colors"
                             onClick={onToggleAdvancedSearch}
                         >
                             {advancedSearchOpen ? 'Basic' : 'Advanced'}
                         </Button>
                         <Button
                             type="button"
-                            className="lm-btn-ghost rounded px-2 py-1 transition-colors"
+                            className="button-ghost rounded px-2 py-1 transition-colors"
                             onClick={onClose}
                         >
                             Esc
@@ -216,33 +212,33 @@ export default function MailSearchModal({
                 </div>
                 {advancedSearchOpen && (
                     <div
-                        className="lm-card mt-2 grid grid-cols-1 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:grid-cols-4">
+                        className="panel mt-2 grid grid-cols-1 gap-2 rounded-xl p-2 sm:grid-cols-3 lg:grid-cols-4">
                         <FormInput
                             type="search"
                             value={fromFilter}
                             onChange={(event) => onFromFilterChange(event.target.value)}
                             placeholder="From address/name"
-                            className="lm-input h-9 rounded-md px-2 text-xs"
+                            className="field-input h-9 rounded-md px-2 text-xs"
                         />
                         <FormInput
                             type="search"
                             value={subjectFilter}
                             onChange={(event) => onSubjectFilterChange(event.target.value)}
                             placeholder="Subject"
-                            className="lm-input h-9 rounded-md px-2 text-xs"
+                            className="field-input h-9 rounded-md px-2 text-xs"
                         />
                         <FormInput
                             type="search"
                             value={toFilter}
                             onChange={(event) => onToFilterChange(event.target.value)}
                             placeholder="To address"
-                            className="lm-input h-9 rounded-md px-2 text-xs"
+                            className="field-input h-9 rounded-md px-2 text-xs"
                         />
                         <FormSelect
                             value={folderFilter}
                             onChange={(event) => onFolderFilterChange(event.target.value)}
                             disabled={accountFilter === 'all'}
-                            className="lm-select h-9 rounded-md px-2 text-xs disabled:opacity-60"
+                            className="field-select h-9 rounded-md px-2 text-xs disabled:opacity-60"
                         >
                             <option value="all">All folders</option>
                             {searchFoldersForSelectedAccount.map((folder) => (
@@ -254,7 +250,7 @@ export default function MailSearchModal({
                         <FormSelect
                             value={readFilter}
                             onChange={(event) => onReadFilterChange(event.target.value as 'all' | 'read' | 'unread')}
-                            className="lm-select h-9 rounded-md px-2 text-xs"
+                            className="field-select h-9 rounded-md px-2 text-xs"
                         >
                             <option value="all">Read status: all</option>
                             <option value="read">Read only</option>
@@ -265,7 +261,7 @@ export default function MailSearchModal({
                             onChange={(event) =>
                                 onStarFilterChange(event.target.value as 'all' | 'starred' | 'unstarred')
                             }
-                            className="lm-select h-9 rounded-md px-2 text-xs"
+                            className="field-select h-9 rounded-md px-2 text-xs"
                         >
                             <option value="all">Star: all</option>
                             <option value="starred">Starred only</option>
@@ -276,7 +272,7 @@ export default function MailSearchModal({
                             onChange={(event) =>
                                 onDateRangeFilterChange(event.target.value as 'all' | '7d' | '30d' | '365d')
                             }
-                            className="lm-select h-9 rounded-md px-2 text-xs"
+                            className="field-select h-9 rounded-md px-2 text-xs"
                         >
                             <option value="all">Any date</option>
                             <option value="7d">Last 7 days</option>
@@ -290,7 +286,7 @@ export default function MailSearchModal({
                             value={minSizeKbFilter}
                             onChange={(event) => onMinSizeKbFilterChange(event.target.value)}
                             placeholder="Min size (KB)"
-                            className="lm-input h-9 rounded-md px-2 text-xs"
+                            className="field-input h-9 rounded-md px-2 text-xs"
                         />
                         <div className="flex items-center gap-2">
                             <FormInput
@@ -300,11 +296,11 @@ export default function MailSearchModal({
                                 value={maxSizeKbFilter}
                                 onChange={(event) => onMaxSizeKbFilterChange(event.target.value)}
                                 placeholder="Max size (KB)"
-                                className="lm-input h-9 min-w-0 flex-1 rounded-md px-2 text-xs"
+                                className="field-input h-9 min-w-0 flex-1 rounded-md px-2 text-xs"
                             />
                             <Button
                                 type="button"
-                                className="lm-btn-secondary h-9 shrink-0 rounded-md px-2 text-xs"
+                                className="button-secondary h-9 shrink-0 rounded-md px-2 text-xs"
                                 onClick={onResetFilters}
                             >
                                 Reset
@@ -315,19 +311,19 @@ export default function MailSearchModal({
                 <div className="mt-3 max-h-[56vh] overflow-y-auto">
                     {!isGlobalSearchActive && (
                         <div
-                            className="lm-border-default lm-text-muted rounded-lg border border-dashed px-3 py-6 text-center text-sm">
+                            className="ui-border-default ui-text-muted rounded-lg border border-dashed px-3 py-6 text-center text-sm">
                             Type to search emails across all accounts.
                         </div>
                     )}
                     {isGlobalSearchActive && searchLoading && (
                         <div
-                            className="lm-border-default lm-text-muted rounded-lg border border-dashed px-3 py-6 text-center text-sm">
+                            className="ui-border-default ui-text-muted rounded-lg border border-dashed px-3 py-6 text-center text-sm">
                             Searching...
                         </div>
                     )}
                     {isGlobalSearchActive && !searchLoading && filteredSearchMessages.length === 0 && (
                         <div
-                            className="lm-border-default lm-text-muted rounded-lg border border-dashed px-3 py-6 text-center text-sm">
+                            className="ui-border-default ui-text-muted rounded-lg border border-dashed px-3 py-6 text-center text-sm">
                             No matching emails found.
                         </div>
                     )}
@@ -342,7 +338,9 @@ export default function MailSearchModal({
                                     <Link
                                         key={message.id}
                                         to={`/email/${message.account_id}/${message.folder_id}/${message.id}`}
-                                        className="lm-list-row block w-full rounded-lg border border-transparent px-3 py-2 text-left no-underline transition-colors hover:border-[var(--border-default)]"
+                                        className={`mail-search-result block w-full rounded-lg px-3 py-2 text-left no-underline ${
+                                            message.is_read ? '' : 'is-unread'
+                                        }`}
                                         style={{color: 'inherit'}}
                                         onClick={() => {
                                             onSelectMessage(message.id, idx);
@@ -350,37 +348,39 @@ export default function MailSearchModal({
                                         }}
                                     >
                                         <div
-                                            className={`truncate text-sm ${message.is_read ? 'lm-text-secondary font-medium' : 'lm-text-primary font-semibold'}`}
+                                            className={`mail-search-result-subject truncate text-sm ${
+                                                message.is_read ? 'font-medium' : 'font-semibold'
+                                            }`}
                                         >
                                             {message.subject || '(No subject)'}
                                         </div>
                                         <div className="mt-1 flex items-center justify-between gap-2">
-											<span className="lm-text-muted truncate text-xs">
+											<span className="mail-search-result-meta truncate text-xs">
 												{formatMessageSender(message)}
 											</span>
                                             <div className="ml-2 flex shrink-0 items-center gap-2">
                                                 {Boolean(message.is_flagged) && (
                                                     <span
-                                                        className="inline-flex items-center text-amber-500"
+                                                        className="mail-list-starred inline-flex items-center"
                                                         title="Starred"
                                                     >
 														<Star size={12} className="fill-current"/>
 													</span>
                                                 )}
-                                                <span className="lm-text-muted text-xs">
+                                                <span className="mail-search-result-meta text-xs">
 													{formatSystemDateTime(message.date, dateLocale)}
 												</span>
                                             </div>
                                         </div>
                                         <div
-                                            className="lm-text-muted mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                            className="mail-search-result-meta mt-1 flex items-center justify-between gap-2 text-[11px]">
 											<span className="truncate">
 												{account?.display_name?.trim() ||
                                                     account?.email ||
                                                     `Account ${message.account_id}`}
 											</span>
                                             <span
-                                                className="lm-bg-hover lm-text-secondary shrink-0 rounded px-1.5 py-0.5 text-[10px]">
+                                                className="mail-search-result-folder shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium">
 												{folder?.custom_name ||
                                                     folder?.name ||
                                                     folder?.path ||
@@ -393,7 +393,6 @@ export default function MailSearchModal({
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }

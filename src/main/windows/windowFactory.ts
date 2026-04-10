@@ -1,4 +1,6 @@
-import {BrowserWindow, type BrowserWindowConstructorOptions} from 'electron';
+import {app, BrowserWindow, type BrowserWindowConstructorOptions} from 'electron';
+import path from "path";
+import fs from "fs";
 
 type SecureWebPreferencesOptions = {
     preloadPath: string;
@@ -9,6 +11,8 @@ type ShortcutOptions = {
     closeOnEscape?: boolean;
     onEscape?: () => void;
 };
+
+let cachedWindowIconPath: string | null | undefined;
 
 export function buildSecureWebPreferences({
                                               preloadPath,
@@ -22,11 +26,45 @@ export function buildSecureWebPreferences({
     };
 }
 
+export function resolveWindowIconPath(): string | null {
+    if (cachedWindowIconPath !== undefined) {
+        return cachedWindowIconPath;
+    }
+    const candidates = [
+        path.join(app.getAppPath(), 'build/icon.ico'),
+        path.join(app.getAppPath(), 'build/icons/512x512.png'),
+        path.join(app.getAppPath(), 'build/icon.png'),
+        path.join(app.getAppPath(), 'src/resources/llama.ico'),
+        path.join(app.getAppPath(), 'src/resources/llama.png'),
+        path.join(app.getAppPath(), 'src/resources/luna.ico'),
+        path.join(app.getAppPath(), 'src/resources/luna.png'),
+        path.join(process.cwd(), 'build/icon.ico'),
+        path.join(process.cwd(), 'build/icons/512x512.png'),
+        path.join(process.cwd(), 'build/icon.png'),
+        path.join(process.cwd(), 'src/resources/llama.ico'),
+        path.join(process.cwd(), 'src/resources/llama.png'),
+        path.join(process.cwd(), 'src/resources/luna.ico'),
+        path.join(process.cwd(), 'src/resources/luna.png'),
+    ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            cachedWindowIconPath = candidate;
+            return cachedWindowIconPath;
+        }
+    }
+    cachedWindowIconPath = null;
+    return cachedWindowIconPath;
+}
+
 export function createAppWindow(options: BrowserWindowConstructorOptions): BrowserWindow {
+    const appIconPath = resolveWindowIconPath();
+
     const win = new BrowserWindow({
         autoHideMenuBar: true,
         backgroundColor: '#0b0c10',
+        minimizable: true,
         ...options,
+        icon: options.icon ?? appIconPath ?? undefined,
     });
     win.setMenuBarVisibility(false);
     win.removeMenu();
@@ -63,7 +101,7 @@ export function attachWindowShortcuts(win: BrowserWindow, options: ShortcutOptio
         if (!isF12 && !isCtrlShiftI && !isCmdAltI) return;
         event.preventDefault();
         if (!win.isDestroyed()) {
-            win.webContents.openDevTools({mode: 'detach'});
+            win.webContents.openDevTools();
         }
     });
 }

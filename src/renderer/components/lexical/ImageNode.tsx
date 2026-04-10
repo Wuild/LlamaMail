@@ -6,12 +6,12 @@ import {
     $getNodeByKey,
     COMMAND_PRIORITY_LOW,
     DecoratorNode,
-    KEY_BACKSPACE_COMMAND,
-    KEY_DELETE_COMMAND,
     type DOMConversionMap,
     type DOMConversionOutput,
     type DOMExportOutput,
     type EditorConfig,
+    KEY_BACKSPACE_COMMAND,
+    KEY_DELETE_COMMAND,
     type LexicalNode,
     type NodeKey,
     type SerializedLexicalNode,
@@ -490,7 +490,7 @@ function EditableImage({
         <div contentEditable={false} className="relative py-1">
             <div
                 ref={wrapRef}
-                className={`relative ${alignClass} ${isSelected ? 'ring-2 ring-sky-500/80' : ''}`}
+                className={`relative ${alignClass} ${isSelected ? 'image-selected-ring' : ''}`}
                 style={style}
                 onMouseDown={onSelect}
                 onClick={stopEvent}
@@ -510,27 +510,52 @@ function EditableImage({
                 {isSelected && (
                     <>
                         <div
-                            className="absolute left-1 top-1 z-30 flex items-center gap-1 rounded-md border border-slate-300 bg-white/95 p-1 shadow-sm dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-card-dark)]/95"
+                            className="panel absolute left-1 top-1 z-30 flex items-center gap-1 rounded-md border p-1 shadow-sm"
                             onMouseDown={stopEvent}
                             onClick={stopEvent}
                         >
-                            <Button type="button" className={`rounded px-1.5 text-[11px] ${align === 'none' ? 'bg-slate-200 dark:bg-[var(--lm-border-default-dark)]' : ''}`} onClick={() => updateNode((n) => n.setAlign('none'))}>B</Button>
-                            <Button type="button" className={`rounded px-1.5 text-[11px] ${align === 'left' ? 'bg-slate-200 dark:bg-[var(--lm-border-default-dark)]' : ''}`} onClick={() => updateNode((n) => n.setAlign('left'))}>L</Button>
-                            <Button type="button" className={`rounded px-1.5 text-[11px] ${align === 'center' ? 'bg-slate-200 dark:bg-[var(--lm-border-default-dark)]' : ''}`} onClick={() => updateNode((n) => n.setAlign('center'))}>C</Button>
-                            <Button type="button" className={`rounded px-1.5 text-[11px] ${align === 'right' ? 'bg-slate-200 dark:bg-[var(--lm-border-default-dark)]' : ''}`} onClick={() => updateNode((n) => n.setAlign('right'))}>R</Button>
-                            <div className="mx-0.5 h-4 w-px bg-slate-300 dark:bg-[var(--lm-border-default-dark)]"/>
-                            <Button type="button" className="rounded px-1.5 text-[11px] text-red-600 dark:text-red-400" onClick={() => editor.update(() => $getNodeByKey(nodeKey)?.remove())}>x</Button>
+                            <Button type="button"
+                                    className={`rounded px-1.5 text-[11px] ${align === 'none' ? 'ui-surface-active' : ''}`}
+                                    onClick={() => updateNode((n) => n.setAlign('none'))}>B</Button>
+                            <Button type="button"
+                                    className={`rounded px-1.5 text-[11px] ${align === 'left' ? 'ui-surface-active' : ''}`}
+                                    onClick={() => updateNode((n) => n.setAlign('left'))}>L</Button>
+                            <Button type="button"
+                                    className={`rounded px-1.5 text-[11px] ${align === 'center' ? 'ui-surface-active' : ''}`}
+                                    onClick={() => updateNode((n) => n.setAlign('center'))}>C</Button>
+                            <Button type="button"
+                                    className={`rounded px-1.5 text-[11px] ${align === 'right' ? 'ui-surface-active' : ''}`}
+                                    onClick={() => updateNode((n) => n.setAlign('right'))}>R</Button>
+                            <div className="divider-default mx-0.5 h-4 w-px"/>
+                            <Button type="button" className="text-danger rounded px-1.5 text-[11px]"
+                                    onClick={() => editor.update(() => $getNodeByKey(nodeKey)?.remove())}>x</Button>
                         </div>
 
-                        <ResizeOverlay handle="left" className="absolute bottom-2 left-[-1px] top-2 w-1.5 cursor-ew-resize rounded bg-sky-500/80" startResize={startResize}/>
-                        <ResizeOverlay handle="right" className="absolute bottom-2 right-[-1px] top-2 w-1.5 cursor-ew-resize rounded bg-sky-500/80" startResize={startResize}/>
-                        <ResizeOverlay handle="top" className="absolute left-2 right-2 top-[-1px] h-1.5 cursor-ns-resize rounded bg-sky-500/80" startResize={startResize}/>
-                        <ResizeOverlay handle="bottom" className="absolute bottom-[-1px] left-2 right-2 h-1.5 cursor-ns-resize rounded bg-sky-500/80" startResize={startResize}/>
+                        <ResizeOverlay handle="left"
+                                       className="image-resize-bar absolute bottom-2 left-[-1px] top-2 w-1.5 cursor-ew-resize rounded"
+                                       startResize={startResize}/>
+                        <ResizeOverlay handle="right"
+                                       className="image-resize-bar absolute bottom-2 right-[-1px] top-2 w-1.5 cursor-ew-resize rounded"
+                                       startResize={startResize}/>
+                        <ResizeOverlay handle="top"
+                                       className="image-resize-bar absolute left-2 right-2 top-[-1px] h-1.5 cursor-ns-resize rounded"
+                                       startResize={startResize}/>
+                        <ResizeOverlay handle="bottom"
+                                       className="image-resize-bar absolute bottom-[-1px] left-2 right-2 h-1.5 cursor-ns-resize rounded"
+                                       startResize={startResize}/>
 
-                        <ResizeOverlay handle="top-left" className="absolute left-[-1px] top-[-1px] h-2.5 w-2.5 cursor-nwse-resize rounded-sm border border-sky-600 bg-white" startResize={startResize}/>
-                        <ResizeOverlay handle="top-right" className="absolute right-[-1px] top-[-1px] h-2.5 w-2.5 cursor-nesw-resize rounded-sm border border-sky-600 bg-white" startResize={startResize}/>
-                        <ResizeOverlay handle="bottom-left" className="absolute bottom-[-1px] left-[-1px] h-2.5 w-2.5 cursor-nesw-resize rounded-sm border border-sky-600 bg-white" startResize={startResize}/>
-                        <ResizeOverlay handle="bottom-right" className="absolute bottom-[-1px] right-[-1px] h-2.5 w-2.5 cursor-nwse-resize rounded-sm border border-sky-600 bg-white" startResize={startResize}/>
+                        <ResizeOverlay handle="top-left"
+                                       className="image-resize-corner absolute left-[-1px] top-[-1px] h-2.5 w-2.5 cursor-nwse-resize rounded-sm"
+                                       startResize={startResize}/>
+                        <ResizeOverlay handle="top-right"
+                                       className="image-resize-corner absolute right-[-1px] top-[-1px] h-2.5 w-2.5 cursor-nesw-resize rounded-sm"
+                                       startResize={startResize}/>
+                        <ResizeOverlay handle="bottom-left"
+                                       className="image-resize-corner absolute bottom-[-1px] left-[-1px] h-2.5 w-2.5 cursor-nesw-resize rounded-sm"
+                                       startResize={startResize}/>
+                        <ResizeOverlay handle="bottom-right"
+                                       className="image-resize-corner absolute bottom-[-1px] right-[-1px] h-2.5 w-2.5 cursor-nwse-resize rounded-sm"
+                                       startResize={startResize}/>
                     </>
                 )}
             </div>

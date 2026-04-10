@@ -1,3 +1,5 @@
+import mailFrameCss from '../styles/mail-frame.css?raw';
+
 export function parseRouteNumber(value?: string): number | null {
     if (!value) return null;
     const parsed = Number(value);
@@ -33,20 +35,23 @@ export function buildMessageIframeSrcDoc(
     buildSourceDocCsp: (allowRemote: boolean) => string,
 ): string {
     const rawHtml = enrichAnchorTitles(renderedBodyHtml);
-    const hasExplicitStyles = /<style[\s>]|font-family\s*:/i.test(rawHtml);
     const csp = buildSourceDocCsp(allowRemoteForSelectedMessage);
-    const defaultReadableCss = hasExplicitStyles
-        ? ''
-        : `
-      body {
-        padding: 16px;
-        box-sizing: border-box;
-        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
-        font-size: 14px;
-        line-height: 1.5;
-        color: #111827;
-      }
-      `;
+    const rootStyles = window.getComputedStyle(document.documentElement);
+    const dark = document.documentElement.classList.contains('dark');
+    const scrollbarTrack = rootStyles.getPropertyValue(
+        dark ? '--sidebar-surface' : '--app-border',
+    ).trim() || (dark ? '#2b2d31' : '#e2e8f0');
+    const scrollbarThumb = rootStyles.getPropertyValue(
+        dark ? '--scrollbar-thumb-dark' : '--scrollbar-thumb-light',
+    ).trim() || (dark ? '#5b5e66' : '#94a3b8');
+    const scrollbarThumbHover = rootStyles.getPropertyValue(
+        dark ? '--scrollbar-thumb-dark-hover' : '--scrollbar-thumb-light-hover',
+    ).trim() || (dark ? '#7a7e87' : '#64748b');
+    const frameBackground = '#ffffff';
+    const frameText = '#1f2937';
+    const frameLink = '#0b57d0';
+    const colorScheme = 'light';
+    const themeCss = `:root { --llamamail-color-scheme: ${colorScheme}; --llamamail-frame-bg: ${frameBackground}; --llamamail-frame-text: ${frameText}; --llamamail-frame-link: ${frameLink}; --llamamail-scrollbar-track: ${scrollbarTrack}; --llamamail-scrollbar-thumb: ${scrollbarThumb}; --llamamail-scrollbar-thumb-hover: ${scrollbarThumbHover}; }`;
 
     return `<!doctype html>
 <html>
@@ -56,10 +61,8 @@ export function buildMessageIframeSrcDoc(
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <base target="_blank" />
     <style>
-      html, body { width: 100%; margin: 0; }
-      body { box-sizing: border-box; }
-      #llamamail-frame-content { box-sizing: border-box; padding: 16px; }
-      ${defaultReadableCss}
+      ${themeCss}
+      ${mailFrameCss}
     </style>
   </head>
   <body><div id="llamamail-frame-content">${rawHtml}</div></body>

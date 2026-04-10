@@ -23,20 +23,19 @@ export default function SplashScreenPage() {
 	const isDownloading = state.phase === 'downloading';
 
 	return (
-		<div className="h-screen w-screen overflow-hidden bg-[#1f232b] text-slate-100">
+		<div className="splash-screen h-screen w-screen overflow-hidden">
 			<div className="relative flex h-full items-center justify-center overflow-hidden p-8">
-				<div
-					className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_10%,rgba(255,255,255,0.05),transparent_55%)]"/>
+				<div className="splash-screen-glow pointer-events-none absolute inset-0"/>
 				<div className="mx-auto flex w-full max-w-[360px] flex-col items-center">
 					<img src={llamaLogo} alt="" className="h-80 w-80 object-contain" draggable={false}/>
-					<p className="text-center text-[22px] font-semibold tracking-wide text-white/90">LlamaMail</p>
-					<p className="mt-2 text-center text-[11px] font-medium uppercase tracking-wide text-slate-400">
+					<p className="splash-brand text-center text-[22px] font-semibold tracking-wide">LlamaMail</p>
+					<p className="splash-muted mt-2 text-center text-[11px] font-medium uppercase tracking-wide">
 						{progressText}
 					</p>
 					{isDownloading && (
-						<div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#171a20]">
+						<div className="splash-progress-track mt-3 h-2 w-full overflow-hidden rounded-full">
 							<div
-								className="h-full rounded-full bg-gradient-to-r from-sky-400 via-blue-400 to-sky-400 bg-[length:200%_100%] transition-all duration-300 animate-pulse"
+								className="splash-progress-fill h-full rounded-full bg-[length:200%_100%] transition-all duration-300 animate-pulse"
 								style={{width: `${resolveProgress(state)}%`}}
 							/>
 						</div>

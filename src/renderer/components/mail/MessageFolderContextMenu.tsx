@@ -1,4 +1,3 @@
-import {Button} from '../ui/button';
 import React from 'react';
 import {
     Archive,
@@ -15,6 +14,13 @@ import {
 import type {FolderItem, MessageItem} from '../../../preload';
 import ContextItem from './ContextItem';
 import {cn} from '../../lib/utils';
+import {
+    ContextMenu,
+    ContextMenuAnchor,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuSubmenu,
+} from '../ui/ContextMenu';
 
 type TagOption = {
     value: string;
@@ -97,14 +103,12 @@ export default function MessageFolderContextMenu({
     if (!menu) return null;
 
     return (
-        <div
+        <ContextMenu
             ref={menuRef}
-            className="fixed z-[1000] min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-menu-dark)]"
-            style={{
-                left: menuPosition.left,
-                top: menuPosition.top,
-                visibility: menuReady ? 'visible' : 'hidden',
-            }}
+            size="lg"
+            layer="1000"
+            position={menuPosition}
+            ready={menuReady}
             onClick={(event) => event.stopPropagation()}
         >
             {menu.kind === 'message' && (
@@ -133,10 +137,11 @@ export default function MessageFolderContextMenu({
                             onClose();
                         }}
                     />
-                    <div className="group relative">
-                        <Button
+                    <ContextMenuAnchor>
+                        <ContextMenuItem
                             type="button"
-                            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-active-dark)]"
+                            align="between"
+                            className="transition-colors"
                         >
 							<span className="flex items-center gap-2">
 								<span
@@ -150,19 +155,19 @@ export default function MessageFolderContextMenu({
 								Tag
 							</span>
                             <ChevronRight size={14}/>
-                        </Button>
-                        <div
+                        </ContextMenuItem>
+                        <ContextMenuSubmenu
+                            size="md"
                             className={cn(
-                                'absolute top-0 z-[1010] hidden min-w-52 rounded-md border border-slate-200 bg-white p-1 shadow-xl group-hover:block group-focus-within:block dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-menu-dark)]',
                                 moveSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1',
                             )}
                             style={{transform: `translateY(${moveSubmenuOffsetY}px)`}}
                         >
                             {messageTagOptions.map((tag) => (
-                                <Button
+                                <ContextMenuItem
                                     key={tag.value}
                                     type="button"
-                                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-active-dark)]"
+                                    align="between"
                                     onClick={() => {
                                         onMessageTagChange(menu.message, tag.value);
                                         onClose();
@@ -174,23 +179,22 @@ export default function MessageFolderContextMenu({
 									</span>
                                     {((menu.message as MessageItem & { tag?: string | null }).tag || '') ===
                                         tag.value && (
-                                            <span className="text-xs text-emerald-600 dark:text-emerald-300">On</span>
+                                            <span className="text-success text-xs">On</span>
                                         )}
-                                </Button>
+                                </ContextMenuItem>
                             ))}
-                            <div className="my-1 h-px bg-slate-200 dark:bg-[var(--lm-border-default-dark)]"/>
-                            <Button
+                            <ContextMenuSeparator/>
+                            <ContextMenuItem
                                 type="button"
-                                className="flex w-full items-center rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-active-dark)]"
                                 onClick={() => {
                                     onMessageTagChange(menu.message, null);
                                     onClose();
                                 }}
                             >
                                 Clear tag
-                            </Button>
-                        </div>
-                    </div>
+                            </ContextMenuItem>
+                        </ContextMenuSubmenu>
+                    </ContextMenuAnchor>
                     <ContextItem
                         label="Archive"
                         icon={<Archive size={14}/>}
@@ -199,22 +203,23 @@ export default function MessageFolderContextMenu({
                             onClose();
                         }}
                     />
-                    <div className="my-1 h-px bg-slate-200"/>
-                    <div className="group relative">
-                        <Button
+                    <ContextMenuSeparator/>
+                    <ContextMenuAnchor>
+                        <ContextMenuItem
                             ref={moveToTriggerRef}
                             type="button"
-                            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-active-dark)]"
+                            align="between"
+                            className="transition-colors"
                         >
 							<span className="flex items-center gap-2">
 								<Folder size={14}/>
 								Move to
 							</span>
                             <ChevronRight size={14}/>
-                        </Button>
-                        <div
+                        </ContextMenuItem>
+                        <ContextMenuSubmenu
+                            size="lg"
                             className={cn(
-                                'absolute top-0 z-[1010] hidden min-w-56 rounded-md border border-slate-200 bg-white p-1 shadow-xl group-hover:block group-focus-within:block dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-menu-dark)]',
                                 moveSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1',
                             )}
                             style={{
@@ -231,7 +236,7 @@ export default function MessageFolderContextMenu({
                                         <span
                                             className={cn(
                                                 getFolderColorClass(folder.color) ||
-                                                'text-slate-500 dark:text-slate-300',
+                                                'icon-muted',
                                             )}
                                         >
 											{getFolderIcon(folder)}
@@ -244,7 +249,7 @@ export default function MessageFolderContextMenu({
                                 />
                             ))}
                             {moveTargetsProtected.length > 0 && moveTargetsCustom.length > 0 && (
-                                <div className="my-1 h-px bg-slate-200 dark:bg-[var(--lm-border-default-dark)]"/>
+                                <ContextMenuSeparator/>
                             )}
                             {moveTargetsCustom.map((folder) => (
                                 <ContextItem
@@ -254,7 +259,7 @@ export default function MessageFolderContextMenu({
                                         <span
                                             className={cn(
                                                 getFolderColorClass(folder.color) ||
-                                                'text-slate-500 dark:text-slate-300',
+                                                'icon-muted',
                                             )}
                                         >
 											{getFolderIcon(folder)}
@@ -266,9 +271,9 @@ export default function MessageFolderContextMenu({
                                     }}
                                 />
                             ))}
-                        </div>
-                    </div>
-                    <div className="my-1 h-px bg-slate-200"/>
+                        </ContextMenuSubmenu>
+                    </ContextMenuAnchor>
+                    <ContextMenuSeparator/>
                     <ContextItem
                         label="Delete"
                         icon={<Trash2 size={14}/>}
@@ -316,7 +321,8 @@ export default function MessageFolderContextMenu({
                     />
                     {!isProtectedFolder(menu.folder) && (
                         <>
-                            <div className="my-1 h-px bg-slate-200"/>
+                            <ContextMenuSeparator/>
+                            
                             <ContextItem
                                 label="Delete Folder"
                                 icon={<Trash2 size={14}/>}
@@ -330,6 +336,6 @@ export default function MessageFolderContextMenu({
                     )}
                 </>
             )}
-        </div>
+        </ContextMenu>
     );
 }

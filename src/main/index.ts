@@ -29,17 +29,25 @@ import {
 } from './ipc/accounts.js';
 import {queueCloudOAuthCallbackUrl, registerCloudIpc} from './ipc/cloud.js';
 import {registerSettingsIpc} from './ipc/settings.js';
-import {broadcastAccountSyncStatus, broadcastToAllWindows, broadcastUnreadCountUpdated} from './ipc/broadcast.js';
+import {
+	broadcastAccountSyncStatus,
+	broadcastGlobalError,
+	broadcastToAllWindows,
+	broadcastUnreadCountUpdated
+} from './ipc/broadcast.js';
 import {broadcastAutoUpdateState, registerUpdaterIpc} from './ipc/updater.js';
 import {registerWindowIpc} from './ipc/windows.js';
-import {getAppSettings, getAppSettingsBootSnapshotSync, getAppSettingsSync, getSpellCheckerLanguages} from './settings/store.js';
+import {
+	getAppSettings,
+	getAppSettingsBootSnapshotSync,
+	getAppSettingsSync,
+	getSpellCheckerLanguages
+} from './settings/store.js';
 import {reconcileDemoData} from './demo/demoMode.js';
 import {checkForUpdates, initAutoUpdater, runStartupUpdateFlow, setAutoUpdateEnabled} from './updater/autoUpdate.js';
 import type {GlobalErrorEvent, GlobalErrorSource} from '../shared/ipcTypes.js';
-import {broadcastGlobalError} from './ipc/broadcast.js';
 import type {ComposeDraftPayload} from './windows/composeWindow.js';
 import {openComposeWindow} from './windows/composeWindow.js';
-import {getAddAccountWindow, openAddAccountWindow} from './windows/addAccountWindow.js';
 import {loadWindowContent} from './windows/loadWindowContent.js';
 import {closeSplashWindow, openSplashWindow} from './windows/splashWindow.js';
 import {
@@ -47,6 +55,7 @@ import {
 	buildSecureWebPreferences,
 	createAppWindow,
 	createFramelessAppWindow,
+	resolveWindowIconPath,
 } from './windows/windowFactory.js';
 import {APP_NAME, APP_PROTOCOL} from './config.js';
 
@@ -57,6 +66,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let currentUnreadCount = 0;
+let mainWindowActionsEnabled = false;
 const pendingMailtoUrls: string[] = [];
 let pendingStartupRoute: string | null = null;
 let pendingStartupCompose = false;
@@ -64,11 +74,10 @@ let stopDebugForwarding: (() => void) | null = null;
 let backgroundUpdateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let initialBackgroundUpdateCheckTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingGlobalErrors: GlobalErrorEvent[] = [];
-const appIconPath = resolveAppIconPath();
+const appIconPath = resolveWindowIconPath();
 const linuxTrayIconPath = resolveLinuxTrayIconPath();
 const windowsTrayIconPath = resolveWindowsTrayIconPath();
-const appIconPngBase64 =
-	appIconPath && fs.existsSync(appIconPath) ? fs.readFileSync(appIconPath).toString('base64') : null;
+const appIconPngBase64 = appIconPath && fs.existsSync(appIconPath) ? fs.readFileSync(appIconPath).toString('base64') : null;
 const mainWindowStatePath = path.join(app.getPath('userData'), 'main-window-state.json');
 const logger = createAppLogger('main');
 const MAIN_WINDOW_MIN_WIDTH = 900;
@@ -190,7 +199,6 @@ function createWindow() {
 		...(typeof normalizedState?.x === 'number' && typeof normalizedState?.y === 'number'
 			? {x: normalizedState.x, y: normalizedState.y}
 			: {}),
-		icon: appIconPath || undefined,
 		webPreferences: buildSecureWebPreferences({
 			preloadPath,
 			spellcheck: currentSettings.spellcheckEnabled,
@@ -451,15 +459,25 @@ function ensureTray(): void {
 	if (tray) return;
 	tray = new Tray(buildTrayIcon(currentUnreadCount));
 	tray.setToolTip(buildTrayTooltip(currentUnreadCount));
+	applyTrayContextMenu();
+	tray.on('double-click', () => {
+		openMainWindowEntryPoint();
+	});
+}
+
+function applyTrayContextMenu(): void {
+	if (!tray) return;
+	const canUseMainWindowActions = mainWindowActionsEnabled;
 	const contextMenu = Menu.buildFromTemplate([
 		{
 			label: `Show ${APP_NAME}`,
 			click: () => {
-				showMainWindow();
+				openMainWindowEntryPoint();
 			},
 		},
 		{
 			label: 'Compose Email',
+			enabled: canUseMainWindowActions,
 			click: () => {
 				openComposeQuickAction();
 			},
@@ -467,29 +485,35 @@ function ensureTray(): void {
 		{type: 'separator'},
 		{
 			label: 'Mail',
+			enabled: canUseMainWindowActions,
 			click: () => navigateMainWindowToRoute('/email'),
 		},
 		{
 			label: 'Contacts',
+			enabled: canUseMainWindowActions,
 			click: () => navigateMainWindowToRoute('/contacts'),
 		},
 		{
 			label: 'Calendar',
+			enabled: canUseMainWindowActions,
 			click: () => navigateMainWindowToRoute('/calendar'),
 		},
 		{
 			label: 'Cloud',
+			enabled: canUseMainWindowActions,
 			click: () => navigateMainWindowToRoute('/cloud'),
 		},
 		{type: 'separator'},
-			{
-				label: 'Settings',
-				click: () => navigateMainWindowToRoute('/settings/application'),
-			},
-			{
-				label: 'Help',
-				click: () => {
-					navigateMainWindowToRoute('/help');
+		{
+			label: 'Settings',
+			enabled: canUseMainWindowActions,
+			click: () => navigateMainWindowToRoute('/settings/application'),
+		},
+		{
+			label: 'Help',
+			enabled: canUseMainWindowActions,
+			click: () => {
+				navigateMainWindowToRoute('/help');
 			},
 		},
 		{
@@ -501,18 +525,45 @@ function ensureTray(): void {
 		},
 	]);
 	tray.setContextMenu(contextMenu);
-	tray.on('double-click', () => {
-		showMainWindow();
-	});
+}
+
+function openMainWindowEntryPoint(): void {
+	showMainWindow();
+	if (mainWindowActionsEnabled) return;
+	if (!mainWindow || mainWindow.isDestroyed()) return;
+	void mainWindow.webContents.executeJavaScript(`window.location.hash = "/onboarding"`);
+}
+
+function openAddAccountRouteInMainWindow(): void {
+	showMainWindow();
+	if (!mainWindow || mainWindow.isDestroyed()) return;
+	void mainWindow.webContents.executeJavaScript(`window.location.hash = "/add-account"`);
+}
+
+function setMainWindowActionsEnabled(enabled: boolean): void {
+	const next = Boolean(enabled);
+	if (mainWindowActionsEnabled === next) return;
+	mainWindowActionsEnabled = next;
+	ensureTray();
+	applyTrayContextMenu();
+	configurePlatformQuickActions();
 }
 
 function navigateMainWindowToRoute(route: string): void {
+	if (!mainWindowActionsEnabled) {
+		openMainWindowEntryPoint();
+		return;
+	}
 	showMainWindow();
 	if (!mainWindow || mainWindow.isDestroyed()) return;
 	void mainWindow.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`);
 }
 
 function openComposeQuickAction(): void {
+	if (!mainWindowActionsEnabled) {
+		openMainWindowEntryPoint();
+		return;
+	}
 	showMainWindow();
 	const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
 	openComposeWindow(parent);
@@ -527,63 +578,73 @@ function toMainProcessLaunchArgs(extraArgs: string[]): string[] {
 
 function configurePlatformQuickActions(): void {
 	if (process.platform === 'darwin' && app.dock) {
-		const dockMenu = Menu.buildFromTemplate([
-			{label: 'Compose Email', click: () => openComposeQuickAction()},
-			{type: 'separator'},
-			{label: 'Mail', click: () => navigateMainWindowToRoute('/email')},
-			{label: 'Contacts', click: () => navigateMainWindowToRoute('/contacts')},
-			{label: 'Calendar', click: () => navigateMainWindowToRoute('/calendar')},
-			{label: 'Cloud', click: () => navigateMainWindowToRoute('/cloud')},
-			{type: 'separator'},
-			{label: 'Settings', click: () => navigateMainWindowToRoute('/settings/application')},
-			{label: 'Debug', click: () => navigateMainWindowToRoute('/debug')},
-			{label: 'Help', click: () => navigateMainWindowToRoute('/help')},
-		]);
+		const canUseMainWindowActions = mainWindowActionsEnabled;
+		const dockMenu = Menu.buildFromTemplate(
+			canUseMainWindowActions
+				? [
+					{label: 'Compose Email', click: () => openComposeQuickAction()},
+					{type: 'separator'},
+					{label: 'Mail', click: () => navigateMainWindowToRoute('/email')},
+					{label: 'Contacts', click: () => navigateMainWindowToRoute('/contacts')},
+					{label: 'Calendar', click: () => navigateMainWindowToRoute('/calendar')},
+					{label: 'Cloud', click: () => navigateMainWindowToRoute('/cloud')},
+					{type: 'separator'},
+					{label: 'Settings', click: () => navigateMainWindowToRoute('/settings/application')},
+					{label: 'Debug', click: () => navigateMainWindowToRoute('/debug')},
+					{label: 'Help', click: () => navigateMainWindowToRoute('/help')},
+				]
+				: [
+					{label: 'Open Onboarding', click: () => showMainWindow()},
+				],
+		);
 		app.dock.setMenu(dockMenu);
 	}
 
 	if (process.platform === 'win32') {
 		const jumpPath = process.execPath;
+		const canUseMainWindowActions = mainWindowActionsEnabled;
 		void app.setJumpList([
 			{
 				type: 'tasks',
-				items: [
-					{
-						type: 'task',
-						title: 'Compose Email',
-						description: 'Open a compose window',
-						program: jumpPath,
-						args: toMainProcessLaunchArgs(['--action=compose']).join(' '),
-					},
-					{
-						type: 'task',
-						title: 'Mail',
-						description: 'Open mail',
-						program: jumpPath,
-						args: toMainProcessLaunchArgs(['--route=/email']).join(' '),
-					},
-					{
-						type: 'task',
-						title: 'Contacts',
-						description: 'Open contacts',
-						program: jumpPath,
-						args: toMainProcessLaunchArgs(['--route=/contacts']).join(' '),
-					},
-					{
-						type: 'task',
-						title: 'Calendar',
-						description: 'Open calendar',
-						program: jumpPath,
-						args: toMainProcessLaunchArgs(['--route=/calendar']).join(' '),
-					},
-					{
-						type: 'task',
-						title: 'Cloud',
-						description: 'Open cloud files',
-						program: jumpPath,
-						args: toMainProcessLaunchArgs(['--route=/cloud']).join(' '),
-					},
-				],
+				items: canUseMainWindowActions
+					? [
+						{
+							type: 'task',
+							title: 'Compose Email',
+							description: 'Open a compose window',
+							program: jumpPath,
+							args: toMainProcessLaunchArgs(['--action=compose']).join(' '),
+						},
+						{
+							type: 'task',
+							title: 'Mail',
+							description: 'Open mail',
+							program: jumpPath,
+							args: toMainProcessLaunchArgs(['--route=/email']).join(' '),
+						},
+						{
+							type: 'task',
+							title: 'Contacts',
+							description: 'Open contacts',
+							program: jumpPath,
+							args: toMainProcessLaunchArgs(['--route=/contacts']).join(' '),
+						},
+						{
+							type: 'task',
+							title: 'Calendar',
+							description: 'Open calendar',
+							program: jumpPath,
+							args: toMainProcessLaunchArgs(['--route=/calendar']).join(' '),
+						},
+						{
+							type: 'task',
+							title: 'Cloud',
+							description: 'Open cloud files',
+							program: jumpPath,
+							args: toMainProcessLaunchArgs(['--route=/cloud']).join(' '),
+						},
+					]
+					: [],
 			},
 		]);
 	}
@@ -702,32 +763,7 @@ function showMainWindow(): void {
 	mainWindow.focus();
 }
 
-function resolveAppIconPath(): string | null {
-	const candidates = [
-		path.join(app.getAppPath(), 'build/icon.ico'),
-		path.join(app.getAppPath(), 'build/icons/512x512.png'),
-		path.join(app.getAppPath(), 'build/icon.png'),
-		path.join(app.getAppPath(), 'src/resources/llama.ico'),
-		path.join(app.getAppPath(), 'src/resources/llama.png'),
-		path.join(app.getAppPath(), 'src/resources/luna.ico'),
-		path.join(app.getAppPath(), 'src/resources/luna.png'),
-		path.join(__dirname, '../resources/llama.ico'),
-		path.join(__dirname, '../resources/llama.png'),
-		path.join(__dirname, '../resources/luna.ico'),
-		path.join(__dirname, '../resources/luna.png'),
-		path.join(process.cwd(), 'build/icon.ico'),
-		path.join(process.cwd(), 'build/icons/512x512.png'),
-		path.join(process.cwd(), 'build/icon.png'),
-		path.join(process.cwd(), 'src/resources/llama.ico'),
-		path.join(process.cwd(), 'src/resources/llama.png'),
-		path.join(process.cwd(), 'src/resources/luna.ico'),
-		path.join(process.cwd(), 'src/resources/luna.png'),
-	];
-	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) return candidate;
-	}
-	return null;
-}
+
 
 function resolveLinuxTrayIconPath(): string | null {
 	const candidates = [
@@ -814,11 +850,19 @@ function registerProtocolHandlers(): void {
 		logger.info('Received second-instance event args=%d', argv.length);
 		const actionArg = findActionArg(argv);
 		if (actionArg === 'compose') {
+			if (!mainWindowActionsEnabled) {
+				openMainWindowEntryPoint();
+				return;
+			}
 			openComposeQuickAction();
 			return;
 		}
 		const routeArg = findRouteArg(argv);
 		if (routeArg) {
+			if (!mainWindowActionsEnabled) {
+				openMainWindowEntryPoint();
+				return;
+			}
 			navigateMainWindowToRoute(routeArg);
 			return;
 		}
@@ -1076,8 +1120,8 @@ function openComposeFromMailto(url: string): void {
 	if (!draft) return;
 	void getAccounts().then((accounts) => {
 		if (accounts.length === 0) {
-			openAddAccountWindow(undefined);
-			attachAddAccountWindowCloseBehavior();
+			setMainWindowActionsEnabled(false);
+			openMainWindowEntryPoint();
 			return;
 		}
 		if (!mainWindow || mainWindow.isDestroyed()) {
@@ -1164,36 +1208,6 @@ function findActionArg(argv: string[]): 'compose' | null {
 		if (arg === '--action=compose') return 'compose';
 	}
 	return null;
-}
-
-function attachAddAccountWindowCloseBehavior(): void {
-	const wizard = getAddAccountWindow();
-	if (!wizard || wizard.isDestroyed()) return;
-	wizard.once('closed', () => {
-		void maybeOpenMainWindowAfterAccountCreated();
-	});
-}
-
-async function maybeOpenMainWindowAfterAccountCreated(): Promise<void> {
-	const accounts = await getAccounts();
-	if (accounts.length === 0) return;
-	if (mainWindow && !mainWindow.isDestroyed()) {
-		mainWindow.show();
-		mainWindow.focus();
-		return;
-	}
-	createWindow();
-}
-
-function closeMainWindowForNoAccounts(): void {
-	if (!mainWindow || mainWindow.isDestroyed()) return;
-	const win = mainWindow;
-	mainWindow = null;
-	try {
-		win.destroy();
-	} catch {
-		// ignore close failures
-	}
 }
 
 function configureLinuxDesktopEntryName(): void {
@@ -1340,13 +1354,9 @@ if (!gotSingleInstanceLock) {
 			updateUnreadIndicators(count);
 		});
 		setAccountCountChangedListener((count) => {
+			setMainWindowActionsEnabled(count > 0);
 			if (count > 0) return;
-			openAddAccountWindow(undefined);
-			attachAddAccountWindowCloseBehavior();
-			// Close the main window after requesting the wizard to avoid a transient zero-window app state.
-			setImmediate(() => {
-				closeMainWindowForNoAccounts();
-			});
+			openMainWindowEntryPoint();
 		});
 		setNewMailListener(({newMessages, source, target}) => {
 			if (newMessages <= 0) return;
@@ -1373,7 +1383,7 @@ if (!gotSingleInstanceLock) {
 			void applyDemoMode(settings);
 		});
 		registerUpdaterIpc();
-			registerWindowIpc();
+		registerWindowIpc({onOpenAddAccountRoute: openAddAccountRouteInMainWindow});
 			logger.info('IPC handlers registered');
 			registerMailtoProtocolClient();
 			registerAppProtocolClient();
@@ -1399,11 +1409,12 @@ if (!gotSingleInstanceLock) {
 
 			const accounts = await getAccounts();
 			logger.info('Loaded accounts count=%d', accounts.length);
+		setMainWindowActionsEnabled(accounts.length > 0);
 			pendingStartupRoute = findRouteArg(process.argv);
 			pendingStartupCompose = findActionArg(process.argv) === 'compose';
 			if (accounts.length === 0) {
-				openAddAccountWindow(undefined);
-				attachAddAccountWindowCloseBehavior();
+				createWindow();
+				openMainWindowEntryPoint();
 			} else {
 				createWindow();
 				if (pendingStartupRoute) {
@@ -1430,13 +1441,14 @@ if (!gotSingleInstanceLock) {
 
 		app.on('activate', () => {
 			if (mainWindow && !mainWindow.isDestroyed()) {
-				showMainWindow();
+				openMainWindowEntryPoint();
 				return;
 			}
 			void getAccounts().then((rows) => {
 				if (rows.length === 0) {
-					openAddAccountWindow(undefined);
-					attachAddAccountWindowCloseBehavior();
+					setMainWindowActionsEnabled(false);
+					createWindow();
+					openMainWindowEntryPoint();
 					return;
 				}
 				showMainWindow();

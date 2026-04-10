@@ -25,17 +25,17 @@ const FilledFolderIcon: React.FC = () => (
 export function getFolderColorClass(color: string | null | undefined): string | undefined {
     switch ((color || '').toLowerCase()) {
         case 'sky':
-            return 'text-sky-600 dark:text-sky-300';
+            return 'folder-color-sky';
         case 'emerald':
-            return 'text-emerald-600 dark:text-emerald-300';
+            return 'folder-color-emerald';
         case 'amber':
-            return 'text-amber-600 dark:text-amber-300';
+            return 'folder-color-amber';
         case 'rose':
-            return 'text-rose-600 dark:text-rose-300';
+            return 'folder-color-rose';
         case 'violet':
-            return 'text-violet-600 dark:text-violet-300';
+            return 'folder-color-violet';
         case 'slate':
-            return 'text-slate-700 dark:text-slate-200';
+            return 'folder-color-slate';
         default:
             return undefined;
     }
@@ -44,18 +44,18 @@ export function getFolderColorClass(color: string | null | undefined): string | 
 export function getFolderSwatchClass(color: string): string {
     switch ((color || '').toLowerCase()) {
         case 'sky':
-            return 'bg-sky-500';
+            return 'swatch-sky';
         case 'emerald':
-            return 'bg-emerald-500';
+            return 'swatch-emerald';
         case 'amber':
-            return 'bg-amber-500';
+            return 'swatch-amber';
         case 'rose':
-            return 'bg-rose-500';
+            return 'swatch-rose';
         case 'violet':
-            return 'bg-violet-500';
+            return 'swatch-violet';
         case 'slate':
-            return 'bg-slate-500';
+            return 'swatch-slate';
         default:
-            return 'bg-transparent ring-1 ring-dashed ring-slate-400 dark:ring-slate-500';
+            return 'swatch-none';
     }
 }

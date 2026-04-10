@@ -104,11 +104,11 @@ export default function WorkspaceLayout({
 
     return (
         <section
-            className={cn('lm-shell flex h-full min-h-0 flex-col overflow-hidden', className)}
+            className={cn('workspace app-shell flex h-full min-h-0 flex-col overflow-hidden', className)}
         >
             {showMenuBar && (
                 <header
-                    className="lm-menubar shrink-0 px-5 py-3">
+                    className="workspace-header shrink-0 px-5 py-3">
                     {menubar}
                 </header>
             )}
@@ -120,29 +120,30 @@ export default function WorkspaceLayout({
                             <div
                                 role="separator"
                                 aria-orientation="vertical"
-                                className="lm-resize-handle absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent"
+                                className="workspace-resize-handle absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent"
                                 onMouseDown={onSidebarResizeStart}
                             />
                         )}
                     </div>
                 )}
-                <main className={cn('lm-content min-h-0 flex-1 overflow-auto p-5', contentClassName)}>{children}</main>
+                <main
+                    className={cn('workspace-content min-h-0 flex-1 overflow-auto p-5', contentClassName)}>{children}</main>
             </div>
             {shouldShowFooter && (
                 <div
-                    className="lm-footer shrink-0 px-5 py-3">
+                    className="app-footer shrink-0 px-5 py-3">
                     {footer}
                 </div>
             )}
             {showStatusBar && (
                 <footer
-                    className="lm-statusbar h-8 shrink-0 px-3">
+                    className="workspace-statusbar h-8 shrink-0 px-3">
                     <div className="flex h-full items-center text-xs">
-						<span className="flex min-w-0 items-center gap-2 truncate text-[var(--lm-text-secondary)]">
+						<span className="workspace-status-text flex min-w-0 items-center gap-2 truncate">
 							<span
                                 className={cn(
                                     'inline-flex h-2.5 w-2.5 shrink-0 rounded-full',
-                                    effectiveStatusBusy ? 'animate-pulse bg-[var(--color-primary)]' : 'lm-status-dot-idle',
+                                    effectiveStatusBusy ? 'workspace-status-dot-busy animate-pulse' : 'workspace-status-dot-idle',
                                 )}
                             />
 							<span ref={statusTextViewportRef} className="min-w-0 flex-1 overflow-hidden">

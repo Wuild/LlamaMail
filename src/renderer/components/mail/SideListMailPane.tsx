@@ -94,9 +94,9 @@ function DraggableMessageRow({
         <div
             ref={(node) => void dragRef(node)}
             className={cn(
-                'block w-full border-b border-slate-100 px-5 py-4 text-left transition-colors hover:bg-slate-50 dark:border-[var(--lm-border-subtle-dark)] dark:hover:bg-[var(--lm-surface-chip-dark)]',
-                selectedMessageIds.includes(message.id) && 'bg-sky-50/70 dark:bg-[var(--lm-surface-active-dark)]',
-                selectedMessageId === message.id && 'border-l-4 border-l-sky-600 dark:border-l-[var(--lm-color-accent-dark)]',
+                'mail-list-row block w-full px-5 py-4 text-left',
+                selectedMessageIds.includes(message.id) && 'is-selected',
+                selectedMessageId === message.id && 'is-focused',
             )}
             onClick={(event) => {
                 onMessageRowClick(event, message, messageIndex);
@@ -113,11 +113,14 @@ function DraggableMessageRow({
             }}
         >
             <div
-                className={`flex min-w-0 items-center gap-2 text-sm ${message.is_read ? 'font-medium text-slate-700 dark:text-slate-300' : 'font-semibold text-slate-950 dark:text-white'}`}
+                className={cn(
+                    'flex min-w-0 items-center gap-2 text-sm',
+                    message.is_read ? 'mail-list-subject-read font-medium' : 'mail-list-subject-unread font-semibold',
+                )}
             >
                 {!message.is_read && (
                     <span
-                        className="inline-flex h-2 w-2 shrink-0 rounded-full bg-sky-500 dark:bg-[var(--lm-color-info-soft-dark)]"
+                        className="mail-list-unread-dot inline-flex h-2 w-2 shrink-0 rounded-full"
                         title="Unread"
                         aria-label="Unread"
                     />
@@ -125,19 +128,19 @@ function DraggableMessageRow({
                 <span className="truncate">{message.subject || '(No subject)'}</span>
                 {getThreadCount(message) > 1 && (
                     <span
-                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-200 px-1.5 text-[11px] font-semibold leading-none text-slate-700 dark:bg-[var(--lm-surface-badge-dark)] dark:text-slate-100">
+                        className="mail-list-thread-count inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-none">
 						{getThreadCount(message)}
 					</span>
                 )}
             </div>
             <div className="mt-1.5 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mail-list-sender truncate text-xs">
                         {formatMessageSender(message)}
                     </p>
                     {Boolean((message as MessageItem & { tag?: string | null }).tag) && (
                         <span
-                            className="inline-flex max-w-[10rem] items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600 dark:border-[var(--lm-border-strong-dark)] dark:text-slate-200">
+                            className="mail-list-tag-chip inline-flex max-w-[10rem] items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]">
 							<span
                                 className={cn(
                                     'inline-flex h-1.5 w-1.5 shrink-0 rounded-full',
@@ -151,10 +154,10 @@ function DraggableMessageRow({
                     )}
                 </div>
                 <span
-                    className="ml-3 inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                    className="mail-list-meta ml-3 inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">
 					{Boolean(message.is_flagged) && (
                         <span
-                            className="inline-flex items-center text-amber-500 dark:text-amber-300"
+                            className="mail-list-starred inline-flex items-center"
                             title="Starred"
                         >
 							<Star size={12} className="fill-current"/>
@@ -195,20 +198,20 @@ export default function SideListMailPane({
         <>
             <main
                 className={cn(
-                    'relative flex min-h-0 flex-col border-r border-slate-200 bg-white dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-sidebar-dark)]',
+                    'mail-list-pane relative flex min-h-0 flex-col',
                     isCompactSideList ? 'min-w-0 flex-1' : 'shrink-0',
                 )}
                 style={isCompactSideList ? undefined : {width: mailListWidth}}
             >
-                <div className="border-b border-slate-200 p-2 dark:border-[var(--lm-border-default-dark)]">
+                <div className="mail-list-pane-header p-2">
                     <div className="relative">
                         <FormInput
                             type="text"
                             readOnly
                             value=""
                             placeholder="Search mail"
-                            leftIcon={<Search size={14} className="text-slate-500 dark:text-slate-400"/>}
-                            className="pr-14 text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-[var(--lm-surface-muted-dark)]"
+                            leftIcon={<Search size={14} className="ui-text-muted"/>}
+                            className="mail-list-search-input pr-14"
                             onClick={onOpenSearchModal}
                             onFocus={(event) => {
                                 onOpenSearchModal();
@@ -217,42 +220,46 @@ export default function SideListMailPane({
                             aria-label="Search mail"
                         />
                         <span
-                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                            className="mail-list-shortcut pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium uppercase tracking-wide">
 							Ctrl+F
 						</span>
                     </div>
                 </div>
                 {selectedMessageIds.length > 1 && (
-                    <div className="border-b border-slate-200 px-2 py-2 dark:border-[var(--lm-border-default-dark)]">
+                    <div className="mail-list-pane-header px-2 py-2">
                         <div
-                            className="flex flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-[var(--lm-border-default-dark)] dark:bg-[var(--lm-surface-content-dark)]">
-							<span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            className="mail-selection-toolbar flex flex-wrap items-center gap-2 rounded-md p-2">
+							<span className="ui-text-secondary text-xs font-medium">
 								{selectedMessageIds.length} selected
 							</span>
                             <Button
                                 type="button"
-                                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[var(--lm-border-default-dark)] dark:text-slate-200 dark:hover:bg-[var(--lm-surface-hover-dark)]"
+                                variant="secondary"
+                                className="rounded-md px-2 py-1 text-xs"
                                 onClick={() => onBulkMarkRead(selectedMessageIds, 1)}
                             >
                                 Mark read
                             </Button>
                             <Button
                                 type="button"
-                                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[var(--lm-border-default-dark)] dark:text-slate-200 dark:hover:bg-[var(--lm-surface-hover-dark)]"
+                                variant="secondary"
+                                className="rounded-md px-2 py-1 text-xs"
                                 onClick={() => onBulkMarkRead(selectedMessageIds, 0)}
                             >
                                 Mark unread
                             </Button>
                             <Button
                                 type="button"
-                                className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/25"
+                                variant="danger"
+                                className="rounded-md px-2 py-1 text-xs"
                                 onClick={() => onBulkDelete(selectedMessageIds)}
                             >
                                 Delete
                             </Button>
                             <Button
                                 type="button"
-                                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-[var(--lm-border-default-dark)] dark:text-slate-200 dark:hover:bg-[var(--lm-surface-hover-dark)]"
+                                variant="secondary"
+                                className="rounded-md px-2 py-1 text-xs"
                                 onClick={onClearMessageSelection}
                             >
                                 Clear
@@ -271,7 +278,7 @@ export default function SideListMailPane({
                     }}
                 >
                     {messages.length === 0 && (
-                        <div className="p-5 text-sm text-slate-500 dark:text-slate-400">
+                        <div className="mail-list-empty p-5 text-sm">
                             No messages in this folder yet.
                         </div>
                     )}
@@ -294,12 +301,12 @@ export default function SideListMailPane({
                         />
                     ))}
                     {loadingMoreMessages && messages.length > 0 && (
-                        <div className="px-5 py-3 text-center text-xs text-slate-500 dark:text-slate-400">
+                        <div className="mail-list-loading px-5 py-3 text-center text-xs">
                             Loading more messages...
                         </div>
                     )}
                     {!hasMoreMessages && messages.length > 0 && (
-                        <div className="px-5 py-3 text-center text-xs text-slate-400 dark:text-slate-500">
+                        <div className="mail-list-end px-5 py-3 text-center text-xs">
                             End of list
                         </div>
                     )}
@@ -308,13 +315,13 @@ export default function SideListMailPane({
                     <div
                         role="separator"
                         aria-orientation="vertical"
-                        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent hover:bg-slate-300/70 dark:hover:bg-slate-500/70"
+                        className="mail-resize-hover absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent"
                         onMouseDown={onResizeStart}
                     />
                 )}
             </main>
             {!isCompactSideList && (
-                <section className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[var(--lm-surface-preview-dark)]">{children}</section>
+                <section className="mail-preview-pane flex min-w-0 flex-1 flex-col">{children}</section>
             )}
         </>
     );

@@ -3,7 +3,12 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {loadWindowContent} from './loadWindowContent.js';
 import {getAppSettingsSync} from '../settings/store.js';
-import {attachWindowShortcuts, buildSecureWebPreferences, createAppWindow, createFramelessAppWindow} from './windowFactory.js';
+import {
+	attachWindowShortcuts,
+	buildSecureWebPreferences,
+	createAppWindow,
+	createFramelessAppWindow
+} from './windowFactory.js';
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -11,18 +16,16 @@ const __dirname = path.dirname(__filename);
 
 let debugWin: BrowserWindow | null = null;
 
-export function openDebugWindow(parentWindow?: BrowserWindow): void {
+export function openDebugWindow(): void {
 	if (debugWin && !debugWin.isDestroyed()) {
 		debugWin.focus();
 		return;
 	}
 
 	const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
-	const parent = parentWindow && !parentWindow.isDestroyed() ? parentWindow : undefined;
 	const useNativeTitleBar = Boolean(getAppSettingsSync().useNativeTitleBar);
 	const createWindow = useNativeTitleBar ? createAppWindow : createFramelessAppWindow;
 	debugWin = createWindow({
-		parent,
 		modal: false,
 		width: 1020,
 		height: 760,

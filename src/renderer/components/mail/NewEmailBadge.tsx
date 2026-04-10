@@ -16,7 +16,7 @@ export default function NewEmailBadge({count, className, title, max = 99}: NewEm
     return (
         <span
             className={cn(
-                'inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-red-300/80 bg-red-600 px-1.5 text-[11px] font-semibold leading-none text-white shadow-sm dark:border-red-500/70 dark:bg-red-600',
+                'mail-badge-danger inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold leading-none shadow-sm',
                 className,
             )}
             title={title}

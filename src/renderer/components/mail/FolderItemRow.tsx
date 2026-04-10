@@ -37,21 +37,17 @@ export default function FolderItemRow({
     return (
         <div
             className={cn(
-                "group relative ml-3 w-[calc(100%-0.75rem)] before:absolute before:left-[-0.75rem] before:top-1/2 before:h-px before:w-2 before:-translate-y-1/2 before:bg-slate-300/80 before:content-[''] dark:before:bg-[var(--lm-border-strong-dark)]",
+                "folder-item-branch group relative ml-3 w-[calc(100%-0.75rem)] before:absolute before:left-[-0.75rem] before:top-1/2 before:h-px before:w-2 before:-translate-y-1/2 before:content-['']",
             )}
         >
             <Link
                 to={to || '#'}
                 draggable={false}
                 className={cn(
-                    'relative flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-left no-underline transition-all',
-                    dropActive &&
-                    'bg-slate-200 text-slate-900 ring-1 ring-slate-300 shadow-sm dark:bg-[var(--lm-surface-row-strong-dark)] dark:text-slate-100 dark:ring-[var(--lm-scrollbar-thumb-dark)]',
+                    'folder-item-link relative flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-left no-underline transition-all',
+                    dropActive && 'is-drop-active shadow-sm',
                     customDragging && 'opacity-45',
-                    active
-                        ? 'bg-slate-200/80 text-slate-900 ring-1 ring-slate-300/70 dark:bg-[var(--lm-surface-row-active-dark)] dark:text-slate-100 dark:ring-[var(--lm-border-active-dark)]'
-                        : 'text-slate-700 dark:text-slate-200',
-                    'hover:bg-slate-200/70 dark:hover:bg-[var(--lm-border-default-dark)]',
+                    active && 'is-active',
                 )}
                 onClick={onClick}
                 onContextMenu={onContextMenu}
@@ -60,10 +56,8 @@ export default function FolderItemRow({
 				<span className="flex min-w-0 items-center gap-2.5">
 					<span
                         className={cn(
-                            'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
-                            active ? 'bg-white dark:bg-[var(--lm-surface-selected-dark)]' : 'bg-slate-100 dark:bg-[var(--lm-surface-chip-dark)]',
-                            iconColorClassName ||
-                            (active ? 'text-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300'),
+                            'folder-item-icon inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+                            iconColorClassName,
                         )}
                     >
 						{icon}
@@ -79,7 +73,6 @@ export default function FolderItemRow({
                             className={cn(
                                 'transition-opacity',
                                 onEditFolder && 'group-hover:opacity-0',
-                                active && 'border-red-400/90 from-red-500 to-red-700 dark:border-red-400/80',
                             )}
                         />
                     )}
@@ -88,7 +81,7 @@ export default function FolderItemRow({
             {onEditFolder && (
                 <Button
                     type="button"
-                    className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 opacity-0 transition-opacity hover:bg-slate-200 hover:text-slate-800 group-hover:opacity-100 dark:text-slate-400 dark:hover:bg-[var(--lm-surface-icon-hover-dark)] dark:hover:text-slate-100"
+                    className="folder-item-edit absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-100"
                     onClick={(event) => {
                         event.stopPropagation();
                         onEditFolder();
@@ -101,7 +94,7 @@ export default function FolderItemRow({
             )}
             {customDragActive && (
                 <div
-                    className="pointer-events-none absolute -top-0.5 left-2 right-2 h-0.5 rounded-full bg-sky-500/90 dark:bg-sky-400/90"/>
+                    className="folder-item-drop-indicator pointer-events-none absolute -top-0.5 left-2 right-2 h-0.5 rounded-full"/>
             )}
         </div>
     );

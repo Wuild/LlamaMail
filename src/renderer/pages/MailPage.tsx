@@ -1,5 +1,5 @@
-import {FormInput} from '../components/ui/FormControls';
 import {Button} from '../components/ui/button';
+import {ContextMenu, ContextMenuItem} from '../components/ui/ContextMenu';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
 	FileText,
@@ -49,7 +49,6 @@ import {
 	toErrorMessage,
 } from '../lib/statusText';
 import {useThemePreference} from '../hooks/useAppTheme';
-import type {Workspace} from '../lib/workspace';
 import {useIpcEvent} from '../hooks/ipc/useIpcEvent';
 import {useMailSelection} from '../hooks/mail/useMailSelection';
 import {useMessageBodyLoader} from '../hooks/mail/useMessageBodyLoader';
@@ -67,8 +66,6 @@ import {
 import {ipcClient} from '../lib/ipcClient';
 import {createDefaultAppSettings} from '../../shared/defaults';
 import type {
-	CalendarEventItem,
-	ContactItem,
 	FolderItem,
 	MessageItem,
 	OpenMessageTargetEvent,
@@ -79,6 +76,7 @@ import type {
 const MESSAGE_PAGE_SIZE = 100;
 const MIN_INLINE_MAIL_BODY_WIDTH = 520;
 const MIN_INLINE_MAIL_BODY_HEIGHT = 260;
+const SEARCH_FALLBACK_MESSAGES_PER_FOLDER = 1000;
 
 function MailPage() {
 	const params = useParams<{ accountId?: string; folderId?: string; emailId?: string }>();
@@ -117,7 +115,6 @@ function MailPage() {
 	const autoOpenedForSmallPreviewMessageIdRef = useRef<number | null>(null);
 	const [systemLocale, setSystemLocale] = useState<string>('en-US');
 	const [mailBodyViewport, setMailBodyViewport] = useState<{ width: number; height: number }>({width: 0, height: 0});
-	const [workspace, setWorkspace] = useState<Workspace>('mail');
 	const {
 		syncStatusText,
 		setSyncStatusText,
@@ -142,13 +139,8 @@ function MailPage() {
 		messages,
 		navigate,
 		locationPathname: location.pathname,
-		onSelectMail: () => setWorkspace('mail'),
+		onSelectMail: () => undefined,
 	});
-	const [contacts, setContacts] = useState<ContactItem[]>([]);
-	const [contactsQuery, setContactsQuery] = useState('');
-	const [contactsLoading, setContactsLoading] = useState(false);
-	const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
-	const [calendarLoading, setCalendarLoading] = useState(false);
 	const routeAccountId = parseRouteNumber(params.accountId);
 	const routeFolderId = parseRouteNumber(params.folderId);
 	const routeEmailId = parseRouteNumber(params.emailId);
@@ -489,7 +481,18 @@ function MailPage() {
 			setSearchLoading(false);
 			return;
 		}
-		if (accounts.length === 0) {
+		const candidateAccountIds = Array.from(
+			new Set(
+				[
+					...accounts.map((account) => account.id),
+					...Object.keys(accountFoldersById)
+						.map((value) => Number(value))
+						.filter((value) => Number.isFinite(value) && value > 0),
+					selectedAccountId,
+				].filter((value): value is number => Number.isFinite(value) && Number(value) > 0),
+			),
+		);
+		if (candidateAccountIds.length === 0) {
 			setSearchResults([]);
 			setSearchLoading(false);
 			return;
@@ -503,16 +506,61 @@ function MailPage() {
 			}, loadingDelayMs);
 			try {
 				const perAccountLimit = 120;
-				const rowsByAccount = await Promise.all(
-					accounts.map((account) => ipcClient.searchMessages(account.id, query, null, perAccountLimit)),
+				const rowsByAccount = await Promise.allSettled(
+					candidateAccountIds.map((accountId) => ipcClient.searchMessages(accountId, query, null, perAccountLimit)),
 				);
 				if (!active) return;
-				const merged = rowsByAccount.flat().sort((a, b) => {
+				const fulfilled = rowsByAccount
+					.filter((result): result is PromiseFulfilledResult<MessageItem[]> => result.status === 'fulfilled')
+					.map((result) => result.value);
+				const merged = fulfilled.flat().sort((a, b) => {
 					const aTime = a.date ? Date.parse(a.date) : 0;
 					const bTime = b.date ? Date.parse(b.date) : 0;
 					return bTime - aTime;
 				});
-				setSearchResults(merged);
+				if (merged.length > 0 || fulfilled.length > 0) {
+					setSearchResults(merged);
+					return;
+				}
+				// Fallback: if all IPC search calls fail, scan cached message headers across folders.
+				const needle = query.toLowerCase();
+				const foldersByAccount = await Promise.allSettled(
+					candidateAccountIds.map(async (accountId) => {
+						const cachedFolders = accountFoldersById[accountId] ?? [];
+						if (cachedFolders.length > 0) return {accountId, folders: cachedFolders};
+						const folders = await ipcClient.getFolders(accountId);
+						return {accountId, folders};
+					}),
+				);
+				if (!active) return;
+				const folderPairs = foldersByAccount.flatMap((result) =>
+					result.status === 'fulfilled'
+						? result.value.folders.map((folder) => ({
+							accountId: result.value.accountId,
+							folderPath: folder.path
+						}))
+						: [],
+				);
+				const scannedRows = await Promise.allSettled(
+					folderPairs.map(({accountId, folderPath}) =>
+						ipcClient.getFolderMessages(accountId, folderPath, SEARCH_FALLBACK_MESSAGES_PER_FOLDER),
+					),
+				);
+				if (!active) return;
+				const deduped = new Map<number, MessageItem>();
+				for (const result of scannedRows) {
+					if (result.status !== 'fulfilled') continue;
+					for (const row of result.value) {
+						if (!matchesMailSearchNeedle(row, needle)) continue;
+						if (!deduped.has(row.id)) deduped.set(row.id, row);
+					}
+				}
+				const fallback = Array.from(deduped.values()).sort((a, b) => {
+					const aTime = a.date ? Date.parse(a.date) : 0;
+					const bTime = b.date ? Date.parse(b.date) : 0;
+					return bTime - aTime;
+				});
+				setSearchResults(fallback);
 			} finally {
 				window.clearTimeout(loadingTimer);
 				if (active) setSearchLoading(false);
@@ -522,63 +570,7 @@ function MailPage() {
 		return () => {
 			active = false;
 		};
-	}, [searchQuery, accounts]);
-
-	useEffect(() => {
-		if (workspace !== 'contacts' || !selectedAccountId) {
-			setContacts([]);
-			setContactsLoading(false);
-			return;
-		}
-		let active = true;
-		const run = async () => {
-			setContactsLoading(true);
-			try {
-				const rows = await ipcClient.getContacts(selectedAccountId, contactsQuery.trim() || null, 500);
-				if (!active) return;
-				setContacts(rows);
-			} finally {
-				if (active) setContactsLoading(false);
-			}
-		};
-		void run();
-		return () => {
-			active = false;
-		};
-	}, [workspace, selectedAccountId, contactsQuery]);
-
-	useEffect(() => {
-		if (workspace !== 'calendar' || !selectedAccountId) {
-			setCalendarEvents([]);
-			setCalendarLoading(false);
-			return;
-		}
-		let active = true;
-		const run = async () => {
-			setCalendarLoading(true);
-			try {
-				const now = new Date();
-				const start = new Date(now);
-				start.setDate(start.getDate() - 30);
-				const end = new Date(now);
-				end.setDate(end.getDate() + 365);
-				const rows = await ipcClient.getCalendarEvents(
-					selectedAccountId,
-					start.toISOString(),
-					end.toISOString(),
-					1000,
-				);
-				if (!active) return;
-				setCalendarEvents(rows);
-			} finally {
-				if (active) setCalendarLoading(false);
-			}
-		};
-		void run();
-		return () => {
-			active = false;
-		};
-	}, [workspace, selectedAccountId]);
+	}, [searchQuery, accounts, accountFoldersById, selectedAccountId]);
 
 	useEffect(() => {
 		setMessageFetchLimit(MESSAGE_PAGE_SIZE);
@@ -857,6 +849,9 @@ function MailPage() {
 		body?: string | null;
 		bodyHtml?: string | null;
 		bodyText?: string | null;
+		quotedBodyHtml?: string | null;
+		quotedBodyText?: string | null;
+		quotedAllowRemote?: boolean;
 		inReplyTo?: string | null;
 		references?: string[] | string | null;
 	}) {
@@ -877,8 +872,11 @@ function MailPage() {
 		composeWithDraft({
 			to: replyTo,
 			subject,
-			bodyHtml: quoteHtml,
-			bodyText: `\n\n${buildReplyQuoteText(selectedMessage, quoteText, systemLocale)}`,
+			bodyHtml: '',
+			bodyText: '',
+			quotedBodyHtml: quoteHtml,
+			quotedBodyText: `\n\n${buildReplyQuoteText(selectedMessage, quoteText, systemLocale)}`,
+			quotedAllowRemote: allowRemoteForSelectedMessage,
 			inReplyTo,
 			references,
 		});
@@ -896,8 +894,11 @@ function MailPage() {
 			to: replyTo,
 			cc: selectedMessage.to_address || '',
 			subject,
-			bodyHtml: quoteHtml,
-			bodyText: `\n\n${buildReplyQuoteText(selectedMessage, quoteText, systemLocale)}`,
+			bodyHtml: '',
+			bodyText: '',
+			quotedBodyHtml: quoteHtml,
+			quotedBodyText: `\n\n${buildReplyQuoteText(selectedMessage, quoteText, systemLocale)}`,
+			quotedAllowRemote: allowRemoteForSelectedMessage,
 			inReplyTo,
 			references,
 		});
@@ -913,8 +914,11 @@ function MailPage() {
 			to: '',
 			cc: '',
 			subject,
-			bodyHtml: buildForwardQuoteHtml(selectedMessage, selectedMessageBody?.html, originalText, systemLocale),
-			bodyText: forwarded,
+			bodyHtml: '',
+			bodyText: '',
+			quotedBodyHtml: buildForwardQuoteHtml(selectedMessage, selectedMessageBody?.html, originalText, systemLocale),
+			quotedBodyText: forwarded,
+			quotedAllowRemote: allowRemoteForSelectedMessage,
 		});
 	}
 
@@ -1147,7 +1151,6 @@ function MailPage() {
 						navigate('/email');
 					}
 				}
-				setWorkspace('mail');
 			}}
 			messages={messages}
 			selectedMessageId={selectedMessageId}
@@ -1164,31 +1167,13 @@ function MailPage() {
 			hasMoreMessages={hasMoreMessages}
 			loadingMoreMessages={loadingMoreMessages}
 			onRefresh={onRefresh}
-			onOpenCalendar={() => {
-				setWorkspace((prev) => {
-					if (prev === 'calendar') return 'mail';
-					setSelectedFolderPath(null);
-					setSelectedMessageId(null);
-					setSelectedMessageIds([]);
-					return 'calendar';
-				});
-			}}
-			onOpenContacts={() => {
-				setWorkspace((prev) => {
-					if (prev === 'contacts') return 'mail';
-					setSelectedFolderPath(null);
-					setSelectedMessageId(null);
-					setSelectedMessageIds([]);
-					return 'contacts';
-				});
-			}}
+			onOpenCalendar={() => navigate('/calendar')}
+			onOpenContacts={() => navigate('/contacts')}
 			mailView={appSettings.mailView}
 			onMailViewChange={(view) => {
 				setAppSettings((prev) => ({...prev, mailView: view}));
 				void ipcClient.updateAppSettings({mailView: view}).catch(() => undefined);
 			}}
-			activeWorkspace={workspace}
-			hideFolderSidebar={workspace === 'calendar' || workspace === 'contacts'}
 			syncStatusText={syncStatusText}
 			syncInProgress={Boolean(syncStatusText && syncStatusText.toLowerCase().startsWith('syncing'))}
 			statusHintText={isPointerOverMessageFrame && hoveredLinkUrl ? hoveredLinkUrl : null}
@@ -1558,119 +1543,19 @@ function MailPage() {
 				}
 			}}
 		>
-			<div className={`h-full overflow-hidden ${selectedMessage ? '' : 'lm-bg-content'}`}>
-				{workspace === 'calendar' && (
-					<section className="lm-bg-content h-full overflow-auto p-5">
-						<div className="mx-auto max-w-5xl">
-							<h2 className="lm-text-primary text-xl font-semibold">Calendar</h2>
-							{!selectedAccountId && (
-								<p className="lm-text-muted mt-3 text-sm">
-									Select an account to load calendar events.
-								</p>
-							)}
-							{selectedAccountId && (
-								<>
-									{calendarLoading && (
-										<p className="lm-text-muted mt-3 text-sm">
-											Loading events...
-										</p>
-									)}
-									{!calendarLoading && calendarEvents.length === 0 && (
-										<p className="lm-text-muted mt-3 text-sm">
-											No events found.
-										</p>
-									)}
-									{!calendarLoading && calendarEvents.length > 0 && (
-										<div className="lm-card mt-4 overflow-hidden rounded-lg">
-											<ul className="divide-y lm-border-default">
-												{calendarEvents.map((event) => (
-													<li key={event.id} className="px-4 py-3">
-														<p className="lm-text-primary text-sm font-medium">
-															{event.summary || '(No title)'}
-														</p>
-														<p className="lm-text-secondary mt-0.5 text-xs">
-															{formatSystemDateTime(event.starts_at, systemLocale)} -{' '}
-															{formatSystemDateTime(event.ends_at, systemLocale)}
-														</p>
-														{event.location && (
-															<p className="lm-text-muted mt-1 text-xs">
-																{event.location}
-															</p>
-														)}
-													</li>
-												))}
-											</ul>
-										</div>
-									)}
-								</>
-							)}
-						</div>
-					</section>
-				)}
+			<div className={`h-full overflow-hidden ${selectedMessage ? '' : 'ui-surface-content'}`}>
 
-				{workspace === 'contacts' && (
-					<section className="lm-bg-content h-full overflow-auto p-5">
-						<div className="mx-auto max-w-5xl">
-							<h2 className="lm-text-primary text-xl font-semibold">Contacts</h2>
-							{!selectedAccountId && (
-								<p className="lm-text-muted mt-3 text-sm">
-									Select an account to load contacts.
-								</p>
-							)}
-							{selectedAccountId && (
-								<>
-									<div className="mt-4">
-										<FormInput
-											type="text"
-											value={contactsQuery}
-											onChange={(event) => setContactsQuery(event.target.value)}
-											placeholder="Search contacts..."
-											className="h-10 w-full rounded-md px-3 text-sm"
-										/>
-									</div>
-									{contactsLoading && (
-										<p className="lm-text-muted mt-3 text-sm">
-											Loading contacts...
-										</p>
-									)}
-									{!contactsLoading && contacts.length === 0 && (
-										<p className="lm-text-muted mt-3 text-sm">
-											No contacts found.
-										</p>
-									)}
-									{!contactsLoading && contacts.length > 0 && (
-										<div className="lm-card mt-4 overflow-hidden rounded-lg">
-											<ul className="divide-y lm-border-default">
-												{contacts.map((contact) => (
-													<li key={contact.id} className="px-4 py-3">
-														<p className="lm-text-primary text-sm font-medium">
-															{contact.full_name || '(No name)'}
-														</p>
-														<p className="lm-text-secondary mt-0.5 text-xs">
-															{contact.email}
-														</p>
-													</li>
-												))}
-											</ul>
-										</div>
-									)}
-								</>
-							)}
-						</div>
-					</section>
-				)}
-
-				{workspace === 'mail' && selectedMessage && (
+				{selectedMessage && (
 					<article className="flex h-full flex-col">
 						<div
 							role="toolbar"
 							aria-label="Message actions"
-							className="lm-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
+							className="mail-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
 						>
 							<ToolboxButton label="Reply" icon={<Reply size={14}/>} onClick={onReply} primary/>
 							<ToolboxButton label="Reply all" icon={<ReplyAll size={14}/>} onClick={onReplyAll}/>
 							<ToolboxButton label="Forward" icon={<Forward size={14}/>} onClick={onForward}/>
-							<span className="mx-1 h-6 w-px bg-[var(--border-default)]"/>
+							<span className="divider-default mx-1 h-6 w-px"/>
 							<ToolboxButton
 								label="Open"
 								icon={<SquareArrowOutUpRight size={14}/>}
@@ -1684,29 +1569,29 @@ function MailPage() {
 								danger
 							/>
 						</div>
-						<div className="lm-message-header shrink-0 px-4 py-3">
+						<div className="mail-message-header shrink-0 px-4 py-3">
 							<div className="flex items-start justify-between gap-5">
 								<div className="min-w-0 flex-1">
 									<div className="mb-2 flex flex-wrap items-center gap-1.5">
 										<span
-											className="inline-flex h-5 items-center rounded-md bg-[var(--surface-hover)] px-2 text-[11px] font-medium lm-text-secondary">
+											className="badge-muted inline-flex h-5 items-center rounded-md px-2 text-[11px] font-medium">
 											{selectedFolderPath || 'Message'}
 										</span>
 										{Boolean(selectedMessage.is_flagged) && (
 											<span
-												className="inline-flex h-5 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 text-[11px] font-medium text-amber-800">
+												className="chip-warning inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-medium">
 												<Star size={11} className="fill-current"/>
 												Starred
 											</span>
 										)}
 										<span
-											className="inline-flex h-5 items-center gap-1 rounded-md border lm-border-default lm-bg-card px-2 text-[11px] font-medium lm-text-secondary">
+											className="inline-flex h-5 items-center gap-1 rounded-md border ui-border-default ui-surface-card px-2 text-[11px] font-medium ui-text-secondary">
 											<MailOpen size={11}/>
 											{selectedMessage.is_read ? 'Read' : 'Unread'}
 										</span>
 										{Boolean((selectedMessage as MessageItem & { tag?: string | null }).tag) && (
 											<span
-												className="inline-flex h-5 items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 text-[11px] font-medium text-sky-800">
+												className="chip-info inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-medium">
 												<Tag size={11}/>
 												{formatMessageTagLabel(
 													(
@@ -1719,7 +1604,7 @@ function MailPage() {
 										)}
 										{messageAttachments.length > 0 && (
 											<span
-												className="inline-flex h-5 items-center gap-1 rounded-md border lm-border-default lm-bg-card px-2 text-[11px] font-medium lm-text-secondary">
+												className="inline-flex h-5 items-center gap-1 rounded-md border ui-border-default ui-surface-card px-2 text-[11px] font-medium ui-text-secondary">
 												<Paperclip size={11}/>
 												{messageAttachments.length} attachment
 												{messageAttachments.length > 1 ? 's' : ''}
@@ -1727,27 +1612,27 @@ function MailPage() {
 										)}
 										{buildSpoofHints(selectedMessage).length > 0 && (
 											<span
-												className="inline-flex h-5 items-center rounded-md bg-amber-100 px-2 text-[11px] font-medium text-amber-800">
+												className="chip-warning inline-flex h-5 items-center rounded-md px-2 text-[11px] font-medium">
 												Verify sender
 											</span>
 										)}
 									</div>
-									<h2 className="lm-text-primary truncate text-xl font-semibold tracking-tight">
+									<h2 className="ui-text-primary truncate text-xl font-semibold tracking-tight">
 										{selectedMessage.subject || '(No subject)'}
 									</h2>
 								</div>
 							</div>
-							<div className="lm-text-secondary mt-2 grid gap-1 text-xs">
+							<div className="ui-text-secondary mt-2 grid gap-1 text-xs">
 								<div className="select-text">
-									<span className="lm-text-muted font-medium">From:</span>{' '}
+									<span className="ui-text-muted font-medium">From:</span>{' '}
 									<span className="select-text">{formatFromDisplay(selectedMessage)}</span>
 								</div>
 								<div className="select-text">
-									<span className="lm-text-muted font-medium">To:</span>{' '}
+									<span className="ui-text-muted font-medium">To:</span>{' '}
 									<span className="select-text">{selectedMessage.to_address || '-'}</span>
 								</div>
 								<div>
-									<span className="lm-text-muted font-medium">Date:</span>{' '}
+									<span className="ui-text-muted font-medium">Date:</span>{' '}
 									{formatSystemDateTime(selectedMessage.date, systemLocale)}
 								</div>
 							</div>
@@ -1760,7 +1645,7 @@ function MailPage() {
 							</Button>
 							{showMessageDetails && (
 								<div
-									className="mt-3 rounded-md border lm-border-default bg-[var(--surface-content)] p-3 text-xs lm-text-secondary">
+									className="panel-muted mt-3 rounded-md border ui-border-default p-3 text-xs ui-text-secondary">
 									<div>
 										<span className="font-medium">From name:</span>{' '}
 										{selectedMessage.from_name || '-'}
@@ -1795,7 +1680,7 @@ function MailPage() {
 									{buildSpoofHints(selectedMessage).map((hint) => (
 										<div
 											key={hint}
-											className="mt-1 rounded border border-amber-300/70 bg-amber-50 px-2 py-1 text-amber-800"
+											className="notice-warning mt-1 rounded border px-2 py-1"
 										>
 											{hint}
 										</div>
@@ -1803,7 +1688,7 @@ function MailPage() {
 								</div>
 							)}
 						</div>
-						<div className="lm-bg-card min-h-0 flex flex-1 flex-col">
+						<div className="ui-surface-card min-h-0 flex flex-1 flex-col">
 							{Boolean(
 								renderedBodyHtml &&
 								selectedMessage &&
@@ -1811,19 +1696,19 @@ function MailPage() {
 								!allowRemoteForSelectedMessage,
 							) && (
 								<div
-									className="w-full shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+									className="notice-warning w-full shrink-0 border-b px-4 py-2 text-xs">
 									<div className="flex flex-wrap items-center gap-2">
 										<span>Remote content blocked for privacy.</span>
 										<Button
 											type="button"
-											className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200"
+											className="notice-button-warning rounded px-2 py-1 text-[11px] font-medium"
 											onClick={allowRemoteContentOnceForSelected}
 										>
 											Load once
 										</Button>
 										<Button
 											type="button"
-											className="rounded border border-amber-500/60 bg-amber-100 px-2 py-1 text-[11px] font-medium hover:bg-amber-200"
+											className="notice-button-warning rounded px-2 py-1 text-[11px] font-medium"
 											onClick={allowRemoteContentForSender}
 										>
 											Always allow sender
@@ -1833,8 +1718,9 @@ function MailPage() {
 							)}
 							<div ref={mailBodyViewportRef} className="min-h-0 flex-1">
 								{isMailBodyViewportTooSmall && (
-									<div className="lm-bg-card flex h-full items-center justify-center px-4 text-center">
-										<div className="max-w-md text-sm lm-text-secondary">
+									<div
+										className="ui-surface-card flex h-full items-center justify-center px-4 text-center">
+										<div className="max-w-md text-sm ui-text-secondary">
 											<p>
 												Preview is too small ({mailBodyViewport.width}x{mailBodyViewport.height}
 												). Message opened in a separate window.
@@ -1856,7 +1742,7 @@ function MailPage() {
 										className={
 											isMailBodyViewportTooSmall
 												? 'hidden'
-												: 'lm-text-muted flex h-full items-center justify-center'
+												: 'ui-text-muted flex h-full items-center justify-center'
 										}
 									>
 										Loading message body...
@@ -1867,9 +1753,12 @@ function MailPage() {
 										title={`message-body-${selectedMessage.id}`}
 										srcDoc={iframeSrcDoc}
 										sandbox="allow-popups allow-popups-to-escape-sandbox"
-										className="h-full w-full border-0 bg-[var(--surface-card)]"
+										className="iframe-surface h-full w-full border-0"
 										onMouseDown={requestCloseMainOverlays}
-										onContextMenu={() => requestCloseMainOverlays()}
+										onContextMenu={(event) => {
+											event.stopPropagation();
+											requestCloseMainOverlays();
+										}}
 										onFocus={requestCloseMainOverlays}
 										onMouseEnter={() => setIsPointerOverMessageFrame(true)}
 										onMouseLeave={() => {
@@ -1879,7 +1768,7 @@ function MailPage() {
 									/>
 								)}
 								{!isMailBodyViewportTooSmall && !bodyLoading && !iframeSrcDoc && (
-									<div className="lm-bg-card h-full overflow-auto p-4 lm-text-primary">
+									<div className="ui-surface-card h-full overflow-auto p-4 ui-text-primary">
 										<pre
 											className="select-text whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
 											{selectedMessageBody?.text || 'No body content available for this message.'}
@@ -1890,7 +1779,7 @@ function MailPage() {
 						</div>
 						{messageAttachments.length > 0 && (
 							<div
-								className="shrink-0 border-t lm-border-default bg-[color-mix(in_srgb,var(--surface-content)_80%,transparent)] px-4 py-3">
+								className="shrink-0 border-t ui-border-default bg-[color-mix(in_srgb,var(--surface-content)_80%,transparent)] px-4 py-3">
 								<div className="overflow-x-auto overflow-y-hidden">
 									<div className="flex min-w-full w-max gap-2 pb-1">
 										{messageAttachments.map((attachment, index) => (
@@ -1919,7 +1808,7 @@ function MailPage() {
 												}}
 											>
 												<span
-													className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border lm-border-default bg-[var(--surface-content)] lm-text-muted">
+													className="attachment-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ui-border-default ui-text-muted">
 													<Paperclip size={15}/>
 												</span>
 												<span className="min-w-0 flex-1">
@@ -1927,7 +1816,7 @@ function MailPage() {
 														{attachment.filename || 'Attachment'}
 													</span>
 													<span
-														className="lm-text-muted block truncate text-[11px]">
+														className="ui-text-muted block truncate text-[11px]">
 														{attachment.contentType || 'FILE'}
 														{typeof attachment.size === 'number'
 															? ` • ${formatBytes(attachment.size)}`
@@ -1951,38 +1840,48 @@ function MailPage() {
 				onClose={() => setShowSourceModal(false)}
 			/>
 			{attachmentMenu && (
-				<div
-					className="lm-context-menu fixed z-[1100] min-w-44 rounded-md p-1 shadow-xl"
-					style={{
+				<ContextMenu
+					size="sm"
+					layer="1100"
+					position={{
 						left: clampToViewport(attachmentMenu.x, 184, window.innerWidth),
 						top: clampToViewport(attachmentMenu.y, 108, window.innerHeight),
 					}}
 					onClick={(event) => event.stopPropagation()}
 				>
-					<Button
-						variant="ghost"
-						className="block w-full rounded px-2 py-1.5 text-left text-sm"
+					<ContextMenuItem
 						onClick={() => {
 							runAttachmentAction(attachmentMenu.index, 'open');
 							setAttachmentMenu(null);
 						}}
 					>
 						Open
-					</Button>
-					<Button
-						variant="ghost"
-						className="block w-full rounded px-2 py-1.5 text-left text-sm"
+					</ContextMenuItem>
+					<ContextMenuItem
 						onClick={() => {
 							runAttachmentAction(attachmentMenu.index, 'save');
 							setAttachmentMenu(null);
 						}}
 					>
 						Save As...
-					</Button>
-				</div>
+					</ContextMenuItem>
+				</ContextMenu>
 			)}
 		</MainLayout>
 	);
+}
+
+function matchesMailSearchNeedle(message: MessageItem, needle: string): boolean {
+	if (!needle) return true;
+	const haystack = [
+		message.from_name || '',
+		message.from_address || '',
+		message.subject || '',
+		message.to_address || '',
+	]
+		.join(' ')
+		.toLowerCase();
+	return haystack.includes(needle);
 }
 
 export default MailPage;

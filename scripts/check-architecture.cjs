@@ -7,6 +7,20 @@ const SRC_DIR = path.join(ROOT, 'src');
 const MAX_FILE_LINES = 2000;
 const TARGET_EXTENSIONS = new Set(['.ts', '.tsx']);
 const DIRECT_EVENT_PATTERN = /window\.electronAPI\.on[A-Z][A-Za-z0-9_]*(?:\?\.)?\s*\(/g;
+const FORBIDDEN_RENDERER_COLOR_PATTERNS = [
+    {
+        name: 'dark-color-utility',
+        regex: /\bdark:(?:bg|text|border|ring|fill|stroke)-[^\s"'`]+/g,
+    },
+    {
+        name: 'tailwind-bracket-var-color',
+        regex: /\b(?:bg|text|border|ring|fill|stroke)-\[var\(--[^\]]+\)\]/g,
+    },
+    {
+        name: 'tailwind-palette-color-utility',
+        regex: /\b(?:bg|text|border|ring|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)(?:-[0-9]{2,3}(?:\/[0-9]{1,3})?|\/[0-9]{1,3})?\b/g,
+    },
+];
 const EVENT_ALLOWLIST = new Set([
     normalizePath('src/renderer/hooks/ipc/useIpcEvent.ts'),
     normalizePath('src/renderer/lib/ipcClient.ts'),
@@ -42,6 +56,7 @@ function main() {
 
     const oversized = [];
     const directEventUsages = [];
+    const forbiddenRendererColorUsages = [];
 
     for (const file of files) {
         const raw = fs.readFileSync(file, 'utf8');
@@ -59,6 +74,21 @@ function main() {
                 match = DIRECT_EVENT_PATTERN.exec(raw);
             }
             DIRECT_EVENT_PATTERN.lastIndex = 0;
+        }
+
+        if (relative.startsWith('src/renderer/')) {
+            for (const pattern of FORBIDDEN_RENDERER_COLOR_PATTERNS) {
+                let match = pattern.regex.exec(raw);
+                while (match) {
+                    forbiddenRendererColorUsages.push({
+                        relative,
+                        rule: pattern.name,
+                        token: match[0],
+                    });
+                    match = pattern.regex.exec(raw);
+                }
+                pattern.regex.lastIndex = 0;
+            }
         }
     }
 
@@ -86,6 +116,32 @@ function main() {
             .forEach(([file, count]) => console.warn(`  - ${file}: ${count} occurrence(s)`));
     } else {
         console.log('[architecture-check] Event boilerplate check passed.');
+    }
+
+    if (forbiddenRendererColorUsages.length > 0) {
+        hasError = true;
+        console.error(
+            '[architecture-check] Found forbidden renderer color utilities. Use semantic classes/tokens instead.',
+        );
+        const grouped = new Map();
+        for (const usage of forbiddenRendererColorUsages) {
+            const key = `${usage.relative}::${usage.rule}`;
+            const existing = grouped.get(key) || {count: 0, samples: new Set()};
+            existing.count += 1;
+            if (existing.samples.size < 3) existing.samples.add(usage.token);
+            grouped.set(key, existing);
+        }
+        [...grouped.entries()]
+            .sort((a, b) => b[1].count - a[1].count)
+            .forEach(([key, info]) => {
+                const [file, rule] = key.split('::');
+                console.error(`  - ${file} [${rule}] x${info.count}`);
+                for (const sample of info.samples) {
+                    console.error(`      ${sample}`);
+                }
+            });
+    } else {
+        console.log('[architecture-check] Renderer color utility guard passed.');
     }
 
     if (hasError) process.exit(1);

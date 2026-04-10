@@ -2,7 +2,11 @@ import nodemailer from 'nodemailer';
 import {ImapFlow} from 'imapflow';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {getAccountSendCredentials, getAccountSyncCredentials, getLocalAccountVCardPath} from '../db/repositories/accountsRepo.js';
+import {
+    getAccountSendCredentials,
+    getAccountSyncCredentials,
+    getLocalAccountVCardPath
+} from '../db/repositories/accountsRepo.js';
 import {createMailDebugLogger} from '../debug/debugLog.js';
 import {markdownToEmailHtml} from './markdown.js';
 import {resolveImapSecurity, resolveSmtpSecurity} from './security.js';
@@ -73,9 +77,7 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
     const inputHtml = payload.html?.trim() || (markdown ? markdownToEmailHtml(markdown) : undefined);
     const signedBodies = appendAccountSignature(
         inputText,
-        inputHtml ?? null,
-        account.signature_text,
-        account.signature_is_html,
+        inputHtml ?? null
     );
     const regularAttachments = normalizeAttachments(payload.attachments);
     const attachmentsWithVCard = await withOptionalAccountVCardAttachment(account, regularAttachments);
@@ -143,37 +145,8 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
 function appendAccountSignature(
     text: string,
     html: string | null,
-    signatureText: string | null,
-    signatureIsHtml: number,
 ): { text: string; html: string | null } {
-    const signatureRaw = (signatureText || '').trim();
-    if (!signatureRaw) return {text, html};
-
-    const signatureTextPart = signatureIsHtml ? htmlToText(signatureRaw).trim() : signatureRaw;
-    if (signatureTextPart && normalizeSignatureCompare(text).includes(normalizeSignatureCompare(signatureTextPart))) {
-        return {text, html};
-    }
-    const nextText = [text.trim(), signatureTextPart].filter(Boolean).join('\n\n');
-
-    const signatureHtml = signatureIsHtml
-        ? signatureRaw
-        : signatureRaw
-            .split(/\r?\n/)
-            .map((line) => escapeHtml(line))
-            .join('<br/>');
-    const signatureHtmlWithDivider = withSignatureDivider(signatureHtml);
-    const bodyHtml = (html || '').trim();
-    if (
-        signatureHtmlWithDivider &&
-        normalizeSignatureCompare(bodyHtml).includes(normalizeSignatureCompare(signatureHtmlWithDivider))
-    ) {
-        return {text: nextText || text, html: html || null};
-    }
-    const nextHtml = [bodyHtml, signatureHtmlWithDivider].filter(Boolean).join('<br/><br/>');
-    return {
-        text: nextText,
-        html: nextHtml || null,
-    };
+    return {text, html};
 }
 
 function htmlToText(html: string): string {

@@ -15,10 +15,10 @@ export default function ToolboxButton({
     danger?: boolean;
 }) {
     const className = primary
-        ? "bg-sky-600 text-white hover:bg-sky-700 dark:bg-[#5865f2] dark:hover:bg-[#4f5bd5]"
+        ? "mail-toolbox-primary"
         : danger
-            ? "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30"
-            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#3a3d44]";
+            ? "mail-toolbox-danger"
+            : "mail-toolbox-default";
 
     return (
         <Button
