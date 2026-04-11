@@ -7,7 +7,7 @@ import {
 	attachWindowShortcuts,
 	buildSecureWebPreferences,
 	createAppWindow,
-    createFramelessAppWindow,
+	createFramelessAppWindow,
 } from './windowFactory.js';
 
 const isDev = !app.isPackaged;
@@ -18,12 +18,12 @@ let debugWin: BrowserWindow | null = null;
 
 export function openDebugWindow(): void {
 	if (debugWin && !debugWin.isDestroyed()) {
-        if (debugWin.isMinimized()) {
-            debugWin.restore();
-        }
-        if (!debugWin.isVisible()) {
-            debugWin.show();
-        }
+		if (debugWin.isMinimized()) {
+			debugWin.restore();
+		}
+		if (!debugWin.isVisible()) {
+			debugWin.show();
+		}
 		debugWin.focus();
 		return;
 	}
@@ -52,17 +52,17 @@ export function openDebugWindow(): void {
 		devUrls: [
 			{
 				target: 'http://127.0.0.1:5174/window.html',
-                hash: '/windows/debug',
+				hash: '/windows/debug',
 			},
 			{
 				target: 'http://127.0.0.1:5174/src/renderer/window.html',
-                hash: '/windows/debug',
+				hash: '/windows/debug',
 			},
 		],
 		prodFiles: [
 			{
 				target: path.join(__dirname, '..', '..', 'renderer/window.html'),
-                hash: '/windows/debug',
+				hash: '/windows/debug',
 			},
 		],
 		windowName: 'debug',

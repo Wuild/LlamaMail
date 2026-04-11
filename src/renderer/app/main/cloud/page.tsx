@@ -103,7 +103,7 @@ export default function CloudFilesPage() {
 	const [reloadKey, setReloadKey] = useState(0);
 	const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
 	const [newFolderName, setNewFolderName] = useState('');
-	const [shareModal, setShareModal] = useState<{ name: string; url: string } | null>(null);
+	const [shareModal, setShareModal] = useState<{name: string; url: string} | null>(null);
 	const [filesCache, setFilesCache] = useState<Record<string, CloudItem[]>>({});
 	const filesCacheRef = useRef<Record<string, CloudItem[]>>({});
 	const [pendingFolderToken, setPendingFolderToken] = useState<string | null>(null);
@@ -111,31 +111,31 @@ export default function CloudFilesPage() {
 	const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 	const [refreshingAccountIds, setRefreshingAccountIds] = useState<Set<number>>(new Set());
 	const [collapsedAccountIds, setCollapsedAccountIds] = useState<Set<number>>(() => readCollapsedCloudAccountIds());
-	const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: CloudItem } | null>(null);
-	const [accountMenu, setAccountMenu] = useState<{ x: number; y: number; account: PublicCloudAccount } | null>(null);
+	const [rowMenu, setRowMenu] = useState<{x: number; y: number; item: CloudItem} | null>(null);
+	const [accountMenu, setAccountMenu] = useState<{x: number; y: number; account: PublicCloudAccount} | null>(null);
 	const [storageUsage, setStorageUsage] = useState<CloudStorageUsage | null>(null);
 	const [storageLoading, setStorageLoading] = useState(false);
 	const rowMenuRef = useRef<HTMLDivElement | null>(null);
 	const accountMenuRef = useRef<HTMLDivElement | null>(null);
 	const tableHeadMenuRef = useRef<HTMLDivElement | null>(null);
-	const [rowMenuPosition, setRowMenuPosition] = useState<{ left: number; top: number }>({
+	const [rowMenuPosition, setRowMenuPosition] = useState<{left: number; top: number}>({
 		left: 0,
 		top: 0,
 	});
 	const [rowMenuReady, setRowMenuReady] = useState(false);
-	const [accountMenuPosition, setAccountMenuPosition] = useState<{ left: number; top: number }>({
+	const [accountMenuPosition, setAccountMenuPosition] = useState<{left: number; top: number}>({
 		left: 0,
 		top: 0,
 	});
 	const [accountMenuReady, setAccountMenuReady] = useState(false);
-	const [tableHeadMenu, setTableHeadMenu] = useState<{ x: number; y: number } | null>(null);
-	const [tableHeadMenuPosition, setTableHeadMenuPosition] = useState<{ left: number; top: number }>({
+	const [tableHeadMenu, setTableHeadMenu] = useState<{x: number; y: number} | null>(null);
+	const [tableHeadMenuPosition, setTableHeadMenuPosition] = useState<{left: number; top: number}>({
 		left: 0,
 		top: 0,
 	});
 	const [tableHeadMenuReady, setTableHeadMenuReady] = useState(false);
 	const [tableColumns, setTableColumns] = useState<CloudTableColumnKey[]>(() => readCloudTableColumns());
-	const [tableSort, setTableSort] = useState<{ column: CloudTableColumnKey; direction: CloudTableSortDirection }>({
+	const [tableSort, setTableSort] = useState<{column: CloudTableColumnKey; direction: CloudTableSortDirection}>({
 		column: 'name',
 		direction: 'asc',
 	});
@@ -969,14 +969,14 @@ export default function CloudFilesPage() {
 	const tokenHelp =
 		draft.provider === 'onedrive'
 			? {
-				title: 'OneDrive sign-in',
-				steps: [
-					'Click "Sign in with OneDrive".',
-					'Complete Microsoft sign-in and consent in your browser.',
-					'Return to LlamaMail after the browser callback finishes.',
-				],
-				link: 'https://support.microsoft.com/onedrive',
-			}
+					title: 'OneDrive sign-in',
+					steps: [
+						'Click "Sign in with OneDrive".',
+						'Complete Microsoft sign-in and consent in your browser.',
+						'Return to LlamaMail after the browser callback finishes.',
+					],
+					link: 'https://support.microsoft.com/onedrive',
+				}
 			: null;
 
 	function toggleAccountExpanded(accountId: number): void {
@@ -1035,7 +1035,7 @@ export default function CloudFilesPage() {
 						setShowCreateFolderModal(true);
 					}}
 				>
-					<FolderPlus size={14}/>
+					<FolderPlus size={14} />
 					New Folder
 				</Button>
 				<Button
@@ -1045,7 +1045,7 @@ export default function CloudFilesPage() {
 					disabled={!selectedAccount || loading || mutating}
 					onClick={() => void onUploadFiles()}
 				>
-					<Upload size={14}/>
+					<Upload size={14} />
 					Upload
 				</Button>
 			</div>
@@ -1063,7 +1063,7 @@ export default function CloudFilesPage() {
 					onClick={() => setShowAddModal(true)}
 					title="Add cloud account"
 				>
-					<Plus size={15}/>
+					<Plus size={15} />
 				</Button>
 			</div>
 			<div className="min-h-0 flex-1 overflow-auto p-2">
@@ -1106,11 +1106,11 @@ export default function CloudFilesPage() {
 										aria-hidden
 									>
 										{account.provider === 'onedrive' ? (
-											<Cloud size={14}/>
+											<Cloud size={14} />
 										) : account.provider === 'nextcloud' ? (
-											<Globe size={14}/>
+											<Globe size={14} />
 										) : (
-											<HardDrive size={14}/>
+											<HardDrive size={14} />
 										)}
 									</span>
 									<span className="min-w-0 flex-1">
@@ -1121,8 +1121,7 @@ export default function CloudFilesPage() {
 									</span>
 								</Link>
 								<div className="ml-auto flex items-center gap-1 pr-0">
-									<div
-										className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+									<div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
 										<Button
 											type="button"
 											variant="ghost"
@@ -1153,7 +1152,7 @@ export default function CloudFilesPage() {
 												setAccountMenu({x: event.clientX, y: event.clientY, account});
 											}}
 										>
-											<Settings size={13}/>
+											<Settings size={13} />
 										</Button>
 									</div>
 									{isOneDrive && (
@@ -1183,8 +1182,7 @@ export default function CloudFilesPage() {
 								</div>
 							</div>
 							{isOneDrive && isExpanded && (
-								<div
-									className="tree-guide relative space-y-1 pl-7 before:absolute before:bottom-2 before:left-3.5 before:top-1 before:w-px before:content-['']">
+								<div className="tree-guide relative space-y-1 pl-7 before:absolute before:bottom-2 before:left-3.5 before:top-1 before:w-px before:content-['']">
 									{ONEDRIVE_SCOPE_OPTIONS.map((scope) => (
 										<Link
 											key={`${account.id}-${scope.value}`}
@@ -1244,15 +1242,13 @@ export default function CloudFilesPage() {
 						</div>
 					)}
 					{selectedAccount && loading && Boolean(pendingFolderToken) && (
-						<div
-							className="ui-text-muted flex h-full min-h-60 flex-col items-center justify-center gap-2 text-sm">
-							<Loader2 size={18} className="animate-spin"/>
+						<div className="ui-text-muted flex h-full min-h-60 flex-col items-center justify-center gap-2 text-sm">
+							<Loader2 size={18} className="animate-spin" />
 							<span>Loading folder...</span>
 						</div>
 					)}
 					{selectedAccount && !pendingFolderToken && items.length === 0 && !loading && (
-						<div
-							className="ui-text-muted flex h-full min-h-60 flex-col items-center justify-center gap-3 text-sm">
+						<div className="ui-text-muted flex h-full min-h-60 flex-col items-center justify-center gap-3 text-sm">
 							<span>No files</span>
 							<Link
 								to={buildCloudLink(
@@ -1281,9 +1277,9 @@ export default function CloudFilesPage() {
 								>
 									<colgroup>
 										{visibleTableColumns.map((column) => (
-											<col key={column.key} style={{width: `${columnWidths[column.key]}px`}}/>
+											<col key={column.key} style={{width: `${columnWidths[column.key]}px`}} />
 										))}
-										<col style={{width: '44px'}}/>
+										<col style={{width: '44px'}} />
 									</colgroup>
 									<thead
 										className="surface-muted sticky top-0 z-10 border-b ui-border-default shadow-[inset_0_-1px_0_0_var(--border-default)]"
@@ -1292,159 +1288,76 @@ export default function CloudFilesPage() {
 											openTableHeadMenuAt(event.clientX, event.clientY);
 										}}
 									>
-									<tr className="group text-left text-xs uppercase tracking-wide ui-text-secondary">
-										{visibleTableColumns.map((column, index) => (
-											<CloudSortableHeaderCell
-												key={column.key}
-												columnKey={column.key}
-												label={column.label}
-												index={index}
-												visibleColumnCount={visibleTableColumns.length}
-												dragPlaceholder={dragPlaceholder}
-												tableSort={tableSort}
-												onToggleSort={toggleTableSort}
-												onColumnResizeStart={onColumnResizeStart}
-												onDragStart={onTableHeaderDragStart}
-												onHover={(hoverColumn, side, draggedFromHover) => {
-													const dragged = draggedFromHover || draggingColumn;
-													if (!dragged) return;
-													if (isTableColumnMoveNoop(dragged, hoverColumn, side)) {
+										<tr className="group text-left text-xs uppercase tracking-wide ui-text-secondary">
+											{visibleTableColumns.map((column, index) => (
+												<CloudSortableHeaderCell
+													key={column.key}
+													columnKey={column.key}
+													label={column.label}
+													index={index}
+													visibleColumnCount={visibleTableColumns.length}
+													dragPlaceholder={dragPlaceholder}
+													tableSort={tableSort}
+													onToggleSort={toggleTableSort}
+													onColumnResizeStart={onColumnResizeStart}
+													onDragStart={onTableHeaderDragStart}
+													onHover={(hoverColumn, side, draggedFromHover) => {
+														const dragged = draggedFromHover || draggingColumn;
+														if (!dragged) return;
+														if (isTableColumnMoveNoop(dragged, hoverColumn, side)) {
+															setDragPlaceholder(null);
+															return;
+														}
+														setDragPlaceholder((prev) => {
+															if (prev?.column === hoverColumn && prev.side === side)
+																return prev;
+															return {column: hoverColumn, side};
+														});
+													}}
+													onDrop={onTableHeaderDrop}
+													onDragEnd={() => {
+														setDraggingColumn(null);
 														setDragPlaceholder(null);
-														return;
-													}
-													setDragPlaceholder((prev) => {
-														if (prev?.column === hoverColumn && prev.side === side)
-															return prev;
-														return {column: hoverColumn, side};
-													});
-												}}
-												onDrop={onTableHeaderDrop}
-												onDragEnd={() => {
-													setDraggingColumn(null);
-													setDragPlaceholder(null);
-												}}
-											/>
-										))}
-										<th className="surface-muted border-b ui-border-default px-1 py-1 text-right">
-											<Button
-												type="button"
-												variant="ghost"
-												className="ui-surface-hover ui-hover-text-primary inline-flex h-6 w-6 items-center justify-center rounded-md ui-text-muted transition-colors"
-												title="Table column options"
-												aria-label="Table column options"
-												onClick={(event) => {
-													const rect = event.currentTarget.getBoundingClientRect();
-													openTableHeadMenuAt(rect.right - 8, rect.bottom + 6);
-												}}
-											>
-												<Settings size={13}/>
-											</Button>
-										</th>
-									</tr>
+													}}
+												/>
+											))}
+											<th className="surface-muted border-b ui-border-default px-1 py-1 text-right">
+												<Button
+													type="button"
+													variant="ghost"
+													className="ui-surface-hover ui-hover-text-primary inline-flex h-6 w-6 items-center justify-center rounded-md ui-text-muted transition-colors"
+													title="Table column options"
+													aria-label="Table column options"
+													onClick={(event) => {
+														const rect = event.currentTarget.getBoundingClientRect();
+														openTableHeadMenuAt(rect.right - 8, rect.bottom + 6);
+													}}
+												>
+													<Settings size={13} />
+												</Button>
+											</th>
+										</tr>
 									</thead>
 									<tbody>
-									{nav.length > 1 && (
-										<tr className="border-b ui-border-default ui-surface-hover">
-											{visibleTableColumns.map((column) => {
-												if (column.key === 'name') {
-													return (
-														<td
-															key={`parent-${column.key}`}
-															className="px-3 py-2"
-															style={{width: columnWidths.name}}
-														>
-															<Link
-																to={buildCloudLink(
-																	selectedAccount.id,
-																	nav.slice(0, -1),
-																)}
-																onClick={() => {
-																	setPendingFolderToken('__parent__');
-																	setItems([]);
-																	setStatus('Opening parent folder...');
-																	setLoading(true);
-																}}
-																className="flex min-w-0 items-center gap-2 ui-text-primary hover:underline"
+										{nav.length > 1 && (
+											<tr className="border-b ui-border-default ui-surface-hover">
+												{visibleTableColumns.map((column) => {
+													if (column.key === 'name') {
+														return (
+															<td
+																key={`parent-${column.key}`}
+																className="px-3 py-2"
+																style={{width: columnWidths.name}}
 															>
-																<FolderOpen
-																	size={15}
-																	className="icon-info shrink-0"
-																/>
-																<span className="truncate font-medium">..</span>
-															</Link>
-														</td>
-													);
-												}
-												if (column.key === 'type') {
-													return (
-														<td
-															key={`parent-${column.key}`}
-															className="ui-text-muted px-3 py-2 text-xs"
-															style={{width: columnWidths.type}}
-														>
-															Folder
-														</td>
-													);
-												}
-												if (column.key === 'size') {
-													return (
-														<td
-															key={`parent-${column.key}`}
-															className="ui-text-muted px-3 py-2 text-xs"
-															style={{width: columnWidths.size}}
-														>
-															-
-														</td>
-													);
-												}
-												if (column.key === 'modified') {
-													return (
-														<td
-															key={`parent-${column.key}`}
-															className="ui-text-muted px-3 py-2 text-xs"
-															style={{width: columnWidths.modified}}
-														>
-															-
-														</td>
-													);
-												}
-												return (
-													<td
-														key={`parent-${column.key}`}
-														className="ui-text-muted px-3 py-2 text-xs"
-														style={{width: columnWidths.created}}
-													>
-														-
-													</td>
-												);
-											})}
-											<td className="ui-text-muted px-2 py-2 text-right text-xs">Parent</td>
-										</tr>
-									)}
-									{sortedItems.map((item) => (
-										<tr
-											key={item.id}
-											className="ui-surface-hover relative border-b ui-border-default"
-											onContextMenu={(event) => {
-												event.preventDefault();
-												setRowMenu({x: event.clientX, y: event.clientY, item});
-											}}
-										>
-											{visibleTableColumns.map((column) => {
-												if (column.key === 'name') {
-													return (
-														<td
-															key={`${item.id}-${column.key}`}
-															className="px-3 py-2"
-															style={{width: columnWidths.name}}
-														>
-															{item.isFolder ? (
 																<Link
-																	to={buildFolderLink(item)}
+																	to={buildCloudLink(
+																		selectedAccount.id,
+																		nav.slice(0, -1),
+																	)}
 																	onClick={() => {
-																		setPendingFolderToken(item.path);
+																		setPendingFolderToken('__parent__');
 																		setItems([]);
-																		setStatus(`Opening ${item.name}...`);
+																		setStatus('Opening parent folder...');
 																		setLoading(true);
 																	}}
 																	className="flex min-w-0 items-center gap-2 ui-text-primary hover:underline"
@@ -1453,97 +1366,180 @@ export default function CloudFilesPage() {
 																		size={15}
 																		className="icon-info shrink-0"
 																	/>
-																	<span className="truncate">{item.name}</span>
+																	<span className="truncate font-medium">..</span>
 																</Link>
-															) : (
-																<Button
-																	type="button"
-																	className="flex min-w-0 items-center gap-2 text-left ui-text-primary hover:underline"
-																	onClick={() => void onViewItem(item)}
-																>
-																	{activeFileActionId === item.id ? (
-																		<Loader2
-																			size={15}
-																			className="icon-muted shrink-0 animate-spin"
-																		/>
-																	) : (
-																		renderCloudFileTypeIcon(item)
-																	)}
-																	<span className="truncate">{item.name}</span>
-																</Button>
-															)}
-														</td>
-													);
-												}
-												if (column.key === 'type') {
-													return (
-														<td
-															key={`${item.id}-${column.key}`}
-															className="ui-text-muted px-3 py-2 text-xs"
-															style={{width: columnWidths.type}}
-														>
-															{item.isFolder ? 'Folder' : 'File'}
-														</td>
-													);
-												}
-												if (column.key === 'size') {
-													return (
-														<td
-															key={`${item.id}-${column.key}`}
-															className="ui-text-muted px-3 py-2 text-xs"
-															style={{width: columnWidths.size}}
-														>
-															{item.isFolder ? '-' : formatBytes(item.size ?? 0)}
-														</td>
-													);
-												}
-												if (column.key === 'modified') {
-													return (
-														<td
-															key={`${item.id}-${column.key}`}
-															className="ui-text-muted px-3 py-2 text-xs"
-															style={{width: columnWidths.modified}}
-														>
-															{formatSystemDateTime(item.modifiedAt) || '-'}
-														</td>
-													);
-												}
-												return (
-													<td
-														key={`${item.id}-${column.key}`}
-														className="ui-text-muted px-3 py-2 text-xs"
-														style={{width: columnWidths.created}}
-													>
-														{formatSystemDateTime(item.createdAt) || '-'}
-													</td>
-												);
-											})}
-											<td className="relative px-2 py-2 text-right">
-												<Button
-													type="button"
-													variant="outline"
-													className="inline-flex h-7 w-7 items-center justify-center rounded-md disabled:opacity-50"
-													title="Actions"
-													aria-label={`Actions for ${item.name}`}
-													onClick={(event) => {
-														const rect = event.currentTarget.getBoundingClientRect();
-														setRowMenu({x: rect.right - 8, y: rect.bottom + 6, item});
-													}}
-													disabled={
-														mutating ||
-														activeFileActionId !== null ||
-														deletingItemId === item.id
+															</td>
+														);
 													}
-												>
-													{deletingItemId === item.id ? (
-														<Loader2 size={14} className="animate-spin"/>
-													) : (
-														<MoreHorizontal size={14}/>
-													)}
-												</Button>
-											</td>
-										</tr>
-									))}
+													if (column.key === 'type') {
+														return (
+															<td
+																key={`parent-${column.key}`}
+																className="ui-text-muted px-3 py-2 text-xs"
+																style={{width: columnWidths.type}}
+															>
+																Folder
+															</td>
+														);
+													}
+													if (column.key === 'size') {
+														return (
+															<td
+																key={`parent-${column.key}`}
+																className="ui-text-muted px-3 py-2 text-xs"
+																style={{width: columnWidths.size}}
+															>
+																-
+															</td>
+														);
+													}
+													if (column.key === 'modified') {
+														return (
+															<td
+																key={`parent-${column.key}`}
+																className="ui-text-muted px-3 py-2 text-xs"
+																style={{width: columnWidths.modified}}
+															>
+																-
+															</td>
+														);
+													}
+													return (
+														<td
+															key={`parent-${column.key}`}
+															className="ui-text-muted px-3 py-2 text-xs"
+															style={{width: columnWidths.created}}
+														>
+															-
+														</td>
+													);
+												})}
+												<td className="ui-text-muted px-2 py-2 text-right text-xs">Parent</td>
+											</tr>
+										)}
+										{sortedItems.map((item) => (
+											<tr
+												key={item.id}
+												className="ui-surface-hover relative border-b ui-border-default"
+												onContextMenu={(event) => {
+													event.preventDefault();
+													setRowMenu({x: event.clientX, y: event.clientY, item});
+												}}
+											>
+												{visibleTableColumns.map((column) => {
+													if (column.key === 'name') {
+														return (
+															<td
+																key={`${item.id}-${column.key}`}
+																className="px-3 py-2"
+																style={{width: columnWidths.name}}
+															>
+																{item.isFolder ? (
+																	<Link
+																		to={buildFolderLink(item)}
+																		onClick={() => {
+																			setPendingFolderToken(item.path);
+																			setItems([]);
+																			setStatus(`Opening ${item.name}...`);
+																			setLoading(true);
+																		}}
+																		className="flex min-w-0 items-center gap-2 ui-text-primary hover:underline"
+																	>
+																		<FolderOpen
+																			size={15}
+																			className="icon-info shrink-0"
+																		/>
+																		<span className="truncate">{item.name}</span>
+																	</Link>
+																) : (
+																	<Button
+																		type="button"
+																		className="flex min-w-0 items-center gap-2 text-left ui-text-primary hover:underline"
+																		onClick={() => void onViewItem(item)}
+																	>
+																		{activeFileActionId === item.id ? (
+																			<Loader2
+																				size={15}
+																				className="icon-muted shrink-0 animate-spin"
+																			/>
+																		) : (
+																			renderCloudFileTypeIcon(item)
+																		)}
+																		<span className="truncate">{item.name}</span>
+																	</Button>
+																)}
+															</td>
+														);
+													}
+													if (column.key === 'type') {
+														return (
+															<td
+																key={`${item.id}-${column.key}`}
+																className="ui-text-muted px-3 py-2 text-xs"
+																style={{width: columnWidths.type}}
+															>
+																{item.isFolder ? 'Folder' : 'File'}
+															</td>
+														);
+													}
+													if (column.key === 'size') {
+														return (
+															<td
+																key={`${item.id}-${column.key}`}
+																className="ui-text-muted px-3 py-2 text-xs"
+																style={{width: columnWidths.size}}
+															>
+																{item.isFolder ? '-' : formatBytes(item.size ?? 0)}
+															</td>
+														);
+													}
+													if (column.key === 'modified') {
+														return (
+															<td
+																key={`${item.id}-${column.key}`}
+																className="ui-text-muted px-3 py-2 text-xs"
+																style={{width: columnWidths.modified}}
+															>
+																{formatSystemDateTime(item.modifiedAt) || '-'}
+															</td>
+														);
+													}
+													return (
+														<td
+															key={`${item.id}-${column.key}`}
+															className="ui-text-muted px-3 py-2 text-xs"
+															style={{width: columnWidths.created}}
+														>
+															{formatSystemDateTime(item.createdAt) || '-'}
+														</td>
+													);
+												})}
+												<td className="relative px-2 py-2 text-right">
+													<Button
+														type="button"
+														variant="outline"
+														className="inline-flex h-7 w-7 items-center justify-center rounded-md disabled:opacity-50"
+														title="Actions"
+														aria-label={`Actions for ${item.name}`}
+														onClick={(event) => {
+															const rect = event.currentTarget.getBoundingClientRect();
+															setRowMenu({x: rect.right - 8, y: rect.bottom + 6, item});
+														}}
+														disabled={
+															mutating ||
+															activeFileActionId !== null ||
+															deletingItemId === item.id
+														}
+													>
+														{deletingItemId === item.id ? (
+															<Loader2 size={14} className="animate-spin" />
+														) : (
+															<MoreHorizontal size={14} />
+														)}
+													</Button>
+												</td>
+											</tr>
+										))}
 									</tbody>
 								</table>
 							</div>
@@ -1565,17 +1561,17 @@ export default function CloudFilesPage() {
 					{!rowMenu.item.isFolder && (
 						<>
 							<ContextMenuItem type="button" onClick={() => void onViewItem(rowMenu.item)}>
-								<Eye size={14}/>
+								<Eye size={14} />
 								View
 							</ContextMenuItem>
 							<ContextMenuItem type="button" onClick={() => void onDownloadItem(rowMenu.item)}>
-								<Download size={14}/>
+								<Download size={14} />
 								Download
 							</ContextMenuItem>
 						</>
 					)}
 					<ContextMenuItem type="button" onClick={() => void onShareItem(rowMenu.item)}>
-						<Share2 size={14}/>
+						<Share2 size={14} />
 						Share
 					</ContextMenuItem>
 					<ContextMenuItem
@@ -1586,9 +1582,9 @@ export default function CloudFilesPage() {
 						disabled={deletingItemId === rowMenu.item.id}
 					>
 						{deletingItemId === rowMenu.item.id ? (
-							<Loader2 size={14} className="animate-spin"/>
+							<Loader2 size={14} className="animate-spin" />
 						) : (
-							<Trash2 size={14}/>
+							<Trash2 size={14} />
 						)}
 						{deletingItemId === rowMenu.item.id ? 'Deleting...' : 'Delete'}
 					</ContextMenuItem>
@@ -1625,7 +1621,7 @@ export default function CloudFilesPage() {
 							</ContextMenuItem>
 						);
 					})}
-					<ContextMenuSeparator/>
+					<ContextMenuSeparator />
 					<ContextMenuItem type="button" onClick={() => resetTableColumns()}>
 						Reset Columns
 					</ContextMenuItem>
@@ -1680,7 +1676,7 @@ export default function CloudFilesPage() {
 								Nextcloud/WebDAV uses URL + username + app password. OneDrive can use direct sign-in.
 							</p>
 						</div>
-						<Cloud size={18} className="icon-muted"/>
+						<Cloud size={18} className="icon-muted" />
 					</div>
 					<div className="space-y-3">
 						<Field
@@ -1806,7 +1802,7 @@ export default function CloudFilesPage() {
 								Update account details. Leave secret empty to keep current one.
 							</p>
 						</div>
-						<Settings size={18} className="icon-muted"/>
+						<Settings size={18} className="icon-muted" />
 					</div>
 					<div className="space-y-3">
 						<Field
@@ -1831,9 +1827,9 @@ export default function CloudFilesPage() {
 										setEditDraft((prev) =>
 											prev
 												? {
-													...prev,
-													base_url: next,
-												}
+														...prev,
+														base_url: next,
+													}
 												: prev,
 										)
 									}
@@ -1846,9 +1842,9 @@ export default function CloudFilesPage() {
 										setEditDraft((prev) =>
 											prev
 												? {
-													...prev,
-													user: next,
-												}
+														...prev,
+														user: next,
+													}
 												: prev,
 										)
 									}

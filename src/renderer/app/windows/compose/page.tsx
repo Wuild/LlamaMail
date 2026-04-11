@@ -137,10 +137,10 @@ function ComposeEmailPage() {
 	const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const lastSavedSignatureRef = useRef<string>('');
 	const isSavingDraftRef = useRef(false);
-	const queuedDraftSaveRef = useRef<{ payload: SaveDraftPayload; signature: string } | null>(null);
+	const queuedDraftSaveRef = useRef<{payload: SaveDraftPayload; signature: string} | null>(null);
 	const draftSessionIdRef = useRef<string>(`draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 	const draftMessageIdRef = useRef<number | null>(null);
-	const autoSignatureRef = useRef<{ accountId: number; html: string; text: string } | null>(null);
+	const autoSignatureRef = useRef<{accountId: number; html: string; text: string} | null>(null);
 	const recipientSearchSeqRef = useRef(0);
 
 	useEffect(() => {
@@ -211,9 +211,9 @@ function ComposeEmailPage() {
 		const signatureHtml = selectedFromAccount.signature_is_html
 			? signatureRaw
 			: signatureRaw
-				.split(/\r?\n/)
-				.map((line) => escapeSignatureHtml(line))
-				.join('<br/>');
+					.split(/\r?\n/)
+					.map((line) => escapeSignatureHtml(line))
+					.join('<br/>');
 		const signatureHtmlWithDivider = withSignatureDivider(signatureHtml);
 		const signatureText = selectedFromAccount.signature_is_html ? htmlToPlainText(signatureRaw) : signatureRaw;
 		const previousAuto = autoSignatureRef.current;
@@ -406,7 +406,7 @@ function ComposeEmailPage() {
 	const selectedCloudProvider = selectedCloudAccount?.provider ?? 'webdav';
 
 	const loadCloudItems = useCallback(
-		async (selectedAccountId: number, nextPath: string | null, options?: { force?: boolean }) => {
+		async (selectedAccountId: number, nextPath: string | null, options?: {force?: boolean}) => {
 			const selectedCloudAccount = cloudAccounts.find((account) => account.id === selectedAccountId);
 			const provider = selectedCloudAccount?.provider ?? 'webdav';
 			const requestedPath = normalizeRequestedCloudPath(nextPath, provider);
@@ -520,10 +520,10 @@ function ComposeEmailPage() {
 			references: threadMeta.references ?? null,
 			attachments: attachments.length
 				? attachments.map((attachment) => ({
-					path: attachment.path,
-					filename: attachment.filename,
-					contentType: attachment.contentType,
-				}))
+						path: attachment.path,
+						filename: attachment.filename,
+						contentType: attachment.contentType,
+					}))
 				: null,
 			draftSessionId: draftSessionIdRef.current,
 		};
@@ -787,10 +787,10 @@ function ComposeEmailPage() {
 				references: threadMeta.references ?? null,
 				attachments: attachments.length
 					? attachments.map((attachment) => ({
-						path: attachment.path,
-						filename: attachment.filename,
-						contentType: attachment.contentType,
-					}))
+							path: attachment.path,
+							filename: attachment.filename,
+							contentType: attachment.contentType,
+						}))
 					: null,
 				draftSessionId: draftSessionIdRef.current,
 			});
@@ -866,8 +866,7 @@ function ComposeEmailPage() {
 			onDrop={onRootDrop}
 		>
 			{windowDragActive && (
-				<div
-					className="dropzone-info pointer-events-none absolute inset-x-3 bottom-3 top-13 z-90 flex items-center justify-center rounded-xl border-2 border-dashed text-sm font-medium">
+				<div className="dropzone-info pointer-events-none absolute inset-x-3 bottom-3 top-13 z-90 flex items-center justify-center rounded-xl border-2 border-dashed text-sm font-medium">
 					Drop files to attach. Drop on editor body to insert images inline.
 				</div>
 			)}
@@ -875,9 +874,8 @@ function ComposeEmailPage() {
 				<header className="mail-compose-header text-inverse border-b px-5 py-3">
 					<div className="flex items-center justify-between gap-3">
 						<div className="flex items-center gap-3">
-							<div
-								className="compose-hero-icon flex h-9 w-9 items-center justify-center rounded-lg shadow">
-								<PenSquare size={16}/>
+							<div className="compose-hero-icon flex h-9 w-9 items-center justify-center rounded-lg shadow">
+								<PenSquare size={16} />
 							</div>
 							<div>
 								<h1 className="compose-hero-title text-base font-semibold">Compose</h1>
@@ -1077,8 +1075,7 @@ function ComposeEmailPage() {
 								</label>
 							</div>
 							{quotedBodyHtml.trim().length > 0 && (
-								<div
-									className="surface-muted mt-2 flex items-center justify-between rounded-md border ui-border-default px-3 py-2">
+								<div className="surface-muted mt-2 flex items-center justify-between rounded-md border ui-border-default px-3 py-2">
 									<p className="ui-text-secondary text-xs">
 										Quoted message will be included in this reply/forward.
 									</p>
@@ -1142,7 +1139,7 @@ function ComposeEmailPage() {
 											size="sm"
 											variant="outline"
 											groupPosition="first"
-											leftIcon={<Paperclip size={14}/>}
+											leftIcon={<Paperclip size={14} />}
 											onClick={() => void onPickAttachments()}
 										>
 											Attach
@@ -1152,7 +1149,7 @@ function ComposeEmailPage() {
 											size="sm"
 											variant="outline"
 											groupPosition="last"
-											leftIcon={<Cloud size={14}/>}
+											leftIcon={<Cloud size={14} />}
 											onClick={() => void openCloudAttachmentPicker()}
 										>
 											Add file from cloud
@@ -1162,7 +1159,7 @@ function ComposeEmailPage() {
 								<Button
 									size="sm"
 									variant="default"
-									rightIcon={<SendHorizonal size={14}/>}
+									rightIcon={<SendHorizonal size={14} />}
 									onClick={() => void onSend()}
 									disabled={sending}
 								>
@@ -1239,20 +1236,20 @@ function ComposeEmailPage() {
 export default ComposeEmailPage;
 
 function CloudAttachmentPickerModal({
-										cloudAccounts,
-										selectedAccountId,
-										selectedProvider,
-										cloudPath,
-										cloudItems,
-										loading,
-										busy,
-										status,
-										onClose,
-										onAccountChange,
-										onNavigate,
-										onUp,
-										onRefresh,
-										onAttach,
+	cloudAccounts,
+	selectedAccountId,
+	selectedProvider,
+	cloudPath,
+	cloudItems,
+	loading,
+	busy,
+	status,
+	onClose,
+	onAccountChange,
+	onNavigate,
+	onUp,
+	onRefresh,
+	onAttach,
 }: {
 	cloudAccounts: PublicCloudAccount[];
 	selectedAccountId: number | '';
@@ -1289,8 +1286,7 @@ function CloudAttachmentPickerModal({
 				</Button>
 			</div>
 
-			<div
-				className="grid grid-cols-1 gap-2 border-b ui-border-default px-4 py-3 md:grid-cols-[280px_1fr_auto_auto_auto]">
+			<div className="grid grid-cols-1 gap-2 border-b ui-border-default px-4 py-3 md:grid-cols-[280px_1fr_auto_auto_auto]">
 				<FormSelect
 					className="h-9"
 					value={selectedAccountId}
@@ -1303,11 +1299,10 @@ function CloudAttachmentPickerModal({
 						</option>
 					))}
 				</FormSelect>
-				<div
-					className="surface-muted flex h-9 min-w-0 items-center gap-1 overflow-x-auto rounded-md border ui-border-default px-2 text-xs ui-text-secondary">
+				<div className="surface-muted flex h-9 min-w-0 items-center gap-1 overflow-x-auto rounded-md border ui-border-default px-2 text-xs ui-text-secondary">
 					{breadcrumbs.map((crumb, index) => (
 						<React.Fragment key={`${crumb.path}-${index}`}>
-							{index > 0 ? <ChevronRight size={12} className="shrink-0 opacity-70"/> : null}
+							{index > 0 ? <ChevronRight size={12} className="shrink-0 opacity-70" /> : null}
 							<Button
 								type="button"
 								variant="ghost"
@@ -1330,7 +1325,7 @@ function CloudAttachmentPickerModal({
 					title="Go to root"
 				>
 					<span className="inline-flex items-center gap-1">
-						<Home size={12}/>
+						<Home size={12} />
 						Root
 					</span>
 				</Button>
@@ -1351,7 +1346,7 @@ function CloudAttachmentPickerModal({
 					disabled={busy || typeof selectedAccountId !== 'number'}
 				>
 					<span className="inline-flex items-center gap-1">
-						{loading ? <Loader2 size={12} className="animate-spin"/> : <RefreshCw size={12}/>}
+						{loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
 						Refresh
 					</span>
 				</Button>
@@ -1360,7 +1355,7 @@ function CloudAttachmentPickerModal({
 			<div className="min-h-64 max-h-96 overflow-y-auto">
 				{loading && cloudItems.length === 0 ? (
 					<div className="ui-text-muted flex min-h-64 items-center justify-center gap-2 px-2 py-3 text-sm">
-						<Loader2 size={16} className="animate-spin"/>
+						<Loader2 size={16} className="animate-spin" />
 						<span>Loading cloud files...</span>
 					</div>
 				) : cloudAccounts.length === 0 ? (
@@ -1372,67 +1367,66 @@ function CloudAttachmentPickerModal({
 				) : (
 					<table className="table-fixed border-collapse text-sm" style={{width: '100%'}}>
 						<colgroup>
-							<col style={{width: '42%'}}/>
-							<col style={{width: '12%'}}/>
-							<col style={{width: '12%'}}/>
-							<col style={{width: '17%'}}/>
-							<col style={{width: '17%'}}/>
-							<col style={{width: '88px'}}/>
+							<col style={{width: '42%'}} />
+							<col style={{width: '12%'}} />
+							<col style={{width: '12%'}} />
+							<col style={{width: '17%'}} />
+							<col style={{width: '17%'}} />
+							<col style={{width: '88px'}} />
 						</colgroup>
-						<thead
-							className="surface-muted sticky top-0 z-10 border-b ui-border-default text-xs uppercase tracking-wide ui-text-secondary">
-						<tr className="text-left">
-							<th className="px-3 py-2">Name</th>
-							<th className="px-3 py-2">Type</th>
-							<th className="px-3 py-2">Size</th>
-							<th className="px-3 py-2">Modified</th>
-							<th className="px-3 py-2">Created</th>
-							<th className="px-2 py-2 text-right">Action</th>
-						</tr>
+						<thead className="surface-muted sticky top-0 z-10 border-b ui-border-default text-xs uppercase tracking-wide ui-text-secondary">
+							<tr className="text-left">
+								<th className="px-3 py-2">Name</th>
+								<th className="px-3 py-2">Type</th>
+								<th className="px-3 py-2">Size</th>
+								<th className="px-3 py-2">Modified</th>
+								<th className="px-3 py-2">Created</th>
+								<th className="px-2 py-2 text-right">Action</th>
+							</tr>
 						</thead>
 						<tbody>
-						{cloudItems.map((item) => (
-							<tr key={item.id || item.path} className="border-b ui-border-default ui-surface-hover">
-								<td className="px-3 py-2">
-									<Button
-										type="button"
-										className="ui-text-primary flex min-w-0 items-center gap-2 text-left hover:underline"
-										onClick={() =>
-											item.isFolder ? onNavigate(item.path || item.id) : onAttach(item)
-										}
-										disabled={busy}
-									>
-										<span className="ui-text-muted shrink-0">{renderCloudItemIcon(item)}</span>
-										<span className="truncate">{item.name}</span>
-									</Button>
-								</td>
-								<td className="ui-text-muted px-3 py-2 text-xs">
-									{item.isFolder ? 'Folder' : cloudFileTypeLabel(item)}
-								</td>
-								<td className="ui-text-muted px-3 py-2 text-xs">
-									{item.isFolder ? '-' : formatBytes(item.size ?? 0)}
-								</td>
-								<td className="ui-text-muted px-3 py-2 text-xs">
-									{formatSystemDateTime(item.modifiedAt) || '-'}
-								</td>
-								<td className="ui-text-muted px-3 py-2 text-xs">
-									{formatSystemDateTime(item.createdAt) || '-'}
-								</td>
-								<td className="px-2 py-2 text-right">
-									{!item.isFolder && (
+							{cloudItems.map((item) => (
+								<tr key={item.id || item.path} className="border-b ui-border-default ui-surface-hover">
+									<td className="px-3 py-2">
 										<Button
 											type="button"
-											variant="outline"
-											className="rounded-md px-2 py-1 text-xs disabled:opacity-50"
-											onClick={() => onAttach(item)}
+											className="ui-text-primary flex min-w-0 items-center gap-2 text-left hover:underline"
+											onClick={() =>
+												item.isFolder ? onNavigate(item.path || item.id) : onAttach(item)
+											}
 											disabled={busy}
 										>
-											Attach
+											<span className="ui-text-muted shrink-0">{renderCloudItemIcon(item)}</span>
+											<span className="truncate">{item.name}</span>
 										</Button>
-									)}
-								</td>
-							</tr>
-						))}
+									</td>
+									<td className="ui-text-muted px-3 py-2 text-xs">
+										{item.isFolder ? 'Folder' : cloudFileTypeLabel(item)}
+									</td>
+									<td className="ui-text-muted px-3 py-2 text-xs">
+										{item.isFolder ? '-' : formatBytes(item.size ?? 0)}
+									</td>
+									<td className="ui-text-muted px-3 py-2 text-xs">
+										{formatSystemDateTime(item.modifiedAt) || '-'}
+									</td>
+									<td className="ui-text-muted px-3 py-2 text-xs">
+										{formatSystemDateTime(item.createdAt) || '-'}
+									</td>
+									<td className="px-2 py-2 text-right">
+										{!item.isFolder && (
+											<Button
+												type="button"
+												variant="outline"
+												className="rounded-md px-2 py-1 text-xs disabled:opacity-50"
+												onClick={() => onAttach(item)}
+												disabled={busy}
+											>
+												Attach
+											</Button>
+										)}
+									</td>
+								</tr>
+							))}
 						</tbody>
 					</table>
 				)}
@@ -1444,20 +1438,20 @@ function CloudAttachmentPickerModal({
 }
 
 function RecipientMultiInput({
-								 recipients,
-								 draft,
-								 rows,
-								 placeholder,
-								 invalidMessage,
-								 onDraftChange,
-								 onRemoveRecipient,
-								 onPickRow,
-								 onCommit,
-								 onFocus,
-								 onBlur,
-								 onBackspaceEmpty,
-								 groupPosition = 'none',
-								 className,
+	recipients,
+	draft,
+	rows,
+	placeholder,
+	invalidMessage,
+	onDraftChange,
+	onRemoveRecipient,
+	onPickRow,
+	onCommit,
+	onFocus,
+	onBlur,
+	onBackspaceEmpty,
+	groupPosition = 'none',
+	className,
 }: {
 	recipients: string[];
 	draft: string;
@@ -1522,7 +1516,7 @@ function RecipientMultiInput({
 						aria-label={`Remove ${recipient}`}
 						title="Remove"
 					>
-						<X size={10}/>
+						<X size={10} />
 					</Button>
 				</span>
 			))}
@@ -1558,7 +1552,7 @@ function parseRecipients(raw: string): string[] {
 	return parseRecipientEntries(raw).valid;
 }
 
-function parseRecipientEntries(raw: string): { valid: string[]; invalid: string[] } {
+function parseRecipientEntries(raw: string): {valid: string[]; invalid: string[]} {
 	const valid: string[] = [];
 	const invalid: string[] = [];
 	const deduped = new Set<string>();
@@ -1580,10 +1574,9 @@ function joinRecipients(recipients: string[]): string {
 	return recipients.join(', ');
 }
 
-function AttachmentCard({attachment, onRemove}: { attachment: ComposeAttachment; onRemove: () => void }) {
+function AttachmentCard({attachment, onRemove}: {attachment: ComposeAttachment; onRemove: () => void}) {
 	return (
-		<div
-			className="surface-muted group relative flex w-68 items-center gap-2 rounded-lg border ui-border-default p-2 text-xs ui-text-secondary">
+		<div className="surface-muted group relative flex w-68 items-center gap-2 rounded-lg border ui-border-default p-2 text-xs ui-text-secondary">
 			<div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border ui-border-default ui-surface-card">
 				<div className="ui-text-muted flex h-full w-full items-center justify-center">
 					{renderAttachmentTypeIcon(attachment.filename, attachment.contentType)}
@@ -1619,25 +1612,25 @@ function renderAttachmentTypeIcon(filename: string, contentType: string | null):
 	const type = (contentType || '').toLowerCase();
 	const ext = (filename.split('.').pop() || '').toLowerCase();
 	if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext))
-		return <FileImage size={16}/>;
-	if (type.startsWith('video/') || ['mp4', 'mkv', 'mov', 'avi', 'webm'].includes(ext)) return <FileVideo size={16}/>;
+		return <FileImage size={16} />;
+	if (type.startsWith('video/') || ['mp4', 'mkv', 'mov', 'avi', 'webm'].includes(ext)) return <FileVideo size={16} />;
 	if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext))
-		return <FileAudio2 size={16}/>;
-	if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) return <FileArchive size={16}/>;
-	if (['csv', 'xls', 'xlsx', 'ods'].includes(ext)) return <FileSpreadsheet size={16}/>;
+		return <FileAudio2 size={16} />;
+	if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) return <FileArchive size={16} />;
+	if (['csv', 'xls', 'xlsx', 'ods'].includes(ext)) return <FileSpreadsheet size={16} />;
 	if (['txt', 'md', 'rtf', 'doc', 'docx', 'pdf'].includes(ext) || type.startsWith('text/'))
-		return <FileText size={16}/>;
+		return <FileText size={16} />;
 	if (
 		['json', 'xml', 'yml', 'yaml', 'js', 'ts', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h'].includes(
 			ext,
 		)
 	)
-		return <FileCode size={16}/>;
-	return <File size={16}/>;
+		return <FileCode size={16} />;
+	return <File size={16} />;
 }
 
 function renderCloudItemIcon(item: CloudItem): React.ReactNode {
-	if (item.isFolder) return <Folder size={16}/>;
+	if (item.isFolder) return <Folder size={16} />;
 	return renderAttachmentTypeIcon(item.name, item.mimeType);
 }
 
@@ -1683,7 +1676,7 @@ function getCloudParentPath(currentPath: string, provider: PublicCloudAccount['p
 function buildCloudBreadcrumbs(
 	currentPath: string,
 	provider: PublicCloudAccount['provider'],
-): Array<{ path: string; label: string }> {
+): Array<{path: string; label: string}> {
 	const root = cloudRootToken(provider);
 	const normalized = normalizeRequestedCloudPath(currentPath, provider);
 	if (!normalized.startsWith('/')) {
@@ -1691,7 +1684,7 @@ function buildCloudBreadcrumbs(
 		return [{path: root, label}];
 	}
 	const segments = normalized.split('/').filter(Boolean);
-	const crumbs: Array<{ path: string; label: string }> = [{path: root, label: 'Root'}];
+	const crumbs: Array<{path: string; label: string}> = [{path: root, label: 'Root'}];
 	for (let index = 0; index < segments.length; index += 1) {
 		crumbs.push({
 			path: `/${segments.slice(0, index + 1).join('/')}`,
@@ -1716,7 +1709,7 @@ function readPersistedCloudFolderCache(accountId: number, folderToken: string): 
 	try {
 		const raw = window.localStorage.getItem(buildCloudFolderCacheStorageKey(accountId, folderToken));
 		if (!raw) return null;
-		const parsed = JSON.parse(raw) as { items?: CloudItem[] };
+		const parsed = JSON.parse(raw) as {items?: CloudItem[]};
 		if (!Array.isArray(parsed.items)) return null;
 		return parsed.items;
 	} catch {
@@ -1798,7 +1791,7 @@ function parseContactMetaEmails(note: string | null | undefined): string[] {
 	const metaRaw = raw.slice(markerIndex + CONTACT_META_PREFIX.length).trim();
 	if (!metaRaw) return [];
 	try {
-		const meta = JSON.parse(metaRaw) as { emails?: unknown };
+		const meta = JSON.parse(metaRaw) as {emails?: unknown};
 		if (!Array.isArray(meta.emails)) return [];
 		return meta.emails.map((entry) => String(entry || '').trim()).filter(Boolean);
 	} catch {

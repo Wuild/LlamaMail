@@ -33,7 +33,7 @@ type MainNavContextMenuState = {
 };
 
 export default function MainWindowApp() {
-	return <MainWindowShell/>;
+	return <MainWindowShell />;
 }
 
 function MainWindowShell() {
@@ -66,7 +66,7 @@ function MainWindowShell() {
 		setGlobalErrors((prev) => prev.filter((item) => item.id !== id));
 	};
 
-	const pushSystemFailureToast = (notice: { title: string; message: string; key: string; accountId?: number }) => {
+	const pushSystemFailureToast = (notice: {title: string; message: string; key: string; accountId?: number}) => {
 		const now = Date.now();
 		setSystemFailureToasts((prev) => {
 			const duplicate = prev.some((item) => item.key === notice.key && now - item.timestampMs < 5000);
@@ -384,8 +384,7 @@ function MainWindowShell() {
 				</div>
 			)}
 			{showSendNotifications && sendStatus && (
-				<div
-					className="overlay fixed bottom-3 right-3 z-1190 w-[320px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-md shadow-lg backdrop-blur">
+				<div className="overlay fixed bottom-3 right-3 z-1190 w-[320px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-md shadow-lg backdrop-blur">
 					<div className="px-3 py-2.5">
 						<div className="flex items-center justify-between gap-2">
 							<p className="ui-text-primary truncate text-sm font-medium">
@@ -446,11 +445,11 @@ function MainWindowShell() {
 										}}
 										aria-label="Dismiss sync error notification"
 									>
-										<X size={13}/>
+										<X size={13} />
 									</Button>
 								</div>
 								<div className="mt-1 flex items-start gap-2">
-									<AlertTriangle size={14} className="text-danger mt-0.5 shrink-0"/>
+									<AlertTriangle size={14} className="text-danger mt-0.5 shrink-0" />
 									<div className="min-w-0 flex-1">
 										<p className="ui-text-primary text-xs">{toast.message}</p>
 										{toast.accountId && (
@@ -461,7 +460,7 @@ function MainWindowShell() {
 									</div>
 								</div>
 							</div>
-							<div className="progress-fill-danger h-1.5 w-full"/>
+							<div className="progress-fill-danger h-1.5 w-full" />
 						</div>
 					))}
 				</div>

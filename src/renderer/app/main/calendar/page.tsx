@@ -91,9 +91,9 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 	const [selectedDayForModal, setSelectedDayForModal] = useState<string | null>(null);
 	const [showEditEventModal, setShowEditEventModal] = useState(false);
 	const [eventToDelete, setEventToDelete] = useState<CalendarEventItem | null>(null);
-	const [dayContextMenu, setDayContextMenu] = useState<{ x: number; y: number; dayKey: string } | null>(null);
+	const [dayContextMenu, setDayContextMenu] = useState<{x: number; y: number; dayKey: string} | null>(null);
 	const dayContextMenuRef = useRef<HTMLDivElement | null>(null);
-	const calendarBoundsRef = useRef<{ gridStart: Date; gridEnd: Date } | null>(null);
+	const calendarBoundsRef = useRef<{gridStart: Date; gridEnd: Date} | null>(null);
 	const calendarBodyScrollRef = useRef<HTMLDivElement | null>(null);
 	const lastWeekAutoScrollKeyRef = useRef<string | null>(null);
 	const [showAddEventModal, setShowAddEventModal] = useState(false);
@@ -314,14 +314,14 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 	}, [events]);
 
 	const weekEventsByDay = useMemo(() => {
-		const out = new Map<string, Array<{ event: CalendarEventItem; topPx: number; heightPx: number }>>();
+		const out = new Map<string, Array<{event: CalendarEventItem; topPx: number; heightPx: number}>>();
 		for (const day of weekDays) {
 			const dayKey = toDateKey(day);
 			const dayStart = new Date(day);
 			dayStart.setHours(0, 0, 0, 0);
 			const dayEnd = new Date(dayStart);
 			dayEnd.setDate(dayEnd.getDate() + 1);
-			const rows: Array<{ event: CalendarEventItem; topPx: number; heightPx: number }> = [];
+			const rows: Array<{event: CalendarEventItem; topPx: number; heightPx: number}> = [];
 
 			for (const event of events) {
 				const startsAt = event.starts_at ? new Date(event.starts_at) : null;
@@ -673,7 +673,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 										aria-label="Sync account"
 										disabled={isSyncingAccount}
 									>
-										<RefreshCw size={13} className={cn(isSyncingAccount && 'animate-spin')}/>
+										<RefreshCw size={13} className={cn(isSyncingAccount && 'animate-spin')} />
 									</Button>
 									<Button
 										type="button"
@@ -683,7 +683,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 										title="Edit account"
 										aria-label="Edit account"
 									>
-										<Settings size={13}/>
+										<Settings size={13} />
 									</Button>
 								</div>
 							</div>
@@ -711,7 +711,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 					}
 					aria-label={calendarViewMode === 'month' ? 'Previous month' : 'Previous week'}
 				>
-					<ChevronLeft size={16}/>
+					<ChevronLeft size={16} />
 				</Button>
 				<div className="ui-text-primary min-w-44 px-2 text-center text-sm font-medium">
 					{calendarViewMode === 'month'
@@ -731,7 +731,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 					}
 					aria-label={calendarViewMode === 'month' ? 'Next month' : 'Next week'}
 				>
-					<ChevronRight size={16}/>
+					<ChevronRight size={16} />
 				</Button>
 			</div>
 			<Button
@@ -742,8 +742,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 			>
 				Today
 			</Button>
-			<div
-				className="inline-flex items-center overflow-hidden rounded-md border ui-border-default ui-surface-card">
+			<div className="inline-flex items-center overflow-hidden rounded-md border ui-border-default ui-surface-card">
 				<Button
 					type="button"
 					className={cn(
@@ -766,7 +765,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 					)}
 					onClick={() => setCalendarViewMode('week')}
 				>
-					<CalendarDays size={12}/>
+					<CalendarDays size={12} />
 					Week
 				</Button>
 			</div>
@@ -779,7 +778,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 				title="Add event"
 				aria-label="Add event"
 			>
-				<Plus size={14}/>
+				<Plus size={14} />
 				Add event
 			</Button>
 		</div>
@@ -811,9 +810,8 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 									className="relative flex min-h-0 shrink-0 flex-col border-r ui-border-default ui-surface-card"
 									style={{width: eventListWidth}}
 								>
-									<div
-										className="ui-text-primary flex items-center gap-2 border-b ui-border-default px-4 py-3 text-sm font-semibold">
-										<List size={14}/>
+									<div className="ui-text-primary flex items-center gap-2 border-b ui-border-default px-4 py-3 text-sm font-semibold">
+										<List size={14} />
 										Events
 									</div>
 									{sortedEvents.length === 0 ? (
@@ -845,7 +843,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 														title="Edit event"
 														aria-label="Edit event"
 													>
-														<Pencil size={14}/>
+														<Pencil size={14} />
 													</Button>
 													<Button
 														type="button"
@@ -854,7 +852,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 														title="Delete event"
 														aria-label="Delete event"
 													>
-														<Trash2 size={14}/>
+														<Trash2 size={14} />
 													</Button>
 												</div>
 											))}
@@ -880,8 +878,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 												MONTH_GRID_COLUMNS,
 											)}
 										>
-											<div
-												className="border-r ui-border-default px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-wide ui-text-muted"></div>
+											<div className="border-r ui-border-default px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-wide ui-text-muted"></div>
 											{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
 												<div
 													key={day}
@@ -903,8 +900,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 													key={`week-${toDateKey(week[0] || new Date())}`}
 													className={cn('grid min-h-0', MONTH_GRID_COLUMNS)}
 												>
-													<div
-														className="surface-muted border-r border-b ui-border-default px-1 py-2 text-center text-[11px] font-medium ui-text-muted">
+													<div className="surface-muted border-r border-b ui-border-default px-1 py-2 text-center text-[11px] font-medium ui-text-muted">
 														{getIsoWeekNumber(week[0] || new Date())}
 													</div>
 													{week.map((day) => {
@@ -949,8 +945,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 																		{day.getDate()}
 																	</span>
 																</div>
-																<div
-																	className="max-h-[calc(100%-1.75rem)] space-y-1 overflow-y-auto">
+																<div className="max-h-[calc(100%-1.75rem)] space-y-1 overflow-y-auto">
 																	{dayEvents.slice(0, 3).map((event) => (
 																		<Button
 																			key={event.id}
@@ -990,8 +985,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 												WEEK_GRID_COLUMNS,
 											)}
 										>
-											<div
-												className="border-r ui-border-default px-2 py-2 text-xs font-semibold ui-text-secondary">
+											<div className="border-r ui-border-default px-2 py-2 text-xs font-semibold ui-text-secondary">
 												Time
 											</div>
 											{weekDays.map((day) => {
@@ -1079,18 +1073,18 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 																	className={cn(
 																		'cursor-pointer border-b ui-border-default transition-colors ui-surface-hover',
 																		weekDragSelection &&
-																		weekDragSelection.dayKey === dayKey &&
-																		hour >=
-																		Math.min(
-																			weekDragSelection.startHour,
-																			weekDragSelection.endHour,
-																		) &&
-																		hour <=
-																		Math.max(
-																			weekDragSelection.startHour,
-																			weekDragSelection.endHour,
-																		) &&
-																		'event-selection',
+																			weekDragSelection.dayKey === dayKey &&
+																			hour >=
+																				Math.min(
+																					weekDragSelection.startHour,
+																					weekDragSelection.endHour,
+																				) &&
+																			hour <=
+																				Math.max(
+																					weekDragSelection.startHour,
+																					weekDragSelection.endHour,
+																				) &&
+																			'event-selection',
 																	)}
 																	style={{height: WEEK_HOUR_ROW_HEIGHT}}
 																	onMouseDown={(event) => {
@@ -1204,7 +1198,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 								setSelectedEvent(null);
 							}}
 						>
-							<Pencil size={14}/>
+							<Pencil size={14} />
 							Edit
 						</Button>
 						<Button
@@ -1215,7 +1209,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 								setSelectedEvent(null);
 							}}
 						>
-							<Trash2 size={14}/>
+							<Trash2 size={14} />
 							Delete
 						</Button>
 						<Button
@@ -1314,7 +1308,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 								title="Close"
 								aria-label="Close edit event modal"
 							>
-								<X size={14}/>
+								<X size={14} />
 							</Button>
 						</ModalHeader>
 						<div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -1450,7 +1444,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 								title="Close"
 								aria-label="Close add event modal"
 							>
-								<X size={14}/>
+								<X size={14} />
 							</Button>
 						</ModalHeader>
 						<div className="mt-4 grid gap-3 md:grid-cols-2">

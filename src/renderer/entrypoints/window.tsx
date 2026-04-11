@@ -1,6 +1,6 @@
 import React from 'react';
 import {mountApp} from './mountApp';
-import {HashRouter, Navigate, useRoutes, type RouteObject} from 'react-router-dom';
+import {HashRouter, Navigate, type RouteObject, useRoutes} from 'react-router-dom';
 import AppLayout from '@renderer/app/layout';
 import {useAppTheme} from '@renderer/hooks/useAppTheme';
 
@@ -18,28 +18,28 @@ const DebugWindow = React.lazy(DEBUG_LOADER);
 const SplashWindow = React.lazy(SPLASH_LOADER);
 
 const routeObjects: RouteObject[] = [
-    {path: '/windows/splash', element: <SplashWindow/>},
-    {
-        element: <AppLayout/>,
-        children: [
-            {path: '/windows/add-account', element: <AddAccountWindow/>},
-            {path: '/windows/compose', element: <ComposeWindow/>},
-            {path: '/windows/message', element: <MessageWindow/>},
-            {path: '/windows/debug', element: <DebugWindow/>},
-            {path: '/windows/main', element: <Navigate to="/" replace/>},
-            {path: '*', element: <MainWindow/>},
-        ],
-    },
+	{path: '/windows/splash', element: <SplashWindow />},
+	{
+		element: <AppLayout />,
+		children: [
+			{path: '/windows/add-account', element: <AddAccountWindow />},
+			{path: '/windows/compose', element: <ComposeWindow />},
+			{path: '/windows/message', element: <MessageWindow />},
+			{path: '/windows/debug', element: <DebugWindow />},
+			{path: '/windows/main', element: <Navigate to="/" replace />},
+			{path: '*', element: <MainWindow />},
+		],
+	},
 ];
 
 function WindowBootstrap(): React.ReactElement | null {
-    useAppTheme();
-    const routes = useRoutes(routeObjects);
-    return <React.Suspense fallback={null}>{routes}</React.Suspense>;
+	useAppTheme();
+	const routes = useRoutes(routeObjects);
+	return <React.Suspense fallback={null}>{routes}</React.Suspense>;
 }
 
 mountApp(
-    <HashRouter>
-        <WindowBootstrap/>
-    </HashRouter>,
+	<HashRouter>
+		<WindowBootstrap />
+	</HashRouter>,
 );

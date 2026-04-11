@@ -12,9 +12,9 @@ type CreateFolderState = {
 };
 
 type AccountContextMenuProps = {
-	accountMenu: { x: number; y: number; account: PublicAccount } | null;
+	accountMenu: {x: number; y: number; account: PublicAccount} | null;
 	menuRef: React.RefObject<HTMLDivElement | null>;
-	position: { left: number; top: number };
+	position: {left: number; top: number};
 	ready: boolean;
 	onClose: () => void;
 	onOpenCreateFolder: (payload: CreateFolderState) => void;
@@ -22,14 +22,14 @@ type AccountContextMenuProps = {
 };
 
 export default function AccountContextMenu({
-											   accountMenu,
-											   menuRef,
-											   position,
-											   ready,
-											   onClose,
-											   onOpenCreateFolder,
-											   onOpenAccountSettings,
-										   }: AccountContextMenuProps) {
+	accountMenu,
+	menuRef,
+	position,
+	ready,
+	onClose,
+	onOpenCreateFolder,
+	onOpenAccountSettings,
+}: AccountContextMenuProps) {
 	if (!accountMenu) return null;
 
 	return (
@@ -44,7 +44,7 @@ export default function AccountContextMenu({
 		>
 			<ContextItem
 				label="Create Folder"
-				icon={<FolderPlus size={14}/>}
+				icon={<FolderPlus size={14} />}
 				onClick={() => {
 					onOpenCreateFolder({
 						accountId: accountMenu.account.id,
@@ -55,10 +55,10 @@ export default function AccountContextMenu({
 					onClose();
 				}}
 			/>
-			<ContextMenuSeparator/>
+			<ContextMenuSeparator />
 			<ContextItem
 				label="Edit Account Settings"
-				icon={<Settings size={14}/>}
+				icon={<Settings size={14} />}
 				onClick={() => {
 					onOpenAccountSettings(accountMenu.account.id);
 					onClose();

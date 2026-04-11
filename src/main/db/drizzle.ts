@@ -13,33 +13,33 @@ const require = createRequire(import.meta.url);
 const logger = createAppLogger('db');
 
 export function setSqlitePathOverride(pathValue: string | null): void {
-    _sqlitePathOverride = pathValue && pathValue.trim() ? pathValue.trim() : null;
+	_sqlitePathOverride = pathValue && pathValue.trim() ? pathValue.trim() : null;
 }
 
 export function getSqlitePath(): string {
-    if (_sqlitePathOverride) return _sqlitePathOverride;
-    try {
-        const electron = require('electron') as { app?: { getPath: (name: string) => string } };
-        const userData = electron?.app?.getPath?.('userData');
-        if (userData) return path.join(userData, 'llamamail.db');
-    } catch {
-        // Worker/non-electron context fallback.
-    }
-    return path.join(process.cwd(), 'llamamail.db');
+	if (_sqlitePathOverride) return _sqlitePathOverride;
+	try {
+		const electron = require('electron') as {app?: {getPath: (name: string) => string}};
+		const userData = electron?.app?.getPath?.('userData');
+		if (userData) return path.join(userData, 'llamamail.db');
+	} catch {
+		// Worker/non-electron context fallback.
+	}
+	return path.join(process.cwd(), 'llamamail.db');
 }
 
 export function getDb() {
-    if (!_db) {
-        const sqlitePath = getSqlitePath();
-        logger.info('Opening SQLite database path=%s', sqlitePath);
-        _db = new Database(sqlitePath);
-    }
-    return _db;
+	if (!_db) {
+		const sqlitePath = getSqlitePath();
+		logger.info('Opening SQLite database path=%s', sqlitePath);
+		_db = new Database(sqlitePath);
+	}
+	return _db;
 }
 
 export function getDrizzle() {
-    if (!_drizzle) {
-        _drizzle = drizzle(getDb());
-    }
-    return _drizzle;
+	if (!_drizzle) {
+		_drizzle = drizzle(getDb());
+	}
+	return _drizzle;
 }

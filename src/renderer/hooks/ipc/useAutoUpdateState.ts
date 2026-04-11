@@ -5,34 +5,34 @@ import {DEFAULT_AUTO_UPDATE_STATE} from '@renderer/lib/autoUpdateState';
 import {useIpcEvent} from './useIpcEvent';
 
 export function useAutoUpdateState() {
-    const [state, setState] = useState<AutoUpdateState>(DEFAULT_AUTO_UPDATE_STATE);
+	const [state, setState] = useState<AutoUpdateState>(DEFAULT_AUTO_UPDATE_STATE);
 
-    useEffect(() => {
-        let active = true;
-        void ipcClient
-            .getAutoUpdateState()
-            .then((next) => {
-                if (!active) return;
-                setState(next);
-            })
-            .catch(() => undefined);
-        return () => {
-            active = false;
-        };
-    }, []);
+	useEffect(() => {
+		let active = true;
+		void ipcClient
+			.getAutoUpdateState()
+			.then((next) => {
+				if (!active) return;
+				setState(next);
+			})
+			.catch(() => undefined);
+		return () => {
+			active = false;
+		};
+	}, []);
 
-    useIpcEvent(ipcClient.onAutoUpdateStatus, (next) => {
-        setState(next);
-    });
+	useIpcEvent(ipcClient.onAutoUpdateStatus, (next) => {
+		setState(next);
+	});
 
-    return useMemo(
-        () => ({
-            state,
-            setState,
-            appVersion: state.currentVersion || 'unknown',
-            autoUpdatePhase: state.phase,
-            autoUpdateMessage: state.message ?? null,
-        }),
-        [state],
-    );
+	return useMemo(
+		() => ({
+			state,
+			setState,
+			appVersion: state.currentVersion || 'unknown',
+			autoUpdatePhase: state.phase,
+			autoUpdateMessage: state.message ?? null,
+		}),
+		[state],
+	);
 }

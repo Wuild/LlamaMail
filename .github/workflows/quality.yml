@@ -1,42 +1,42 @@
 name: Quality Checks
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - master
+    pull_request:
+    push:
+        branches:
+            - main
+            - master
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    validate:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Lint
-        run: npm run lint
+            - name: Lint
+              run: npm run lint
 
-      - name: Typecheck
-        run: npm exec tsc
+            - name: Typecheck
+              run: npm exec tsc
 
-      - name: Format Check
-        run: npm run format:check
+            - name: Format Check
+              run: npm run format:check
 
-      - name: Architecture checks
-        run: npm run check:architecture
+            - name: Architecture checks
+              run: npm run check:architecture
 
-      - name: Build
-        run: npm run build
+            - name: Build
+              run: npm run build
 
-      - name: Security Audit
-        run: npm audit --audit-level=high
+            - name: Security Audit
+              run: npm audit --audit-level=high

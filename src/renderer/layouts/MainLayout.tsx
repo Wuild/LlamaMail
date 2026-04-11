@@ -106,7 +106,7 @@ interface MainLayoutProps {
 	onDeleteFolder: (folder: FolderItem) => void;
 	onUpdateFolderSettings: (
 		folder: FolderItem,
-		payload: { customName?: string | null; color?: string | null; type?: string | null },
+		payload: {customName?: string | null; color?: string | null; type?: string | null},
 	) => Promise<void>;
 	dateLocale?: string;
 }
@@ -144,7 +144,7 @@ const SIDE_LIST_SIDEBAR_WINDOW_FRACTION = 0.5;
 const SIDE_LIST_MIN_SIDEBAR_WIDTH_PX = 180;
 const TOP_TABLE_COMPACT_BREAKPOINT_PX = 860;
 
-const MESSAGE_TAG_OPTIONS: Array<{ value: string; label: string; dotClass: string }> = [
+const MESSAGE_TAG_OPTIONS: Array<{value: string; label: string; dotClass: string}> = [
 	{value: 'important', label: 'Important', dotClass: 'tag-dot-important'},
 	{value: 'work', label: 'Work', dotClass: 'tag-dot-work'},
 	{value: 'personal', label: 'Personal', dotClass: 'tag-dot-personal'},
@@ -191,81 +191,81 @@ function parseReferencesHeader(value: string | null | undefined): string[] | nul
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({
-												   children,
-												   accounts,
-												   selectedAccountId,
-												   accountFoldersById,
-												   onSelectAccount,
-												   onReorderAccounts,
-												   folders,
-												   selectedFolderPath,
-												   onSelectFolder,
-												   onRefreshFolder,
-												   messages,
-												   selectedMessageId,
-												   selectedMessageIds,
-												   onSelectMessage,
-												   searchQuery,
-												   onSearchQueryChange,
-												   searchResults,
-												   searchLoading,
-												   onLoadMoreMessages,
-												   hasMoreMessages,
-												   loadingMoreMessages,
-												   onRefresh: _onRefresh,
-												   canNavigateBack = false,
-												   canNavigateForward = false,
-												   onNavigateBack,
-												   onNavigateForward,
-												   onOpenCalendar,
-												   onOpenContacts,
-												   mailView,
-												   onMailViewChange: _onMailViewChange,
-												   activeWorkspace = 'mail',
-												   hideFolderSidebar = false,
-												   showMessageOnly = false,
-												   hideHeader = false,
-												   syncStatusText,
-												   syncInProgress,
-												   statusHintText,
-												   syncingAccountIds,
-												   onMessageMarkReadToggle,
-												   onBulkMarkRead,
-												   onBulkDelete,
-												   onClearMessageSelection,
-												   onMessageFlagToggle,
-												   onMessageTagChange,
-												   onMessageArchive,
-												   onMessageDelete,
-												   onMessageMove,
-												   onBulkMove,
-												   onFolderSync: _onFolderSync,
-												   onCreateFolder,
-												   onReorderCustomFolders,
-												   onDeleteFolder,
-												   onUpdateFolderSettings,
-												   dateLocale,
-											   }) => {
+	children,
+	accounts,
+	selectedAccountId,
+	accountFoldersById,
+	onSelectAccount,
+	onReorderAccounts,
+	folders,
+	selectedFolderPath,
+	onSelectFolder,
+	onRefreshFolder,
+	messages,
+	selectedMessageId,
+	selectedMessageIds,
+	onSelectMessage,
+	searchQuery,
+	onSearchQueryChange,
+	searchResults,
+	searchLoading,
+	onLoadMoreMessages,
+	hasMoreMessages,
+	loadingMoreMessages,
+	onRefresh: _onRefresh,
+	canNavigateBack = false,
+	canNavigateForward = false,
+	onNavigateBack,
+	onNavigateForward,
+	onOpenCalendar,
+	onOpenContacts,
+	mailView,
+	onMailViewChange: _onMailViewChange,
+	activeWorkspace = 'mail',
+	hideFolderSidebar = false,
+	showMessageOnly = false,
+	hideHeader = false,
+	syncStatusText,
+	syncInProgress,
+	statusHintText,
+	syncingAccountIds,
+	onMessageMarkReadToggle,
+	onBulkMarkRead,
+	onBulkDelete,
+	onClearMessageSelection,
+	onMessageFlagToggle,
+	onMessageTagChange,
+	onMessageArchive,
+	onMessageDelete,
+	onMessageMove,
+	onBulkMove,
+	onFolderSync: _onFolderSync,
+	onCreateFolder,
+	onReorderCustomFolders,
+	onDeleteFolder,
+	onUpdateFolderSettings,
+	dateLocale,
+}) => {
 	const [menu, setMenu] = React.useState<
-		| { kind: 'message'; x: number; y: number; message: MessageItem }
-		| { kind: 'folder'; x: number; y: number; folder: FolderItem }
+		| {kind: 'message'; x: number; y: number; message: MessageItem}
+		| {kind: 'folder'; x: number; y: number; folder: FolderItem}
 		| null
 	>(null);
-	const [accountMenu, setAccountMenu] = React.useState<{ x: number; y: number; account: PublicAccount } | null>(null);
+	const [accountMenu, setAccountMenu] = React.useState<{x: number; y: number; account: PublicAccount} | null>(null);
 	const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
 	const accountMenuRef = React.useRef<HTMLDivElement | null>(null);
 	const tableHeadMenuRef = React.useRef<HTMLDivElement | null>(null);
 	const moveToTriggerRef = React.useRef<HTMLButtonElement | null>(null);
 	const mailSearchModalInputRef = React.useRef<HTMLInputElement | null>(null);
-	const [menuPosition, setMenuPosition] = React.useState<{ left: number; top: number }>({left: 0, top: 0});
+	const [menuPosition, setMenuPosition] = React.useState<{left: number; top: number}>({left: 0, top: 0});
 	const [menuReady, setMenuReady] = React.useState(false);
-	const [accountMenuPosition, setAccountMenuPosition] = React.useState<{ left: number; top: number }>({
+	const [accountMenuPosition, setAccountMenuPosition] = React.useState<{left: number; top: number}>({
 		left: 0,
 		top: 0,
 	});
 	const [accountMenuReady, setAccountMenuReady] = React.useState(false);
-	const [tableHeadMenu, setTableHeadMenu] = React.useState<{ x: number; y: number } | null>(null);
-	const [tableHeadMenuPosition, setTableHeadMenuPosition] = React.useState<{ left: number; top: number }>({
+	const [tableHeadMenu, setTableHeadMenu] = React.useState<{x: number; y: number} | null>(null);
+	const [tableHeadMenuPosition, setTableHeadMenuPosition] = React.useState<{left: number; top: number}>({
 		left: 0,
 		top: 0,
 	});
@@ -368,7 +368,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 		}
 	});
 
-	const topListResizeRef = React.useRef<{ startY: number; startHeight: number } | null>(null);
+	const topListResizeRef = React.useRef<{startY: number; startHeight: number} | null>(null);
 	const tableColumnResizeRef = React.useRef<{
 		column: MailTableColumnKey;
 		startX: number;
@@ -1082,8 +1082,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 							)}
 							<span className="truncate">{message.subject || '(No subject)'}</span>
 							{getThreadCount(message) > 1 && (
-								<span
-									className="mail-list-thread-count inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-none">
+								<span className="mail-list-thread-count inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-none">
 									{getThreadCount(message)}
 								</span>
 							)}
@@ -1117,13 +1116,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 			case 'flagged':
 				return (
 					<td key={`${message.id}-flagged`} className={cn(baseCell, 'ui-text-secondary')}>
-						{message.is_flagged ? <Star size={12} className="mail-list-starred fill-current"/> : ''}
+						{message.is_flagged ? <Star size={12} className="mail-list-starred fill-current" /> : ''}
 					</td>
 				);
 			case 'tag':
 				return (
 					<td key={`${message.id}-tag`} className={cn(baseCell, 'ui-text-secondary')}>
-						{renderTagCell((message as MessageItem & { tag?: string | null }).tag ?? null)}
+						{renderTagCell((message as MessageItem & {tag?: string | null}).tag ?? null)}
 					</td>
 				);
 			case 'account':
@@ -1471,15 +1470,14 @@ function renderTagCell(tag: string | null): React.ReactNode {
 	const label = getTagLabel(tag);
 	if (!label) return '';
 	return (
-		<span
-			className="mail-list-tag-chip inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px]">
-			<span className={cn('inline-flex h-2 w-2 shrink-0 rounded-full', getTagDotClass(tag))}/>
+		<span className="mail-list-tag-chip inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px]">
+			<span className={cn('inline-flex h-2 w-2 shrink-0 rounded-full', getTagDotClass(tag))} />
 			<span className="truncate">{label}</span>
 		</span>
 	);
 }
 
-function constrainToViewport(x: number, y: number, width: number, height: number): { left: number; top: number } {
+function constrainToViewport(x: number, y: number, width: number, height: number): {left: number; top: number} {
 	const margin = 8;
 	const maxLeft = Math.max(margin, window.innerWidth - width - margin);
 	const maxTop = Math.max(margin, window.innerHeight - height - margin);

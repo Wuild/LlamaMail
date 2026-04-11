@@ -25,9 +25,9 @@ export default function SplashScreenPage() {
 	return (
 		<div className="splash-screen h-screen w-screen overflow-hidden">
 			<div className="relative flex h-full items-center justify-center overflow-hidden p-8">
-				<div className="splash-screen-glow pointer-events-none absolute inset-0"/>
+				<div className="splash-screen-glow pointer-events-none absolute inset-0" />
 				<div className="mx-auto flex w-full max-w-[360px] flex-col items-center">
-					<img src={llamaLogo} alt="" className="h-80 w-80 object-contain" draggable={false}/>
+					<img src={llamaLogo} alt="" className="h-80 w-80 object-contain" draggable={false} />
 					<p className="splash-brand text-center text-[22px] font-semibold tracking-wide">LlamaMail</p>
 					<p className="splash-muted mt-2 text-center text-[11px] font-medium uppercase tracking-wide">
 						{progressText}

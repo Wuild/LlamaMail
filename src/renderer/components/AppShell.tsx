@@ -12,14 +12,14 @@ type AppShellProps = {
 };
 
 export default function AppShell({
-									 title,
-									 titleActions,
-									 showMaximize = true,
-									 onRequestClose,
-									 navRail,
-									 showNavRail = false,
-									 children,
-								 }: AppShellProps) {
+	title,
+	titleActions,
+	showMaximize = true,
+	onRequestClose,
+	navRail,
+	showNavRail = false,
+	children,
+}: AppShellProps) {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<WindowTitleBar

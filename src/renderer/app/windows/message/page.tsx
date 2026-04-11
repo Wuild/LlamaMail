@@ -36,13 +36,13 @@ import {useApp} from '@renderer/app/AppContext';
 
 export default function MessageWindowPage() {
 	useAppTheme();
-    const {setTitle} = useApp();
+	const {setTitle} = useApp();
 	const [systemLocale, setSystemLocale] = useState('en-US');
 	const [messageId, setMessageId] = useState<number | null>(null);
 	const [message, setMessage] = useState<MessageDetails | null>(null);
 	const [body, setBody] = useState<MessageBodyResult | null>(null);
 	const [loading, setLoading] = useState(false);
-    const [attachmentMenu, setAttachmentMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+	const [attachmentMenu, setAttachmentMenu] = useState<{x: number; y: number; index: number} | null>(null);
 	const [showMessageDetails, setShowMessageDetails] = useState(false);
 	const [showSourceModal, setShowSourceModal] = useState(false);
 	const [messageSource, setMessageSource] = useState('');
@@ -184,7 +184,7 @@ export default function MessageWindowPage() {
 		);
 	}, [allowRemoteForMessage, body, warnOnExternalLinksForMessage]);
 	const attachments = body?.attachments ?? [];
-    const isDraftMessage = /^<draft\./i.test(String(message?.message_id || ''));
+	const isDraftMessage = /^<draft\./i.test(String(message?.message_id || ''));
 	const canReplyAll = useMemo(() => countRecipients(message?.to_address || '') > 1, [message?.to_address]);
 
 	useEffect(() => {
@@ -202,9 +202,9 @@ export default function MessageWindowPage() {
 		setShowMessageDetails(false);
 	}, [messageId]);
 
-    useEffect(() => {
-        setTitle((message?.subject || '').trim() || 'Message');
-    }, [message?.subject, setTitle]);
+	useEffect(() => {
+		setTitle((message?.subject || '').trim() || 'Message');
+	}, [message?.subject, setTitle]);
 
 	function composeWithDraft(draft: {
 		to?: string | null;
@@ -323,83 +323,83 @@ export default function MessageWindowPage() {
 	}
 
 	return (
-        <div className="h-full min-h-0 w-full overflow-hidden">
-            <div className="flex h-full min-h-0 flex-col">
+		<div className="h-full min-h-0 w-full overflow-hidden">
+			<div className="flex h-full min-h-0 flex-col">
 				<div
 					role="toolbar"
 					aria-label="Message actions"
 					className="mail-menubar shrink-0 flex w-full flex-wrap items-center gap-1.5 px-3 py-2"
 				>
-                    {!isDraftMessage && (
-                        <>
-                            <Button
-                                type="button"
-                                variant="default"
-                                className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
-                                onClick={onReply}
-                            >
-                                <Reply size={14}/>
-                                <span>Reply</span>
-                            </Button>
+					{!isDraftMessage && (
+						<>
+							<Button
+								type="button"
+								variant="default"
+								className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
+								onClick={onReply}
+							>
+								<Reply size={14} />
+								<span>Reply</span>
+							</Button>
 							{canReplyAll && (
 								<Button
 									type="button"
-                                    variant="ghost"
-                                    className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
-                                    onClick={onReplyAll}
+									variant="ghost"
+									className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
+									onClick={onReplyAll}
 								>
-                                    <ReplyAll size={14}/>
+									<ReplyAll size={14} />
 									<span>Reply all</span>
 								</Button>
 							)}
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
-                                onClick={onForward}
-                            >
-                                <Forward size={14}/>
-                                <span>Forward</span>
-                            </Button>
-                        </>
-                    )}
+							<Button
+								type="button"
+								variant="ghost"
+								className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
+								onClick={onForward}
+							>
+								<Forward size={14} />
+								<span>Forward</span>
+							</Button>
+						</>
+					)}
 					<Button
 						type="button"
 						variant="ghost"
 						className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
 						onClick={onViewSource}
 					>
-                        <FileText size={14}/>
+						<FileText size={14} />
 						<span>View source</span>
 					</Button>
-                    <span className="divider-default mx-1 h-6 w-px"/>
+					<span className="divider-default mx-1 h-6 w-px" />
 					<Button
 						type="button"
 						variant="danger"
 						className="h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium"
 						onClick={onDelete}
 					>
-                        <Trash2 size={14}/>
+						<Trash2 size={14} />
 						<span>Delete</span>
 					</Button>
 				</div>
 				{message && (
 					<MessageHeaderCard
 						message={message}
-                        folderLabel="Message"
-                        attachmentsCount={attachments.length}
-                        showMessageDetails={showMessageDetails}
-                        onToggleMessageDetails={() => setShowMessageDetails((prev) => !prev)}
-                        dateLocale={systemLocale}
-                        tagLabel={formatMessageTagLabel(
-                            (
-                                message as MessageDetails & {
-                                    tag?: string | null;
-                                }
-                            ).tag ?? null,
-                        )}
-                        avatarSrc={senderAvatarSrc}
-                        onOpenCustomFilter={({accountId}) => {
+						folderLabel="Message"
+						attachmentsCount={attachments.length}
+						showMessageDetails={showMessageDetails}
+						onToggleMessageDetails={() => setShowMessageDetails((prev) => !prev)}
+						dateLocale={systemLocale}
+						tagLabel={formatMessageTagLabel(
+							(
+								message as MessageDetails & {
+									tag?: string | null;
+								}
+							).tag ?? null,
+						)}
+						avatarSrc={senderAvatarSrc}
+						onOpenCustomFilter={({accountId}) => {
 							void ipcClient.openRouteWindow(`/settings/account/${accountId}/filters`);
 						}}
 					/>
@@ -407,28 +407,27 @@ export default function MessageWindowPage() {
 
 				<MessageBodyPane
 					loading={loading}
-                    loadingLabel="Loading message..."
-                    iframeSrcDoc={iframeSrcDoc}
-                    plainText={body?.text}
-                    iframeTitle={`message-window-body-${message?.id || 'unknown'}`}
-                    showRemoteContentWarning={Boolean(
-                        iframeSrcDoc && message && appSettings.blockRemoteContent && !allowRemoteForMessage,
-                    )}
-                    onLoadRemoteOnce={() => setSessionRemoteAllowed(true)}
-                    onAllowRemoteForSender={allowRemoteContentForSender}
-                    onMessageFramePointerEnter={() => setIsPointerOverMessageFrame(true)}
-                    onMessageFramePointerLeave={() => {
+					loadingLabel="Loading message..."
+					iframeSrcDoc={iframeSrcDoc}
+					plainText={body?.text}
+					iframeTitle={`message-window-body-${message?.id || 'unknown'}`}
+					showRemoteContentWarning={Boolean(
+						iframeSrcDoc && message && appSettings.blockRemoteContent && !allowRemoteForMessage,
+					)}
+					onLoadRemoteOnce={() => setSessionRemoteAllowed(true)}
+					onAllowRemoteForSender={allowRemoteContentForSender}
+					onMessageFramePointerEnter={() => setIsPointerOverMessageFrame(true)}
+					onMessageFramePointerLeave={() => {
 						setIsPointerOverMessageFrame(false);
 						setHoveredLinkUrl('');
 					}}
-                    attachments={attachments}
-                    onOpenAttachmentMenu={(index, x, y) => {
+					attachments={attachments}
+					onOpenAttachmentMenu={(index, x, y) => {
 						setAttachmentMenu({x, y, index});
 					}}
 				/>
 				{isPointerOverMessageFrame && Boolean(hoveredLinkUrl) && (
-                    <div
-                        className="pointer-events-none fixed bottom-3 left-3 z-[1210] max-w-[min(60vw,56rem)] rounded-md border ui-border-default bg-[color-mix(in_srgb,var(--surface-card)_95%,transparent)] px-2.5 py-1.5 text-xs ui-text-secondary shadow-md backdrop-blur">
+					<div className="pointer-events-none fixed bottom-3 left-3 z-[1210] max-w-[min(60vw,56rem)] rounded-md border ui-border-default bg-[color-mix(in_srgb,var(--surface-card)_95%,transparent)] px-2.5 py-1.5 text-xs ui-text-secondary shadow-md backdrop-blur">
 						<span className="block truncate">{hoveredLinkUrl}</span>
 					</div>
 				)}
@@ -475,7 +474,7 @@ export default function MessageWindowPage() {
 					contentClassName="overlay flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl p-0"
 				>
 					<ModalHeader className="border-b ui-border-default px-4 py-3">
-                        <h2 className="ui-text-primary text-sm font-semibold">Message source</h2>
+						<h2 className="ui-text-primary text-sm font-semibold">Message source</h2>
 						<Button
 							type="button"
 							variant="outline"
@@ -486,13 +485,12 @@ export default function MessageWindowPage() {
 						</Button>
 					</ModalHeader>
 					<div className="ui-surface-content min-h-0 flex-1 overflow-auto p-3">
-                        {sourceLoading && <p className="ui-text-muted text-sm">Loading message source...</p>}
+						{sourceLoading && <p className="ui-text-muted text-sm">Loading message source...</p>}
 						{!sourceLoading && sourceError && (
-                            <p className="text-danger text-sm">Failed to load source: {sourceError}</p>
+							<p className="text-danger text-sm">Failed to load source: {sourceError}</p>
 						)}
 						{!sourceLoading && !sourceError && (
-                            <pre
-                                className="panel select-text whitespace-pre-wrap break-words rounded-md p-3 font-mono text-xs leading-5 ui-text-primary">
+							<pre className="panel select-text whitespace-pre-wrap break-words rounded-md p-3 font-mono text-xs leading-5 ui-text-primary">
 								{messageSource || '(No source available)'}
 							</pre>
 						)}

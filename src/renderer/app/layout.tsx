@@ -52,8 +52,8 @@ export default function AppLayout() {
 			title={defaultUpdateIndicatorTitle}
 			aria-label="Open update status"
 		>
-			<Download size={13}/>
-			<span className="titlebar-button-dot absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full"/>
+			<Download size={13} />
+			<span className="titlebar-button-dot absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full" />
 		</Button>
 	) : null;
 	const title = titlebarOverrides.title ?? defaultTitle;
@@ -102,10 +102,10 @@ export default function AppLayout() {
 					title={title}
 					titleActions={titleActions}
 					onRequestClose={onRequestClose}
-					navRail={showNavRail ? <MainNavRail/> : null}
+					navRail={showNavRail ? <MainNavRail /> : null}
 					showNavRail={showNavRail}
 				>
-					<Outlet/>
+					<Outlet />
 				</AppShell>
 			</AppContextProvider>
 		</ShellLayout>

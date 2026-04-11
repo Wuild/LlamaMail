@@ -52,7 +52,7 @@ async function resolveBimiLogoUrl(domain: string): Promise<string | null> {
 	return null;
 }
 
-async function fetchIconBuffer(url: string): Promise<{ buffer: Buffer; ext: string } | null> {
+async function fetchIconBuffer(url: string): Promise<{buffer: Buffer; ext: string} | null> {
 	try {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), ICON_FETCH_TIMEOUT_MS);
@@ -96,7 +96,7 @@ async function fetchIconBuffer(url: string): Promise<{ buffer: Buffer; ext: stri
 	return null;
 }
 
-async function fetchSenderDomainIcon(domain: string): Promise<{ buffer: Buffer; ext: string } | null> {
+async function fetchSenderDomainIcon(domain: string): Promise<{buffer: Buffer; ext: string} | null> {
 	const bimiUrl = await resolveBimiLogoUrl(domain);
 	const urls = [
 		bimiUrl,

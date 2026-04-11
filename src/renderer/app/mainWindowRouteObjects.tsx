@@ -27,102 +27,102 @@ import OnboardingLayout from './onboarding/layout';
 import type {MainWindowRouteContext} from './mainWindowRouteContext';
 
 export function buildMainWindowRouteObjects(context: MainWindowRouteContext, showDebugNavItem: boolean): RouteObject[] {
-    const hasAccounts = context.accounts.length > 0;
-    if (!hasAccounts) {
-        return [
-            {
-                path: '/',
-                element: <Navigate to="/onboarding" replace/>,
-            },
-            {
-                element: <OnboardingLayout/>,
-                children: [{path: '/onboarding', element: <OnboardingPage hasAccounts={false}/>}],
-            },
-            {
-                element: <AddAccountLayout/>,
-                children: [{path: '/add-account', element: <AddAccountPage hasAccounts={false}/>}],
-            },
-            {path: '*', element: <Navigate to="/onboarding" replace/>},
-        ];
-    }
+	const hasAccounts = context.accounts.length > 0;
+	if (!hasAccounts) {
+		return [
+			{
+				path: '/',
+				element: <Navigate to="/onboarding" replace />,
+			},
+			{
+				element: <OnboardingLayout />,
+				children: [{path: '/onboarding', element: <OnboardingPage hasAccounts={false} />}],
+			},
+			{
+				element: <AddAccountLayout />,
+				children: [{path: '/add-account', element: <AddAccountPage hasAccounts={false} />}],
+			},
+			{path: '*', element: <Navigate to="/onboarding" replace />},
+		];
+	}
 
-    return [
-        {
-            path: '/onboarding',
-            element: <Navigate to="/email" replace/>,
-        },
-        {
-            element: <AddAccountLayout/>,
-            children: [{path: '/add-account', element: <AddAccountPage hasAccounts/>}],
-        },
-        {
-            element: <MainSectionLayout/>,
-            children: [
-                {path: '/', element: <Navigate to="/email" replace/>},
-                {
-                    element: <EmailSectionLayout/>,
-                    children: [
-                        {path: '/email', element: <EmailPage/>},
-                        {path: '/email/:accountId', element: <EmailPage/>},
-                        {path: '/email/:accountId/:folderId', element: <EmailPage/>},
-                        {path: '/email/:accountId/:folderId/:emailId', element: <EmailPage/>},
-                    ],
-                },
-                {path: '/mail/*', element: <Navigate to="/email" replace/>},
-                {path: '/cloud', element: <CloudPage/>},
-                {
-                    path: '/contacts',
-                    element: (
-                        <ContactsPage
-                            accountId={context.accountId}
-                            accounts={context.accounts}
-                            onSelectAccount={context.onSelectAccount}
-                        />
-                    ),
-                },
-                {
-                    path: '/calendar',
-                    element: (
-                        <CalendarPage
-                            accountId={context.accountId}
-                            accounts={context.accounts}
-                            onSelectAccount={context.onSelectAccount}
-                        />
-                    ),
-                },
-                {
-                    element: <SettingsLayout/>,
-                    children: [
-                        {path: '/settings', element: <SettingsIndexPage/>},
-                        {path: '/settings/application', element: <SettingsApplicationPage/>},
-                        {path: '/settings/layout', element: <SettingsLayoutPage/>},
-                        {path: '/settings/whitelist', element: <SettingsWhitelistPage/>},
-                        {path: '/settings/developer', element: <SettingsDeveloperPage/>},
-                        {path: '/settings/:tab', element: <SettingsTabPage/>},
-                        {
-                            element: <SettingsAccountLayout/>,
-                            children: [
-                                {path: '/settings/account/:accountId', element: <SettingsAccountPage/>},
-                                {
-                                    path: '/settings/account/:accountId/identity',
-                                    element: <SettingsAccountIdentityPage/>,
-                                },
-                                {
-                                    path: '/settings/account/:accountId/server',
-                                    element: <SettingsAccountServerPage/>,
-                                },
-                                {
-                                    path: '/settings/account/:accountId/filters',
-                                    element: <SettingsAccountFiltersPage/>,
-                                },
-                            ],
-                        },
-                    ],
-                },
-                {path: '/debug', element: <DebugPage showDebugNavItem={showDebugNavItem}/>},
-                {path: '/help', element: <HelpPage/>},
-                {path: '*', element: <Navigate to="/email" replace/>},
-            ],
-        },
-    ];
+	return [
+		{
+			path: '/onboarding',
+			element: <Navigate to="/email" replace />,
+		},
+		{
+			element: <AddAccountLayout />,
+			children: [{path: '/add-account', element: <AddAccountPage hasAccounts />}],
+		},
+		{
+			element: <MainSectionLayout />,
+			children: [
+				{path: '/', element: <Navigate to="/email" replace />},
+				{
+					element: <EmailSectionLayout />,
+					children: [
+						{path: '/email', element: <EmailPage />},
+						{path: '/email/:accountId', element: <EmailPage />},
+						{path: '/email/:accountId/:folderId', element: <EmailPage />},
+						{path: '/email/:accountId/:folderId/:emailId', element: <EmailPage />},
+					],
+				},
+				{path: '/mail/*', element: <Navigate to="/email" replace />},
+				{path: '/cloud', element: <CloudPage />},
+				{
+					path: '/contacts',
+					element: (
+						<ContactsPage
+							accountId={context.accountId}
+							accounts={context.accounts}
+							onSelectAccount={context.onSelectAccount}
+						/>
+					),
+				},
+				{
+					path: '/calendar',
+					element: (
+						<CalendarPage
+							accountId={context.accountId}
+							accounts={context.accounts}
+							onSelectAccount={context.onSelectAccount}
+						/>
+					),
+				},
+				{
+					element: <SettingsLayout />,
+					children: [
+						{path: '/settings', element: <SettingsIndexPage />},
+						{path: '/settings/application', element: <SettingsApplicationPage />},
+						{path: '/settings/layout', element: <SettingsLayoutPage />},
+						{path: '/settings/whitelist', element: <SettingsWhitelistPage />},
+						{path: '/settings/developer', element: <SettingsDeveloperPage />},
+						{path: '/settings/:tab', element: <SettingsTabPage />},
+						{
+							element: <SettingsAccountLayout />,
+							children: [
+								{path: '/settings/account/:accountId', element: <SettingsAccountPage />},
+								{
+									path: '/settings/account/:accountId/identity',
+									element: <SettingsAccountIdentityPage />,
+								},
+								{
+									path: '/settings/account/:accountId/server',
+									element: <SettingsAccountServerPage />,
+								},
+								{
+									path: '/settings/account/:accountId/filters',
+									element: <SettingsAccountFiltersPage />,
+								},
+							],
+						},
+					],
+				},
+				{path: '/debug', element: <DebugPage showDebugNavItem={showDebugNavItem} />},
+				{path: '/help', element: <HelpPage />},
+				{path: '*', element: <Navigate to="/email" replace />},
+			],
+		},
+	];
 }

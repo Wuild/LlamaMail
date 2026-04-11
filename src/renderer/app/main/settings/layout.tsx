@@ -67,7 +67,7 @@ export default function SettingsLayout() {
 						id: 'account:add',
 						label: 'Add account',
 						description: 'Open account setup',
-						icon: <Plus size={15}/>,
+						icon: <Plus size={15} />,
 					},
 				],
 			},
@@ -121,7 +121,7 @@ export default function SettingsLayout() {
 			onSidebarResizeStart={onSettingsSidebarResizeStart}
 			contentClassName={cn('min-h-0 flex-1 overflow-y-auto', isAccountSettingsRoute && 'p-0')}
 		>
-			<Outlet/>
+			<Outlet />
 		</WorkspaceLayout>
 	);
 }

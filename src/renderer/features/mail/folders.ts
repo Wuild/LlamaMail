@@ -1,4 +1,4 @@
-export function isProtectedFolder(folder: { type: string | null; path: string }): boolean {
+export function isProtectedFolder(folder: {type: string | null; path: string}): boolean {
 	const type = (folder.type || '').toLowerCase();
 	const path = folder.path.toLowerCase();
 	if (type === 'inbox' || path === 'inbox') return true;

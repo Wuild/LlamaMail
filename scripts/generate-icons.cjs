@@ -19,56 +19,56 @@ const trayIconIcoOut = path.join(buildDir, 'lunatray.ico');
 const iconSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
 
 async function ensureSourceFiles() {
-    await fs.access(llamaSource);
+	await fs.access(llamaSource);
 }
 
 async function ensureDirectories() {
-    await fs.mkdir(iconsDir, {recursive: true});
+	await fs.mkdir(iconsDir, {recursive: true});
 }
 
 async function writeAppIcons() {
-    for (const size of iconSizes) {
-        const outPath = path.join(iconsDir, `${size}x${size}.png`);
-        await sharp(llamaSource).resize(size, size, {fit: 'contain'}).png().toFile(outPath);
-    }
+	for (const size of iconSizes) {
+		const outPath = path.join(iconsDir, `${size}x${size}.png`);
+		await sharp(llamaSource).resize(size, size, {fit: 'contain'}).png().toFile(outPath);
+	}
 
-    await sharp(llamaSource).resize(1024, 1024, {fit: 'contain'}).png().toFile(appIconOut);
+	await sharp(llamaSource).resize(1024, 1024, {fit: 'contain'}).png().toFile(appIconOut);
 }
 
 async function writeTrayIcon() {
-    await sharp(llamaTraySource).resize(64, 64, {fit: 'contain'}).png().toFile(trayIconOut);
+	await sharp(llamaTraySource).resize(64, 64, {fit: 'contain'}).png().toFile(trayIconOut);
 }
 
 async function writeWindowsIco() {
-    try {
-        await execFileAsync('convert', [
-            path.join(iconsDir, '16x16.png'),
-            path.join(iconsDir, '32x32.png'),
-            path.join(iconsDir, '48x48.png'),
-            path.join(iconsDir, '64x64.png'),
-            path.join(iconsDir, '128x128.png'),
-            path.join(iconsDir, '256x256.png'),
-            appIconIcoOut,
-        ]);
-        await execFileAsync('convert', [trayIconOut, trayIconIcoOut]);
-    } catch {
-        // ImageMagick may not be available in all environments; PNG icons remain as fallback.
-    }
+	try {
+		await execFileAsync('convert', [
+			path.join(iconsDir, '16x16.png'),
+			path.join(iconsDir, '32x32.png'),
+			path.join(iconsDir, '48x48.png'),
+			path.join(iconsDir, '64x64.png'),
+			path.join(iconsDir, '128x128.png'),
+			path.join(iconsDir, '256x256.png'),
+			appIconIcoOut,
+		]);
+		await execFileAsync('convert', [trayIconOut, trayIconIcoOut]);
+	} catch {
+		// ImageMagick may not be available in all environments; PNG icons remain as fallback.
+	}
 }
 
 async function main() {
-    await ensureSourceFiles();
-    await ensureDirectories();
-    await Promise.all([writeAppIcons(), writeTrayIcon()]);
-    await writeWindowsIco();
-    console.log(`Generated app icons in ${iconsDir}`);
-    console.log(`Generated app icon: ${appIconOut}`);
-    console.log(`Generated tray icon: ${trayIconOut}`);
-    console.log(`Generated Windows app icon: ${appIconIcoOut}`);
-    console.log(`Generated Windows tray icon: ${trayIconIcoOut}`);
+	await ensureSourceFiles();
+	await ensureDirectories();
+	await Promise.all([writeAppIcons(), writeTrayIcon()]);
+	await writeWindowsIco();
+	console.log(`Generated app icons in ${iconsDir}`);
+	console.log(`Generated app icon: ${appIconOut}`);
+	console.log(`Generated tray icon: ${trayIconOut}`);
+	console.log(`Generated Windows app icon: ${appIconIcoOut}`);
+	console.log(`Generated Windows tray icon: ${trayIconIcoOut}`);
 }
 
 main().catch((error) => {
-    console.error('Failed to generate icons:', error);
-    process.exit(1);
+	console.error('Failed to generate icons:', error);
+	process.exit(1);
 });

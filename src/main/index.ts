@@ -437,8 +437,8 @@ function normalizeWindowState(state: MainWindowState | null): MainWindowState | 
 }
 
 function rectsIntersect(
-	a: { x: number; y: number; width: number; height: number },
-	b: { x: number; y: number; width: number; height: number },
+	a: {x: number; y: number; width: number; height: number},
+	b: {x: number; y: number; width: number; height: number},
 ): boolean {
 	return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
@@ -590,17 +590,17 @@ function configurePlatformQuickActions(): void {
 		const dockMenu = Menu.buildFromTemplate(
 			mainWindowActionsEnabled
 				? [
-					{label: 'Compose Email', click: () => openComposeQuickAction()},
-					{type: 'separator'},
-					{label: 'Mail', click: () => navigateMainWindowToRoute('/email')},
-					{label: 'Contacts', click: () => navigateMainWindowToRoute('/contacts')},
-					{label: 'Calendar', click: () => navigateMainWindowToRoute('/calendar')},
-					{label: 'Cloud', click: () => navigateMainWindowToRoute('/cloud')},
-					{type: 'separator'},
-					{label: 'Settings', click: () => navigateMainWindowToRoute('/settings/application')},
-					{label: 'Debug', click: () => navigateMainWindowToRoute('/debug')},
-					{label: 'Help', click: () => navigateMainWindowToRoute('/help')},
-				]
+						{label: 'Compose Email', click: () => openComposeQuickAction()},
+						{type: 'separator'},
+						{label: 'Mail', click: () => navigateMainWindowToRoute('/email')},
+						{label: 'Contacts', click: () => navigateMainWindowToRoute('/contacts')},
+						{label: 'Calendar', click: () => navigateMainWindowToRoute('/calendar')},
+						{label: 'Cloud', click: () => navigateMainWindowToRoute('/cloud')},
+						{type: 'separator'},
+						{label: 'Settings', click: () => navigateMainWindowToRoute('/settings/application')},
+						{label: 'Debug', click: () => navigateMainWindowToRoute('/debug')},
+						{label: 'Help', click: () => navigateMainWindowToRoute('/help')},
+					]
 				: [{label: 'Open Onboarding', click: () => showMainWindow()}],
 		);
 		app.dock.setMenu(dockMenu);
@@ -613,42 +613,42 @@ function configurePlatformQuickActions(): void {
 				type: 'tasks',
 				items: mainWindowActionsEnabled
 					? [
-						{
-							type: 'task',
-							title: 'Compose Email',
-							description: 'Open a compose window',
-							program: jumpPath,
-							args: toMainProcessLaunchArgs(['--action=compose']).join(' '),
-						},
-						{
-							type: 'task',
-							title: 'Mail',
-							description: 'Open mail',
-							program: jumpPath,
-							args: toMainProcessLaunchArgs(['--route=/email']).join(' '),
-						},
-						{
-							type: 'task',
-							title: 'Contacts',
-							description: 'Open contacts',
-							program: jumpPath,
-							args: toMainProcessLaunchArgs(['--route=/contacts']).join(' '),
-						},
-						{
-							type: 'task',
-							title: 'Calendar',
-							description: 'Open calendar',
-							program: jumpPath,
-							args: toMainProcessLaunchArgs(['--route=/calendar']).join(' '),
-						},
-						{
-							type: 'task',
-							title: 'Cloud',
-							description: 'Open cloud files',
-							program: jumpPath,
-							args: toMainProcessLaunchArgs(['--route=/cloud']).join(' '),
-						},
-					]
+							{
+								type: 'task',
+								title: 'Compose Email',
+								description: 'Open a compose window',
+								program: jumpPath,
+								args: toMainProcessLaunchArgs(['--action=compose']).join(' '),
+							},
+							{
+								type: 'task',
+								title: 'Mail',
+								description: 'Open mail',
+								program: jumpPath,
+								args: toMainProcessLaunchArgs(['--route=/email']).join(' '),
+							},
+							{
+								type: 'task',
+								title: 'Contacts',
+								description: 'Open contacts',
+								program: jumpPath,
+								args: toMainProcessLaunchArgs(['--route=/contacts']).join(' '),
+							},
+							{
+								type: 'task',
+								title: 'Calendar',
+								description: 'Open calendar',
+								program: jumpPath,
+								args: toMainProcessLaunchArgs(['--route=/calendar']).join(' '),
+							},
+							{
+								type: 'task',
+								title: 'Cloud',
+								description: 'Open cloud files',
+								program: jumpPath,
+								args: toMainProcessLaunchArgs(['--route=/cloud']).join(' '),
+							},
+						]
 					: [],
 			},
 		]);
@@ -1205,7 +1205,7 @@ async function confirmUnsafeUrlOpen(url: string, hints: string[], owner?: Browse
 	return result.response === 0;
 }
 
-function resolveWrappedMessageLink(url: string): { targetUrl: string; senderUntrusted: boolean } | null {
+function resolveWrappedMessageLink(url: string): {targetUrl: string; senderUntrusted: boolean} | null {
 	try {
 		const parsed = new URL(url);
 		if (parsed.protocol.toLowerCase() !== LINK_WARNING_WRAPPER_PROTOCOL) {
