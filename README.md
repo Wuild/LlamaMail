@@ -6,16 +6,13 @@ LlamaMail is a modern, offline-first desktop mail client built with Electron, Re
 ## Screenshots
 
 ### Mail
-![LlamaMail Mail View](./screenshots/email.png)
+
+![LlamaMail Mail View](./screenshots/email-dark.png)
 
 ### Compose
-![LlamaMail Compose View](./screenshots/compose.png)
 
-### Calendar
-![LlamaMail Calendar View](./screenshots/calendar.png)
+![LlamaMail Compose View](./screenshots/compose-dark.png)
 
-### Settings
-![LlamaMail Settings View](./screenshots/settings.png)
 
 ## Highlights
 
