@@ -27,17 +27,16 @@ import {
 	uploadCloudFile,
 } from '@main/cloud/providers.js';
 import {syncCloudDav} from '@main/cloud/davSync.js';
-import {APP_NAME} from '@/shared/appConfig.js';
-import {
-	ONEDRIVE_APP_ID,
-	ONEDRIVE_AUTHORITY,
-	ONEDRIVE_REDIRECT_URI,
-	ONEDRIVE_RESOURCE,
-	ONEDRIVE_SCOPES,
-} from '@/shared/cloudConfig.js';
+import {APP_NAME, APP_PROTOCOL} from '@/shared/appConfig.js';
 import {confirmFileOpen, isRiskyFileOpenTarget} from '@main/security/fileOpenRisk.js';
 
 const logger = createMailDebugLogger('cloud', 'ipc:cloud');
+const ONEDRIVE_APP_ID = 'e063ebfa-cd51-47fd-8a97-6a73fe65f26c';
+const ONEDRIVE_TENANT_ID = 'common';
+const ONEDRIVE_SCOPES = ['Files.ReadWrite', 'Files.ReadWrite.All', 'Sites.ReadWrite.All'] as const;
+const ONEDRIVE_REDIRECT_URI = `${APP_PROTOCOL}://azure/auth`;
+const ONEDRIVE_AUTHORITY = `https://login.microsoftonline.com/${ONEDRIVE_TENANT_ID}`;
+const ONEDRIVE_RESOURCE = 'https://graph.microsoft.com';
 type OAuthProvider = 'google-drive' | 'onedrive';
 type LinkCloudOAuthPayload = {
 	clientId?: string | null;

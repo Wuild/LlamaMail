@@ -2,7 +2,6 @@ import {FormInput, FormSelect} from '@renderer/components/ui/FormControls';
 import React from 'react';
 import {File, FileArchive, FileAudio2, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo} from 'lucide-react';
 import type {CloudItem, CloudProvider, CloudStorageUsage} from '@/preload';
-import {ONEDRIVE_DEFAULT_CLIENT_ID, ONEDRIVE_DEFAULT_TENANT_ID} from '@/shared/cloudConfig';
 
 export type NavigationEntry = {token: string; label: string};
 export type CloudTableColumnKey = 'name' | 'type' | 'size' | 'modified' | 'created';
@@ -14,9 +13,6 @@ export const providerLabels: Record<CloudProvider, string> = {
 	'google-drive': 'Google Drive',
 	onedrive: 'OneDrive',
 };
-
-export const DEFAULT_ONEDRIVE_CLIENT_ID = ONEDRIVE_DEFAULT_CLIENT_ID;
-export const DEFAULT_ONEDRIVE_TENANT_ID = ONEDRIVE_DEFAULT_TENANT_ID;
 
 const CLOUD_FOLDER_CACHE_PREFIX = 'llamamail.cloud.folder.cache.v1';
 const CLOUD_TABLE_COLUMNS_STORAGE_KEY = 'llamamail.cloud.table.columns.v1';

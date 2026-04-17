@@ -451,6 +451,22 @@ function MailPage() {
 		);
 	}, [selectedAccountId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+	const triggerBackgroundFolderSync = useCallback(
+		(accountId: number, folderPath: string, reason: string): void => {
+			const key = `${accountId}:${folderPath}`;
+			if (backgroundFolderSyncsRef.current.has(key)) return;
+			backgroundFolderSyncsRef.current.add(key);
+			setSyncStatusText(reason);
+			void getAccount(accountId)
+				.email.sync()
+				.catch(() => undefined)
+				.finally(() => {
+					backgroundFolderSyncsRef.current.delete(key);
+				});
+		},
+		[getAccount, setSyncStatusText],
+	);
+
 	useEffect(() => {
 		if (!selectedAccountId || !selectedFolderPath) {
 			setMessages([]);
@@ -855,22 +871,6 @@ function MailPage() {
 		if (pending.size === 0) return rows;
 		return rows.filter((m) => !pending.has(m.id));
 	}
-
-	const triggerBackgroundFolderSync = useCallback(
-		(accountId: number, folderPath: string, reason: string): void => {
-			const key = `${accountId}:${folderPath}`;
-			if (backgroundFolderSyncsRef.current.has(key)) return;
-			backgroundFolderSyncsRef.current.add(key);
-			setSyncStatusText(reason);
-			void getAccount(accountId)
-				.email.sync()
-				.catch(() => undefined)
-				.finally(() => {
-					backgroundFolderSyncsRef.current.delete(key);
-				});
-		},
-		[getAccount, setSyncStatusText],
-	);
 
 	async function loadFoldersAndMessages(
 		accountId: number,
