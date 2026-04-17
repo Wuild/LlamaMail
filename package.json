@@ -163,7 +163,8 @@
 			"target": [
 				"AppImage",
 				"deb",
-				"rpm"
+				"rpm",
+				"zip"
 			],
 			"executableName": "llamamail",
 			"icon": "build/icons",
@@ -224,7 +225,8 @@
 			"artifactName": "${productName}.Setup.${version}.${ext}",
 			"icon": "build/icon.ico",
 			"target": [
-				"nsis"
+				"nsis",
+				"zip"
 			]
 		},
 		"nsis": {

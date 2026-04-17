@@ -154,11 +154,7 @@ export function createMainWindowManager(deps: MainWindowManagerDeps): {
 				devUrls: [],
 				prodFiles: [
 					{
-						target: path.join(__dirname, '../renderer/window.html'),
-						hash: initialRouteHash,
-					},
-					{
-						target: path.join(__dirname, '../renderer/src/renderer/window.html'),
+						target: path.join(__dirname, '..', '..', 'renderer/window.html'),
 						hash: initialRouteHash,
 					},
 				],
