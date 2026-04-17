@@ -74,6 +74,7 @@ const notificationIconPath = resolveNotificationIconPath();
 const MAIN_WINDOW_MIN_WIDTH = 900;
 const MAIN_WINDOW_MIN_HEIGHT = 600;
 const DEV_SPLASH_MIN_DURATION_MS = 1200;
+const STARTUP_UPDATE_FLOW_TIMEOUT_MS = 20000;
 const logger = createAppLogger('main');
 const mainWindowManager = createMainWindowManager({
 	isDev,
@@ -195,6 +196,25 @@ function toErrorDetail(error: unknown): string | null {
 		return asJson && asJson !== '{}' ? asJson : null;
 	} catch {
 		return null;
+	}
+}
+
+async function runStartupUpdateFlowWithTimeout(timeoutMs: number): Promise<'proceed' | 'installing'> {
+	let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+	try {
+		return await Promise.race<'proceed' | 'installing'>([
+			runStartupUpdateFlow(),
+			new Promise<'proceed'>((resolve) => {
+				timeoutHandle = setTimeout(() => {
+					logger.warn('Startup update flow timeout after %dms, continuing startup', timeoutMs);
+					resolve('proceed');
+				}, timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeoutHandle) {
+			clearTimeout(timeoutHandle);
+		}
 	}
 }
 
@@ -1170,7 +1190,7 @@ if (!gotSingleInstanceLock) {
 			createWindow('/windows/splash');
 			showMainWindow();
 			const startupFlowStartedAt = Date.now();
-			const startupUpdateResult = await runStartupUpdateFlow();
+			const startupUpdateResult = await runStartupUpdateFlowWithTimeout(STARTUP_UPDATE_FLOW_TIMEOUT_MS);
 			logger.info('Startup update flow result=%s', startupUpdateResult);
 			console.log(`[main-startup] startup update flow result=${startupUpdateResult}`);
 			if (startupUpdateResult === 'installing') {
