@@ -5,9 +5,7 @@ type MailFoldersStoreState = {
 	accountFoldersById: Record<number, FolderItem[]>;
 	selectedFolderPath: string | null;
 	setAccountFoldersById: (
-		value:
-			| Record<number, FolderItem[]>
-			| ((current: Record<number, FolderItem[]>) => Record<number, FolderItem[]>),
+		value: Record<number, FolderItem[]> | ((current: Record<number, FolderItem[]>) => Record<number, FolderItem[]>),
 	) => void;
 	setSelectedFolderPath: (path: string | null) => void;
 };

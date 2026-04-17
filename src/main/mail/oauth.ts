@@ -37,7 +37,7 @@ function getSmtpHost(provider: 'google' | 'microsoft'): string {
 	return provider === 'google' ? 'smtp.gmail.com' : 'smtp.office365.com';
 }
 
-async function getElectronShell(): Promise<{ openExternal: (url: string) => Promise<void> }> {
+async function getElectronShell(): Promise<{openExternal: (url: string) => Promise<void>}> {
 	const electron = (await import('electron')) as {
 		shell?: {openExternal: (url: string) => Promise<void>};
 	};
@@ -97,11 +97,7 @@ async function resolveOAuthCallback(rawUrl: string) {
 	const code = url.searchParams.get('code');
 	const error = url.searchParams.get('error');
 
-	logger.info(
-		'Parsed callback code=%s error=%s',
-		code ? 'yes' : 'no',
-		error || 'none',
-	);
+	logger.info('Parsed callback code=%s error=%s', code ? 'yes' : 'no', error || 'none');
 
 	if (!requestId) return;
 
@@ -144,12 +140,8 @@ export function queueMailOAuthCallbackUrl(url: string): boolean {
 	return true;
 }
 
-export async function startMailOAuth(
-	payload: StartMailOAuthPayload
-): Promise<OAuthSession> {
-	const provider = (payload.provider === 'microsoft'
-		? 'microsoft'
-		: 'google') as OAuthProvider;
+export async function startMailOAuth(payload: StartMailOAuthPayload): Promise<OAuthSession> {
+	const provider = (payload.provider === 'microsoft' ? 'microsoft' : 'google') as OAuthProvider;
 
 	const requestId = randomBytes(16).toString('hex');
 	const redirectTo = `llamamail://oauth/callback?request_id=${encodeURIComponent(requestId)}`;
@@ -196,9 +188,7 @@ export function cancelPendingMailOAuth(reason = 'OAuth login cancelled'): number
 	return entries.length;
 }
 
-export async function ensureFreshMailOAuthSession(
-	session: OAuthSession
-): Promise<OAuthSession> {
+export async function ensureFreshMailOAuthSession(session: OAuthSession): Promise<OAuthSession> {
 	if (!session.expiresAt) return session;
 	if (Date.now() < session.expiresAt - TOKEN_REFRESH_BUFFER_MS) return session;
 	if (!session.refreshToken) return session;

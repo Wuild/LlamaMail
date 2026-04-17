@@ -22,7 +22,9 @@ export default function SettingsAccountServerPage() {
 						<FormCheckbox
 							checked={!!editor.sync_emails}
 							onChange={(event) =>
-								setEditor((prev) => (prev ? {...prev, sync_emails: event.target.checked ? 1 : 0} : prev))
+								setEditor((prev) =>
+									prev ? {...prev, sync_emails: event.target.checked ? 1 : 0} : prev,
+								)
 							}
 						/>
 					</label>
@@ -31,7 +33,9 @@ export default function SettingsAccountServerPage() {
 						<FormCheckbox
 							checked={!!editor.sync_contacts}
 							onChange={(event) =>
-								setEditor((prev) => (prev ? {...prev, sync_contacts: event.target.checked ? 1 : 0} : prev))
+								setEditor((prev) =>
+									prev ? {...prev, sync_contacts: event.target.checked ? 1 : 0} : prev,
+								)
 							}
 						/>
 					</label>
@@ -40,20 +44,18 @@ export default function SettingsAccountServerPage() {
 						<FormCheckbox
 							checked={!!editor.sync_calendar}
 							onChange={(event) =>
-								setEditor((prev) => (prev ? {...prev, sync_calendar: event.target.checked ? 1 : 0} : prev))
+								setEditor((prev) =>
+									prev ? {...prev, sync_calendar: event.target.checked ? 1 : 0} : prev,
+								)
 							}
 						/>
 					</label>
 				</div>
 				{!hasAnyModuleEnabled && (
-					<p className="text-danger mt-3 text-xs">
-						Enable at least one module before saving this account.
-					</p>
+					<p className="text-danger mt-3 text-xs">Enable at least one module before saving this account.</p>
 				)}
 				{hasAnyModuleEnabled && /Select at least one sync module/i.test(accountStatus || '') && (
-					<p className="ui-text-muted mt-3 text-xs">
-						Module selection is valid. You can save now.
-					</p>
+					<p className="ui-text-muted mt-3 text-xs">Module selection is valid. You can save now.</p>
 				)}
 			</section>
 			<section className="panel rounded-xl p-4">

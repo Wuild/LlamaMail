@@ -53,7 +53,10 @@ export const useMailMessagesStore = create<MailMessagesStoreState>((set) => ({
 		})),
 	setMessageFetchLimit: (value) =>
 		set((state) => ({
-			messageFetchLimit: Math.max(1, Number(resolveValue(state.messageFetchLimit, value)) || DEFAULT_MESSAGE_FETCH_LIMIT),
+			messageFetchLimit: Math.max(
+				1,
+				Number(resolveValue(state.messageFetchLimit, value)) || DEFAULT_MESSAGE_FETCH_LIMIT,
+			),
 		})),
 	setLoadingMoreMessages: (value) =>
 		set((state) => ({

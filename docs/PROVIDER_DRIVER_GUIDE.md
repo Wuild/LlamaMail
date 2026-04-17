@@ -15,17 +15,17 @@ This codebase uses a provider-driver architecture for account sync and capabilit
 Each driver must satisfy `MailProviderDriver`:
 
 - Metadata:
-  - `key()`
-  - `label()`
-  - `supports('emails' | 'contacts' | 'calendar' | 'files')`
+    - `key()`
+    - `label()`
+    - `supports('emails' | 'contacts' | 'calendar' | 'files')`
 - Sync metadata:
-  - `canRunInitialSync()`
-  - `canRunIncrementalSync()`
-  - `supportsRealtimeEvents()`
-  - `supportsPushNotifications()`
+    - `canRunInitialSync()`
+    - `canRunIncrementalSync()`
+    - `supportsRealtimeEvents()`
+    - `supportsPushNotifications()`
 - Account/module resolution:
-  - `resolveSyncModules(account)`
-  - `resolveSyncCredentials(accountId)`
+    - `resolveSyncModules(account)`
+    - `resolveSyncCredentials(accountId)`
 
 Driver registration must satisfy `ProviderDriverRegistration`:
 
@@ -34,9 +34,9 @@ Driver registration must satisfy `ProviderDriverRegistration`:
 - sync metadata flags
 - auth metadata (`recommendedAuthMethod`, `supportedAuthMethods`)
 - factories:
-  - `createDriver()`
-  - `createEmailSyncService(driver)`
-  - `createAncillarySyncService(driver)`
+    - `createDriver()`
+    - `createEmailSyncService(driver)`
+    - `createAncillarySyncService(driver)`
 
 ## Adding A New Provider Driver
 
@@ -46,8 +46,8 @@ Driver registration must satisfy `ProviderDriverRegistration`:
 4. Implement email and ancillary sync service factories for that provider.
 5. Ensure the provider key is enabled in `src/shared/mailProviderConfig.ts`.
 6. Build and validate:
-   - `npm run check:architecture`
-   - `npm run build`
+    - `npm run check:architecture`
+    - `npm run build`
 
 No hardcoded manager wiring is required; discovery loads driver registrations automatically.
 
@@ -61,4 +61,3 @@ Renderer provider selection consumes catalog metadata from IPC (`ProviderDriverC
 - auth metadata
 
 Keep this metadata accurate, because it drives UI availability and sync behavior.
-

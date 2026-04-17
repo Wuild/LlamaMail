@@ -40,7 +40,11 @@ export class ProviderManager {
 
 	constructor() {}
 
-	registerDriver(providerKey: MailProviderKey, factory: DriverFactory, registration?: ProviderDriverRegistration): void {
+	registerDriver(
+		providerKey: MailProviderKey,
+		factory: DriverFactory,
+		registration?: ProviderDriverRegistration,
+	): void {
 		this.#driverFactories.set(providerKey, factory);
 		if (registration) {
 			this.#driverRegistrations.set(providerKey, registration);
@@ -108,7 +112,10 @@ export class ProviderManager {
 		return this.listRegisteredDriverKeys().map((providerKey) => {
 			const registration = this.#driverRegistrations.get(providerKey);
 			if (!registration) {
-				throw new ProviderManagerError('provider-unsupported', `Provider '${providerKey}' is missing registration metadata.`);
+				throw new ProviderManagerError(
+					'provider-unsupported',
+					`Provider '${providerKey}' is missing registration metadata.`,
+				);
 			}
 			return {
 				key: providerKey,
@@ -141,11 +148,15 @@ export class ProviderManager {
 	}
 
 	#resolveProviderKeyForAccount(account: Pick<PublicAccount, 'provider' | 'oauth_provider'>): MailProviderKey {
-		const provider = String(account.provider || '').trim().toLowerCase();
+		const provider = String(account.provider || '')
+			.trim()
+			.toLowerCase();
 		if (provider && this.#driverFactories.has(provider)) {
 			return provider;
 		}
-		const oauthProvider = String(account.oauth_provider || '').trim().toLowerCase();
+		const oauthProvider = String(account.oauth_provider || '')
+			.trim()
+			.toLowerCase();
 		if (oauthProvider && this.#driverFactories.has(oauthProvider)) {
 			return oauthProvider;
 		}

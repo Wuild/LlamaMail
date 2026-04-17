@@ -41,11 +41,11 @@ type SettingsAddAccountProps = {
 };
 
 const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
-																   embedded = false,
-																   hasAccounts = false,
-																   onCompleted,
-																   onCancel,
-															   }) => {
+	embedded = false,
+	hasAccounts = false,
+	onCompleted,
+	onCancel,
+}) => {
 	useAppTheme();
 
 	const [step, setStep] = useState<WizardStep>(1);
@@ -213,7 +213,6 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 		}
 	}
 
-
 	async function onCredentialsNext() {
 		if (!canGoCredentialsNext) return;
 
@@ -286,10 +285,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 				setError(e?.message || String(e));
 				return;
 			} finally {
-				if (!isActiveOAuthAttempt(attemptId)) {
-					return;
+				if (isActiveOAuthAttempt(attemptId)) {
+					setLoading(false);
 				}
-				setLoading(false);
 			}
 		}
 
@@ -374,10 +372,10 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 			setPop3(
 				discovered.pop3
 					? {
-						host: discovered.pop3.host,
-						port: discovered.pop3.port,
-						security: discovered.pop3.secure ? 'ssl' : 'starttls',
-					}
+							host: discovered.pop3.host,
+							port: discovered.pop3.port,
+							security: discovered.pop3.secure ? 'ssl' : 'starttls',
+						}
 					: null,
 			);
 
@@ -459,7 +457,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 				user: email.trim(),
 				password: selectedAuthMethod === 'oauth2' ? undefined : password,
 				auth_method: selectedAuthMethod,
-				oauth_provider: selectedAuthMethod === 'oauth2' ? oauthSession?.provider ?? null : null,
+				oauth_provider: selectedAuthMethod === 'oauth2' ? (oauthSession?.provider ?? null) : null,
 				oauth_session: selectedAuthMethod === 'oauth2' ? oauthSession : null,
 				sync_emails: syncEmails,
 				sync_contacts: syncContacts,
@@ -499,9 +497,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 									};
 						await ipcClient.linkCloudOAuth(autoCloudProvider, cloudPayload);
 						cloudMessages.push(
-							autoCloudProvider === 'google-drive'
-								? 'Google Drive connected.'
-								: 'OneDrive connected.',
+							autoCloudProvider === 'google-drive' ? 'Google Drive connected.' : 'OneDrive connected.',
 						);
 					} else {
 						cloudMessages.push(
@@ -763,30 +759,32 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 									{step === 1 && (
 										<section className="space-y-5">
 											<header>
-												<h3 className="ui-text-primary text-2xl font-semibold">Choose your provider</h3>
+												<h3 className="ui-text-primary text-2xl font-semibold">
+													Choose your provider
+												</h3>
 												<p className="ui-text-muted mt-1 text-sm">
 													Select the account type to get the best sign-in flow.
 												</p>
 											</header>
 
-												<div className="mx-auto flex w-full max-w-xl flex-col gap-3">
-													{providerCards.length > 0 ? (
-														providerCards.map((item) => (
-															<ProviderCard
-																key={item.key}
-																title={item.title}
-																description={item.description}
-																icon={item.icon}
-																active={providerChoice === item.key}
-																onClick={() => applyProviderChoice(item.key)}
-															/>
-														))
-													) : (
-														<p className="ui-text-muted rounded-lg border border-dashed px-4 py-3 text-sm">
-															No enabled providers are available.
-														</p>
-													)}
-												</div>
+											<div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+												{providerCards.length > 0 ? (
+													providerCards.map((item) => (
+														<ProviderCard
+															key={item.key}
+															title={item.title}
+															description={item.description}
+															icon={item.icon}
+															active={providerChoice === item.key}
+															onClick={() => applyProviderChoice(item.key)}
+														/>
+													))
+												) : (
+													<p className="ui-text-muted rounded-lg border border-dashed px-4 py-3 text-sm">
+														No enabled providers are available.
+													</p>
+												)}
+											</div>
 										</section>
 									)}
 
@@ -797,13 +795,18 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 													<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5">
 														{getProviderIcon(selectedProviderDriver, 20)}
 														<span className="ui-text-secondary text-xs font-semibold uppercase tracking-wide">
-															{selectedProviderDriver?.label || providerChoice || 'Provider'} sign-in
+															{selectedProviderDriver?.label ||
+																providerChoice ||
+																'Provider'}{' '}
+															sign-in
 														</span>
 													</div>
 												)}
 
 												<h3 className="ui-text-primary text-2xl font-semibold">
-													{isOAuthProvider ? 'Sign in with your provider' : 'Enter your account credentials'}
+													{isOAuthProvider
+														? 'Sign in with your provider'
+														: 'Enter your account credentials'}
 												</h3>
 
 												<p className="ui-text-muted mt-1 text-sm">
@@ -837,8 +840,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 															<>
 																<p className="font-semibold">Secure browser sign-in</p>
 																<p className="mt-1 text-xs opacity-90">
-																	Click Continue with Browser to open your provider login page.
-																	After sign-in, LlamaMail will continue automatically.
+																	Click Continue with Browser to open your provider
+																	login page. After sign-in, LlamaMail will continue
+																	automatically.
 																</p>
 															</>
 														) : (
@@ -848,9 +852,12 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 																	aria-hidden
 																/>
 																<div>
-																	<p className="font-semibold">Waiting for authentication...</p>
+																	<p className="font-semibold">
+																		Waiting for authentication...
+																	</p>
 																	<p className="mt-1 text-xs opacity-90">
-																		Complete sign-in in your browser. This window will continue automatically.
+																		Complete sign-in in your browser. This window
+																		will continue automatically.
 																	</p>
 																</div>
 															</div>
@@ -860,7 +867,11 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 
 												{!isOAuthProvider && selectedAuthMethod !== 'oauth2' && (
 													<Field
-														label={selectedAuthMethod === 'app_password' ? 'App password' : 'Password'}
+														label={
+															selectedAuthMethod === 'app_password'
+																? 'App password'
+																: 'Password'
+														}
 														value={password}
 														onChange={setPassword}
 														type="password"
@@ -872,7 +883,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 												<div className="notice-info rounded-xl px-4 py-3 text-sm">
 													<p className="font-semibold">Provider session connected</p>
 													<p className="mt-1 text-xs opacity-90">
-														{oauthSession.email ? `Signed in as ${oauthSession.email}.` : 'OAuth session is ready.'}
+														{oauthSession.email
+															? `Signed in as ${oauthSession.email}.`
+															: 'OAuth session is ready.'}
 													</p>
 												</div>
 											)}
@@ -896,7 +909,8 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 													<div>
 														<p className="font-semibold">Running autodiscover</p>
 														<p className="mt-0.5 text-xs opacity-90">
-															Detecting server settings and verifying IMAP/SMTP credentials.
+															Detecting server settings and verifying IMAP/SMTP
+															credentials.
 														</p>
 													</div>
 												</div>
@@ -911,7 +925,8 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 													Manual server setup
 												</h3>
 												<p className="ui-text-muted mt-1 text-sm">
-													Autodiscover did not return complete settings. Enter IMAP and SMTP manually.
+													Autodiscover did not return complete settings. Enter IMAP and SMTP
+													manually.
 												</p>
 											</header>
 
@@ -943,7 +958,6 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 													controlSize="lg"
 												/>
 											</div>
-
 										</section>
 									)}
 
@@ -961,8 +975,14 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 											<div className="space-y-1">
 												<SummaryRow label="Email" value={email || '-'} />
 												<SummaryRow label="Provider" value={provider ?? 'custom'} />
-												<SummaryRow label="IMAP" value={`${imap?.host ?? '-'}:${imap?.port ?? '-'}`} />
-												<SummaryRow label="SMTP" value={`${smtp?.host ?? '-'}:${smtp?.port ?? '-'}`} />
+												<SummaryRow
+													label="IMAP"
+													value={`${imap?.host ?? '-'}:${imap?.port ?? '-'}`}
+												/>
+												<SummaryRow
+													label="SMTP"
+													value={`${smtp?.host ?? '-'}:${smtp?.port ?? '-'}`}
+												/>
 												{davDiscovery?.carddavUrl && (
 													<SummaryRow label="CardDAV" value={davDiscovery.carddavUrl} />
 												)}
@@ -971,7 +991,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 												)}
 											</div>
 
-												<div className="panel rounded-xl p-4">
+											<div className="panel rounded-xl p-4">
 												<p className="ui-text-primary text-sm font-semibold">Include modules</p>
 												<p className="ui-text-muted mt-1 text-xs">
 													Choose what this account should appear in and sync.
@@ -982,7 +1002,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 														<FormCheckbox
 															checked={syncEmails > 0}
 															disabled={!selectedProviderCapabilities.emails}
-															onChange={(event) => setSyncEmails(event.target.checked ? 1 : 0)}
+															onChange={(event) =>
+																setSyncEmails(event.target.checked ? 1 : 0)
+															}
 														/>
 													</label>
 													<label className="ui-text-secondary flex items-center justify-between gap-3 text-sm">
@@ -990,7 +1012,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 														<FormCheckbox
 															checked={syncContacts > 0}
 															disabled={!selectedProviderCapabilities.contacts}
-															onChange={(event) => setSyncContacts(event.target.checked ? 1 : 0)}
+															onChange={(event) =>
+																setSyncContacts(event.target.checked ? 1 : 0)
+															}
 														/>
 													</label>
 													<label className="ui-text-secondary flex items-center justify-between gap-3 text-sm">
@@ -998,38 +1022,48 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 														<FormCheckbox
 															checked={syncCalendar > 0}
 															disabled={!selectedProviderCapabilities.calendar}
-															onChange={(event) => setSyncCalendar(event.target.checked ? 1 : 0)}
+															onChange={(event) =>
+																setSyncCalendar(event.target.checked ? 1 : 0)
+															}
 														/>
 													</label>
 												</div>
-													{!canSaveModules && (
-														<p className="text-danger mt-3 text-xs">
-															Select at least one module.
-														</p>
-													)}
-												</div>
-												{canLinkCloudForProvider && (
-													<div className="panel rounded-xl p-4">
-														<p className="ui-text-primary text-sm font-semibold">Cloud storage</p>
-														<p className="ui-text-muted mt-1 text-xs">
-															Optionally connect{' '}
-															{autoCloudProvider === 'google-drive' ? 'Google Drive' : 'OneDrive'} for this
-															account.
-														</p>
-														<label className="ui-text-secondary mt-3 flex items-center justify-between gap-3 text-sm">
-															<span>
-																Also connect{' '}
-																{autoCloudProvider === 'google-drive' ? 'Google Drive' : 'OneDrive'}
-															</span>
-															<FormCheckbox
-																checked={linkCloudStorage}
-																onChange={(event) => setLinkCloudStorage(event.target.checked)}
-															/>
-														</label>
-													</div>
+												{!canSaveModules && (
+													<p className="text-danger mt-3 text-xs">
+														Select at least one module.
+													</p>
 												)}
-											</section>
-										)}
+											</div>
+											{canLinkCloudForProvider && (
+												<div className="panel rounded-xl p-4">
+													<p className="ui-text-primary text-sm font-semibold">
+														Cloud storage
+													</p>
+													<p className="ui-text-muted mt-1 text-xs">
+														Optionally connect{' '}
+														{autoCloudProvider === 'google-drive'
+															? 'Google Drive'
+															: 'OneDrive'}{' '}
+														for this account.
+													</p>
+													<label className="ui-text-secondary mt-3 flex items-center justify-between gap-3 text-sm">
+														<span>
+															Also connect{' '}
+															{autoCloudProvider === 'google-drive'
+																? 'Google Drive'
+																: 'OneDrive'}
+														</span>
+														<FormCheckbox
+															checked={linkCloudStorage}
+															onChange={(event) =>
+																setLinkCloudStorage(event.target.checked)
+															}
+														/>
+													</label>
+												</div>
+											)}
+										</section>
+									)}
 
 									{error && (
 										<p className="notice-danger mt-5 rounded-lg px-4 py-2 text-sm">{error}</p>
@@ -1299,7 +1333,8 @@ function describeProviderDriver(driver: ProviderDriverCatalogItem): string {
 }
 
 function getProviderIcon(driver: ProviderDriverCatalogItem | null | undefined, size = 20): React.ReactNode {
-	const logo = driver?.logo ?? (driver?.key === 'google' ? 'google' : driver?.key === 'microsoft' ? 'microsoft' : 'mail');
+	const logo =
+		driver?.logo ?? (driver?.key === 'google' ? 'google' : driver?.key === 'microsoft' ? 'microsoft' : 'mail');
 	if (logo === 'google') return <GoogleLogo size={size} />;
 	if (logo === 'microsoft') return <MicrosoftLogo size={size} />;
 	return <Mail size={size} />;

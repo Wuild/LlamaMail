@@ -1,14 +1,4 @@
-import {
-	app,
-	BrowserWindow,
-	clipboard,
-	dialog,
-	ipcMain,
-	Menu,
-	nativeTheme,
-	Notification,
-	shell,
-} from 'electron';
+import {app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, Notification, shell} from 'electron';
 import path from 'path';
 import {createAppLogger, onDebugLog} from './debug/debugLog.js';
 import {initDb} from '@main/db/index.js';
@@ -390,7 +380,9 @@ function navigateMainWindowToRouteDirect(route: string, options: {replaceHistory
 			.catch(() => undefined);
 		return;
 	}
-	void mainWindow.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`).catch(() => undefined);
+	void mainWindow.webContents
+		.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`)
+		.catch(() => undefined);
 }
 
 function openComposeQuickAction(): void {
@@ -1044,8 +1036,6 @@ function configureLinuxDesktopEntryName(): void {
 	}
 }
 
-
-
 const gotSingleInstanceLock = isDev ? true : app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
 	console.warn('[main] Another app instance is already running; exiting current process.');
@@ -1057,189 +1047,191 @@ if (!gotSingleInstanceLock) {
 	protocolHandler.registerEventHandlers();
 	installExternalNavigationPolicy();
 
-	app.whenReady().then(async () => {
-		logger.info('App ready start');
-		console.log('[main-startup] app.whenReady entered');
-		let devStartupWatchdog: ReturnType<typeof setTimeout> | null = null;
-		let dbReady = true;
-		if (isDev) {
-			devStartupWatchdog = setTimeout(() => {
-				console.warn('[main] Dev startup watchdog triggered; forcing main window show.');
-				logger.warn('Dev startup watchdog triggered; forcing main window show');
-				showMainWindow();
-			}, 7000);
-		}
-		// Register IPC handlers first so renderer never sees "No handler registered"
-		// even if a later startup step fails.
-		registerAccountIpc();
-		registerCloudIpc();
-		registerSettingsIpc(
-			(settings) => {
-				applyRuntimeSettings();
-				void applyDemoMode(settings);
-			},
-			{
-				onOpenUpdaterView: () => openUpdaterRouteInMainWindow(),
-			},
-		);
-		registerUpdaterIpc();
-		registerWindowIpc({onOpenAddAccountRoute: openAddAccountRouteInMainWindow});
-		logger.info('IPC handlers registered');
-		console.log('[main-startup] IPC handlers registered');
-		console.log('[main-startup] initDb start');
-		try {
-			initDb();
-			logger.info('Database initialized');
-			console.log('[main-startup] initDb done');
-		} catch (error) {
-			dbReady = false;
-			const detail = toErrorDetail(error);
-			console.error('[main-startup] Database initialization failed:', error);
-			logger.error('Database initialization failed: %s', detail || toErrorMessage(error));
-			emitGlobalError({
-				source: 'main-process',
-				message: `Database initialization failed: ${toErrorMessage(error)}`,
-				detail,
-				fatal: true,
+	app.whenReady()
+		.then(async () => {
+			logger.info('App ready start');
+			console.log('[main-startup] app.whenReady entered');
+			let devStartupWatchdog: ReturnType<typeof setTimeout> | null = null;
+			let dbReady = true;
+			if (isDev) {
+				devStartupWatchdog = setTimeout(() => {
+					console.warn('[main] Dev startup watchdog triggered; forcing main window show.');
+					logger.warn('Dev startup watchdog triggered; forcing main window show');
+					showMainWindow();
+				}, 7000);
+			}
+			// Register IPC handlers first so renderer never sees "No handler registered"
+			// even if a later startup step fails.
+			registerAccountIpc();
+			registerCloudIpc();
+			registerSettingsIpc(
+				(settings) => {
+					applyRuntimeSettings();
+					void applyDemoMode(settings);
+				},
+				{
+					onOpenUpdaterView: () => openUpdaterRouteInMainWindow(),
+				},
+			);
+			registerUpdaterIpc();
+			registerWindowIpc({onOpenAddAccountRoute: openAddAccountRouteInMainWindow});
+			logger.info('IPC handlers registered');
+			console.log('[main-startup] IPC handlers registered');
+			console.log('[main-startup] initDb start');
+			try {
+				initDb();
+				logger.info('Database initialized');
+				console.log('[main-startup] initDb done');
+			} catch (error) {
+				dbReady = false;
+				const detail = toErrorDetail(error);
+				console.error('[main-startup] Database initialization failed:', error);
+				logger.error('Database initialization failed: %s', detail || toErrorMessage(error));
+				emitGlobalError({
+					source: 'main-process',
+					message: `Database initialization failed: ${toErrorMessage(error)}`,
+					detail,
+					fatal: true,
+				});
+			}
+			const settings = await getAppSettings();
+			console.log('[main-startup] settings loaded');
+			if (dbReady) {
+				await applyDemoMode(settings);
+			}
+			console.log('[main-startup] demo mode applied');
+			applyRuntimeSettings();
+			setUnreadCountListener((count) => {
+				updateUnreadIndicators(count);
 			});
-		}
-		const settings = await getAppSettings();
-		console.log('[main-startup] settings loaded');
-		if (dbReady) {
-			await applyDemoMode(settings);
-		}
-		console.log('[main-startup] demo mode applied');
-		applyRuntimeSettings();
-		setUnreadCountListener((count) => {
-			updateUnreadIndicators(count);
-		});
-		setAccountCountChangedListener((count) => {
-			setMainWindowActionsEnabled(count > 0);
-			if (count > 0) return;
-			openMainWindowEntryPoint();
-		});
-		setNewMailListener(({newMessages, source, target}) => {
-			if (newMessages <= 0) return;
-			if (source === 'send') return;
-			if (!Notification.isSupported()) return;
-			const title = newMessages === 1 ? 'New email received' : `${newMessages} new emails`;
-			const body =
-				source === 'startup' ? 'Mailbox synced with new unread messages.' : 'You have new unread messages.';
-			void (async () => {
-				try {
-					const senderAddress =
-						target && target.messageId > 0
-							? (getMessageById(target.messageId)?.from_address ?? null)
-							: null;
-					const senderIconPath = await resolveSenderNotificationIconPath(senderAddress);
-					const notification = new Notification({
-						title,
-						body,
-						silent: false,
-						...(senderIconPath || notificationIconPath
-							? {icon: senderIconPath || notificationIconPath}
-							: {}),
-					});
-					notification.on('click', () => {
-						focusMainWindowAndOpenMessage(target);
-					});
-					notification.show();
-					playNotificationSound();
-				} catch {
-					// ignore notification failures
-				}
-			})();
-		});
-		protocolHandler.registerProtocolClients();
-		configurePlatformQuickActions();
-		nativeTheme.on('updated', notifyNativeThemeUpdated);
-		initAutoUpdater((state) => {
-			broadcastAutoUpdateState(state);
-		});
-		logger.info('Auto updater initialized');
-		console.log('[main-startup] auto updater initialized');
-		stopDebugForwarding = onDebugLog((entry) => {
-			for (const win of BrowserWindow.getAllWindows()) {
-				win.webContents.send('debug-log', entry);
-			}
-		});
-		logger.info('Debug forwarding active');
-		createWindow('/windows/splash');
-		showMainWindow();
-		const startupFlowStartedAt = Date.now();
-		const startupUpdateResult = await runStartupUpdateFlow();
-		logger.info('Startup update flow result=%s', startupUpdateResult);
-		console.log(`[main-startup] startup update flow result=${startupUpdateResult}`);
-		if (startupUpdateResult === 'installing') {
-			return;
-		}
-		if (isDev) {
-			const elapsed = Date.now() - startupFlowStartedAt;
-			const remaining = Math.max(0, DEV_SPLASH_MIN_DURATION_MS - elapsed);
-			if (remaining > 0) {
-				await new Promise((resolve) => setTimeout(resolve, remaining));
-			}
-		}
-
-		const accounts = dbReady ? await getAccounts().catch(() => []) : [];
-		logger.info('Loaded accounts count=%d', accounts.length);
-		console.log(`[main-startup] accounts loaded count=${accounts.length}`);
-		startupFlowComplete = true;
-		setMainWindowActionsEnabled(accounts.length > 0);
-		const startupIntent = protocolHandler.resolveLaunchIntent(process.argv);
-		pendingStartupRoute = startupIntent.route;
-		pendingStartupCompose = startupIntent.action === 'compose';
-		if (accounts.length === 0) {
-			navigateMainWindowToRouteDirect('/onboarding', {replaceHistory: true});
-		} else {
-			if (pendingStartupRoute) {
-				navigateMainWindowToRouteDirect(pendingStartupRoute, {replaceHistory: true});
-				pendingStartupRoute = null;
-			} else {
-				navigateMainWindowToRouteDirect('/email', {replaceHistory: true});
-			}
-			if (pendingStartupCompose) {
-				openComposeQuickAction();
-				pendingStartupCompose = false;
-			}
-		}
-		protocolHandler.handleInitialLaunchArgs(process.argv);
-		protocolHandler.flushPendingMailtoUrls();
-		updateUnreadIndicators(getCurrentUnreadCount());
-		if (dbReady) {
-			startAccountAutoSync();
-			logger.info('Auto sync started');
-		}
-		if (devStartupWatchdog) {
-			clearTimeout(devStartupWatchdog);
-			devStartupWatchdog = null;
-		}
-
-		app.on('activate', () => {
-			if (mainWindow && !mainWindow.isDestroyed()) {
+			setAccountCountChangedListener((count) => {
+				setMainWindowActionsEnabled(count > 0);
+				if (count > 0) return;
 				openMainWindowEntryPoint();
+			});
+			setNewMailListener(({newMessages, source, target}) => {
+				if (newMessages <= 0) return;
+				if (source === 'send') return;
+				if (!Notification.isSupported()) return;
+				const title = newMessages === 1 ? 'New email received' : `${newMessages} new emails`;
+				const body =
+					source === 'startup' ? 'Mailbox synced with new unread messages.' : 'You have new unread messages.';
+				void (async () => {
+					try {
+						const senderAddress =
+							target && target.messageId > 0
+								? (getMessageById(target.messageId)?.from_address ?? null)
+								: null;
+						const senderIconPath = await resolveSenderNotificationIconPath(senderAddress);
+						const notification = new Notification({
+							title,
+							body,
+							silent: false,
+							...(senderIconPath || notificationIconPath
+								? {icon: senderIconPath || notificationIconPath}
+								: {}),
+						});
+						notification.on('click', () => {
+							focusMainWindowAndOpenMessage(target);
+						});
+						notification.show();
+						playNotificationSound();
+					} catch {
+						// ignore notification failures
+					}
+				})();
+			});
+			protocolHandler.registerProtocolClients();
+			configurePlatformQuickActions();
+			nativeTheme.on('updated', notifyNativeThemeUpdated);
+			initAutoUpdater((state) => {
+				broadcastAutoUpdateState(state);
+			});
+			logger.info('Auto updater initialized');
+			console.log('[main-startup] auto updater initialized');
+			stopDebugForwarding = onDebugLog((entry) => {
+				for (const win of BrowserWindow.getAllWindows()) {
+					win.webContents.send('debug-log', entry);
+				}
+			});
+			logger.info('Debug forwarding active');
+			createWindow('/windows/splash');
+			showMainWindow();
+			const startupFlowStartedAt = Date.now();
+			const startupUpdateResult = await runStartupUpdateFlow();
+			logger.info('Startup update flow result=%s', startupUpdateResult);
+			console.log(`[main-startup] startup update flow result=${startupUpdateResult}`);
+			if (startupUpdateResult === 'installing') {
 				return;
 			}
-			void getAccounts().then((rows) => {
-				if (rows.length === 0) {
-					setMainWindowActionsEnabled(false);
-					createWindow();
+			if (isDev) {
+				const elapsed = Date.now() - startupFlowStartedAt;
+				const remaining = Math.max(0, DEV_SPLASH_MIN_DURATION_MS - elapsed);
+				if (remaining > 0) {
+					await new Promise((resolve) => setTimeout(resolve, remaining));
+				}
+			}
+
+			const accounts = dbReady ? await getAccounts().catch(() => []) : [];
+			logger.info('Loaded accounts count=%d', accounts.length);
+			console.log(`[main-startup] accounts loaded count=${accounts.length}`);
+			startupFlowComplete = true;
+			setMainWindowActionsEnabled(accounts.length > 0);
+			const startupIntent = protocolHandler.resolveLaunchIntent(process.argv);
+			pendingStartupRoute = startupIntent.route;
+			pendingStartupCompose = startupIntent.action === 'compose';
+			if (accounts.length === 0) {
+				navigateMainWindowToRouteDirect('/onboarding', {replaceHistory: true});
+			} else {
+				if (pendingStartupRoute) {
+					navigateMainWindowToRouteDirect(pendingStartupRoute, {replaceHistory: true});
+					pendingStartupRoute = null;
+				} else {
+					navigateMainWindowToRouteDirect('/email', {replaceHistory: true});
+				}
+				if (pendingStartupCompose) {
+					openComposeQuickAction();
+					pendingStartupCompose = false;
+				}
+			}
+			protocolHandler.handleInitialLaunchArgs(process.argv);
+			protocolHandler.flushPendingMailtoUrls();
+			updateUnreadIndicators(getCurrentUnreadCount());
+			if (dbReady) {
+				startAccountAutoSync();
+				logger.info('Auto sync started');
+			}
+			if (devStartupWatchdog) {
+				clearTimeout(devStartupWatchdog);
+				devStartupWatchdog = null;
+			}
+
+			app.on('activate', () => {
+				if (mainWindow && !mainWindow.isDestroyed()) {
 					openMainWindowEntryPoint();
 					return;
 				}
-				showMainWindow();
+				void getAccounts().then((rows) => {
+					if (rows.length === 0) {
+						setMainWindowActionsEnabled(false);
+						createWindow();
+						openMainWindowEntryPoint();
+						return;
+					}
+					showMainWindow();
+				});
+			});
+		})
+		.catch((error) => {
+			console.error('[main-startup] Fatal startup failure:', error);
+			logger.error('Fatal startup failure: %s', toErrorDetail(error) || toErrorMessage(error));
+			emitGlobalError({
+				source: 'main-process',
+				message: `Fatal startup failure: ${toErrorMessage(error)}`,
+				detail: toErrorDetail(error),
+				fatal: true,
 			});
 		});
-	}).catch((error) => {
-		console.error('[main-startup] Fatal startup failure:', error);
-		logger.error('Fatal startup failure: %s', toErrorDetail(error) || toErrorMessage(error));
-		emitGlobalError({
-			source: 'main-process',
-			message: `Fatal startup failure: ${toErrorMessage(error)}`,
-			detail: toErrorDetail(error),
-			fatal: true,
-		});
-	});
 
 	app.on('before-quit', () => {
 		logger.info('App before-quit');

@@ -1,8 +1,4 @@
-import {
-	AUTH_SERVER_BASE_URL,
-	AUTH_SERVER_MAX_RETRIES,
-	AUTH_SERVER_TIMEOUT_MS,
-} from '@/shared/authServerConfig.js';
+import {AUTH_SERVER_BASE_URL, AUTH_SERVER_MAX_RETRIES, AUTH_SERVER_TIMEOUT_MS} from '@/shared/authServerConfig.js';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {
 	extractAuthServerErrorMessage,
@@ -50,11 +46,7 @@ function buildAuthServerUrl(path: string): string {
 	return new URL(normalizedPath, base).toString();
 }
 
-async function requestJson(
-	path: string,
-	init: RequestInit,
-	label: string,
-): Promise<unknown> {
+async function requestJson(path: string, init: RequestInit, label: string): Promise<unknown> {
 	const url = buildAuthServerUrl(path);
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
 		const controller = new AbortController();
@@ -64,7 +56,7 @@ async function requestJson(
 				...init,
 				signal: controller.signal,
 				headers: {
-					'Accept': 'application/json',
+					Accept: 'application/json',
 					...(init.headers || {}),
 				},
 			});
@@ -91,7 +83,7 @@ async function requestJson(
 				});
 			}
 
-			const backoffMs = Math.min(2_000, 200 * (2 ** attempt));
+			const backoffMs = Math.min(2_000, 200 * 2 ** attempt);
 			logger.warn(
 				'Retrying AuthServer %s request attempt=%d/%d waitMs=%d',
 				label,

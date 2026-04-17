@@ -596,7 +596,8 @@ export interface DevShowNotificationResult {
 
 const api = {
 	getAccounts: (): Promise<PublicAccount[]> => ipcRenderer.invoke('get-accounts'),
-	getProviderDriverCatalog: (): Promise<ProviderDriverCatalogItem[]> => ipcRenderer.invoke('get-provider-driver-catalog'),
+	getProviderDriverCatalog: (): Promise<ProviderDriverCatalogItem[]> =>
+		ipcRenderer.invoke('get-provider-driver-catalog'),
 	getAccountProviderCapabilities: (accountId: number): Promise<ProviderCapabilities> =>
 		ipcRenderer.invoke('get-account-provider-capabilities', accountId),
 	addAccount: (account: AddAccountPayload): Promise<{id: number; email: string}> =>

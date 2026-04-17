@@ -50,11 +50,7 @@ import {useAccountsRuntimeStore} from '@renderer/store/accountsRuntimeStore';
 import {useMailFoldersStore} from '@renderer/store/mailFoldersStore';
 import {useMailMessagesStore} from '@renderer/store/mailMessagesStore';
 import {buildMessageIframeSrcDoc, formatMessageTagLabel, parseRouteNumber} from './mailPageHelpers';
-import {
-	normalizeAccountOrder,
-	readPersistedAccountOrder,
-	writePersistedAccountOrder,
-} from './mailAccountOrder';
+import {normalizeAccountOrder, readPersistedAccountOrder, writePersistedAccountOrder} from './mailAccountOrder';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
 import type {FolderItem, MessageItem, OpenMessageTargetEvent, PublicAccount} from '@/preload';
@@ -122,9 +118,7 @@ function MailPage() {
 			setAccountFoldersByIdStore((prev) => {
 				const current = prev[selectedAccountId] ?? [];
 				const next =
-					typeof value === 'function'
-						? (value as (current: FolderItem[]) => FolderItem[])(current)
-						: value;
+					typeof value === 'function' ? (value as (current: FolderItem[]) => FolderItem[])(current) : value;
 				return {
 					...prev,
 					[selectedAccountId]: next,
@@ -136,9 +130,7 @@ function MailPage() {
 	const setMessages = useCallback(
 		(value: SetStateAction<MessageItem[]>) => {
 			setMessagesStore((prev) =>
-				typeof value === 'function'
-					? (value as (current: MessageItem[]) => MessageItem[])(prev)
-					: value,
+				typeof value === 'function' ? (value as (current: MessageItem[]) => MessageItem[])(prev) : value,
 			);
 		},
 		[setMessagesStore],
@@ -154,9 +146,7 @@ function MailPage() {
 	const setSearchResults = useCallback(
 		(value: SetStateAction<MessageItem[]>) => {
 			setSearchResultsStore((prev) =>
-				typeof value === 'function'
-					? (value as (current: MessageItem[]) => MessageItem[])(prev)
-					: value,
+				typeof value === 'function' ? (value as (current: MessageItem[]) => MessageItem[])(prev) : value,
 			);
 		},
 		[setSearchResultsStore],
@@ -196,9 +186,7 @@ function MailPage() {
 	const setAccounts = useCallback(
 		(value: SetStateAction<PublicAccount[]>) => {
 			setAccountsStore((prev) =>
-				typeof value === 'function'
-					? (value as (current: PublicAccount[]) => PublicAccount[])(prev)
-					: value,
+				typeof value === 'function' ? (value as (current: PublicAccount[]) => PublicAccount[])(prev) : value,
 			);
 		},
 		[setAccountsStore],
@@ -231,12 +219,7 @@ function MailPage() {
 		width: window.innerWidth,
 		height: window.innerHeight,
 	});
-	const {
-		syncStatusText,
-		setSyncStatusText,
-		syncingAccountIds,
-		pruneSyncingAccounts,
-	} = useMailSyncStatus();
+	const {syncStatusText, setSyncStatusText, syncingAccountIds, pruneSyncingAccounts} = useMailSyncStatus();
 	const {
 		selectedMessageId,
 		setSelectedMessageId,
@@ -259,17 +242,12 @@ function MailPage() {
 	const routeFolderId = parseRouteNumber(params.folderId);
 	const routeEmailId = parseRouteNumber(params.emailId);
 	const {bodyLoading, selectedMessageBody} = useMessageBodyLoader(selectedMessageId);
-	const {
-		clearPendingReadState,
-		getPendingRead,
-		applyPendingReadOverrides,
-		applyReadOptimistic,
-		syncReadState,
-	} = useOptimisticReadState({
-		setMessages,
-		setAccountFoldersById,
-		setSyncStatusText,
-	});
+	const {clearPendingReadState, getPendingRead, applyPendingReadOverrides, applyReadOptimistic, syncReadState} =
+		useOptimisticReadState({
+			setMessages,
+			setAccountFoldersById,
+			setSyncStatusText,
+		});
 	const {
 		setMessageFlagMutation,
 		setMessageTagMutation,
@@ -391,17 +369,20 @@ function MailPage() {
 		});
 	}, [accounts]);
 
-	const reorderAccounts = useCallback((orderedAccountIds: number[]) => {
-		setAccounts((prev) => {
-			const normalizedOrder = normalizeAccountOrder(orderedAccountIds, prev);
-			accountOrderRef.current = normalizedOrder;
-			setAccountOrder(normalizedOrder);
-			const accountById = new Map<number, PublicAccount>(prev.map((account) => [account.id, account]));
-			return normalizedOrder
-				.map((id) => accountById.get(id))
-				.filter((account): account is PublicAccount => Boolean(account));
-		});
-	}, []);
+	const reorderAccounts = useCallback(
+		(orderedAccountIds: number[]) => {
+			setAccounts((prev) => {
+				const normalizedOrder = normalizeAccountOrder(orderedAccountIds, prev);
+				accountOrderRef.current = normalizedOrder;
+				setAccountOrder(normalizedOrder);
+				const accountById = new Map<number, PublicAccount>(prev.map((account) => [account.id, account]));
+				return normalizedOrder
+					.map((id) => accountById.get(id))
+					.filter((account): account is PublicAccount => Boolean(account));
+			});
+		},
+		[setAccountOrder, setAccounts],
+	);
 
 	useIpcEvent(ipcClient.onMessageReadUpdated, (evt) => {
 		const pending = getPendingRead(evt.messageId);
@@ -541,7 +522,9 @@ function MailPage() {
 			try {
 				const perAccountLimit = 120;
 				const rowsByAccount = await Promise.allSettled(
-					candidateAccountIds.map((accountId) => getAccount(accountId).email.search(query, null, perAccountLimit)),
+					candidateAccountIds.map((accountId) =>
+						getAccount(accountId).email.search(query, null, perAccountLimit),
+					),
 				);
 				if (!active) return;
 				const fulfilled = rowsByAccount
@@ -604,7 +587,7 @@ function MailPage() {
 		return () => {
 			active = false;
 		};
-	}, [searchQuery, accounts, accountFoldersById, selectedAccountId, getAccount]);
+	}, [searchQuery, accounts, accountFoldersById, selectedAccountId, getAccount, setSearchLoading, setSearchResults]);
 
 	const loadMoreMessages = useCallback(async () => {
 		if (!selectedAccountId || !selectedFolderPath || loadingMoreMessages || !hasMoreMessages) return;
@@ -638,6 +621,8 @@ function MailPage() {
 		setLoadingMoreMessages,
 		setMessageFetchLimit,
 		setMessages,
+		applyPendingReadOverrides,
+		triggerBackgroundFolderSync,
 	]);
 
 	useEffect(() => {
@@ -757,7 +742,7 @@ function MailPage() {
 		if (!accounts.some((account) => account.id === routeAccountId)) return;
 		if (selectedAccountId === routeAccountId) return;
 		setSelectedAccountId(routeAccountId);
-	}, [accounts, routeAccountId, selectedAccountId]);
+	}, [accounts, routeAccountId, selectedAccountId, setSelectedAccountId]);
 
 	useEffect(() => {
 		const idx = window.history.state?.idx;
@@ -871,18 +856,21 @@ function MailPage() {
 		return rows.filter((m) => !pending.has(m.id));
 	}
 
-	function triggerBackgroundFolderSync(accountId: number, folderPath: string, reason: string): void {
-		const key = `${accountId}:${folderPath}`;
-		if (backgroundFolderSyncsRef.current.has(key)) return;
-		backgroundFolderSyncsRef.current.add(key);
-		setSyncStatusText(reason);
-		void getAccount(accountId)
-			.email.sync()
-			.catch(() => undefined)
-			.finally(() => {
-				backgroundFolderSyncsRef.current.delete(key);
-			});
-	}
+	const triggerBackgroundFolderSync = useCallback(
+		(accountId: number, folderPath: string, reason: string): void => {
+			const key = `${accountId}:${folderPath}`;
+			if (backgroundFolderSyncsRef.current.has(key)) return;
+			backgroundFolderSyncsRef.current.add(key);
+			setSyncStatusText(reason);
+			void getAccount(accountId)
+				.email.sync()
+				.catch(() => undefined)
+				.finally(() => {
+					backgroundFolderSyncsRef.current.delete(key);
+				});
+		},
+		[getAccount, setSyncStatusText],
+	);
 
 	async function loadFoldersAndMessages(
 		accountId: number,
@@ -946,10 +934,8 @@ function MailPage() {
 		const msgRowsRaw = await targetAccount.email.messages(chosenFolder, messageFetchLimit);
 		const msgRows = applyPendingReadOverrides(filterOutPendingDeletes(msgRowsRaw));
 		const chosenFolderTotalCount =
-			Math.max(
-				0,
-				Number(folderRows.find((folder) => folder.path === chosenFolder)?.total_count) || 0,
-			) || msgRowsRaw.length;
+			Math.max(0, Number(folderRows.find((folder) => folder.path === chosenFolder)?.total_count) || 0) ||
+			msgRowsRaw.length;
 		const hasMore = hasMoreFolderMessages(msgRowsRaw.length, messageFetchLimit, chosenFolderTotalCount);
 		setHasMoreMessages(hasMore);
 		if (hasMore && msgRowsRaw.length < messageFetchLimit) {
@@ -1742,7 +1728,11 @@ function MailPage() {
 							})
 							.catch((error: unknown) => {
 								setSyncStatusText(`Move sync failed: ${toErrorMessage(error)}`);
-								queueReconcileReload(selectedAccountId, selectedFolderPath, selectedMessageIdRef.current);
+								queueReconcileReload(
+									selectedAccountId,
+									selectedFolderPath,
+									selectedMessageIdRef.current,
+								);
 							});
 					}
 				})()

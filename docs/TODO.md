@@ -312,8 +312,6 @@ oauth server can be found at /home/wuild/PhpstormProjects/llamamail-auth
 
 ---
 
-
-
 ## 14.4 Electron IPC Architecture
 
 - [ ] Treat the desktop app as an **Electron application**
@@ -340,7 +338,6 @@ oauth server can be found at /home/wuild/PhpstormProjects/llamamail-auth
 - [ ] `event:new-email` → push update
 - [ ] `event:sync-status` → sync progress updates
 - [ ] `event:account-state` → auth/renewal/account status updates
-
 
 ## 15. Realtime / Event System
 
@@ -436,6 +433,7 @@ oauth server can be found at /home/wuild/PhpstormProjects/llamamail-auth
 ---
 
 ## 20. Developer Experience
+
 - [ ] Add a simple way to register new providers
 - [x] Document driver contract requirements
 - [ ] Document normalized DTO/resource formats

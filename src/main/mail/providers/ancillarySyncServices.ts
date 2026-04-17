@@ -1,11 +1,7 @@
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {syncDav} from '@main/dav/sync.js';
 import {syncOauthProviderDav} from '@main/dav/oauthSync.js';
-import type {
-	MailProviderDriver,
-	ProviderAncillarySyncResult,
-	ProviderAncillarySyncService,
-} from './contracts.js';
+import type {MailProviderDriver, ProviderAncillarySyncResult, ProviderAncillarySyncService} from './contracts.js';
 import type {DavSyncOptions, OAuthProvider} from '@/shared/ipcTypes.js';
 
 export class DavAncillarySyncService implements ProviderAncillarySyncService {
@@ -40,8 +36,12 @@ export class DavAncillarySyncService implements ProviderAncillarySyncService {
 			return {
 				dav,
 				moduleStatus: {
-					contacts: syncContacts ? {state: 'success'} : {state: 'skipped', reason: 'Contacts sync is disabled for this account.'},
-					calendar: syncCalendar ? {state: 'success'} : {state: 'skipped', reason: 'Calendar sync is disabled for this account.'},
+					contacts: syncContacts
+						? {state: 'success'}
+						: {state: 'skipped', reason: 'Contacts sync is disabled for this account.'},
+					calendar: syncCalendar
+						? {state: 'success'}
+						: {state: 'skipped', reason: 'Calendar sync is disabled for this account.'},
 				},
 			};
 		} catch (davError: any) {
@@ -95,8 +95,12 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 				return {
 					dav,
 					moduleStatus: {
-						contacts: syncContacts ? {state: 'success'} : {state: 'skipped', reason: 'Contacts sync is disabled for this account.'},
-						calendar: syncCalendar ? {state: 'success'} : {state: 'skipped', reason: 'Calendar sync is disabled for this account.'},
+						contacts: syncContacts
+							? {state: 'success'}
+							: {state: 'skipped', reason: 'Contacts sync is disabled for this account.'},
+						calendar: syncCalendar
+							? {state: 'success'}
+							: {state: 'skipped', reason: 'Calendar sync is disabled for this account.'},
 					},
 				};
 			}
@@ -111,8 +115,12 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 			return {
 				dav,
 				moduleStatus: {
-					contacts: syncContacts ? {state: 'success'} : {state: 'skipped', reason: 'Contacts sync is disabled for this account.'},
-					calendar: syncCalendar ? {state: 'success'} : {state: 'skipped', reason: 'Calendar sync is disabled for this account.'},
+					contacts: syncContacts
+						? {state: 'success'}
+						: {state: 'skipped', reason: 'Contacts sync is disabled for this account.'},
+					calendar: syncCalendar
+						? {state: 'success'}
+						: {state: 'skipped', reason: 'Calendar sync is disabled for this account.'},
 				},
 			};
 		} catch (error: any) {

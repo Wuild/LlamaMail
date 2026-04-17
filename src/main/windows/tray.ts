@@ -105,7 +105,11 @@ export function createTrayController(deps: TrayControllerDeps): {
 	};
 }
 
-function buildTrayIcon(appIconPath: string | null, linuxTrayIconPath: string | null, windowsTrayIconPath: string | null) {
+function buildTrayIcon(
+	appIconPath: string | null,
+	linuxTrayIconPath: string | null,
+	windowsTrayIconPath: string | null,
+) {
 	const trayPath =
 		process.platform === 'win32'
 			? windowsTrayIconPath || appIconPath
@@ -165,4 +169,3 @@ export function resolveWindowsTrayIconPath(appIconPath: string | null): string |
 	}
 	return null;
 }
-

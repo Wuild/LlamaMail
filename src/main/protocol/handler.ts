@@ -203,4 +203,3 @@ function findActionArg(argv: string[]): 'compose' | null {
 	}
 	return null;
 }
-

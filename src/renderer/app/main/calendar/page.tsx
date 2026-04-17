@@ -1,15 +1,5 @@
 import React, {startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState} from 'react';
-import {
-	CalendarDays,
-	ChevronLeft,
-	ChevronRight,
-	Pencil,
-	Plus,
-	RefreshCw,
-	Settings,
-	Trash2,
-	X,
-} from 'lucide-react';
+import {CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Settings, Trash2, X} from 'lucide-react';
 import {useNavigate} from 'react-router-dom';
 import type {CalendarEventItem, PublicAccount, SyncStatusEvent} from '@/preload';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
@@ -84,8 +74,12 @@ function parseGoogleEventMetadata(event: CalendarEventItem): GoogleEventMetadata
 function isGoogleWeekNumbersEvent(event: CalendarEventItem): boolean {
 	if (event.source !== 'google-api') return false;
 	const metadata = parseGoogleEventMetadata(event);
-	const calendarId = String(metadata?.calendarId || '').trim().toLowerCase();
-	const calendarSummary = String(metadata?.calendarSummary || '').trim().toLowerCase();
+	const calendarId = String(metadata?.calendarId || '')
+		.trim()
+		.toLowerCase();
+	const calendarSummary = String(metadata?.calendarSummary || '')
+		.trim()
+		.toLowerCase();
 	if (calendarId.includes('weeknum')) return true;
 	if (calendarSummary.includes('week number')) return true;
 	if (calendarSummary === 'week numbers') return true;
@@ -765,11 +759,19 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 		</aside>
 	);
 	const selectedDayEvents = selectedDayForModal ? (eventsByDay.get(selectedDayForModal) ?? []) : [];
-	const selectedAccountEmail = String(selectedAccount.account?.email || '').trim().toLowerCase() || null;
+	const selectedAccountEmail =
+		String(selectedAccount.account?.email || '')
+			.trim()
+			.toLowerCase() || null;
 	const getEventVisuals = useCallback(
-		(event: CalendarEventItem): {ownerLabel: string | null; ownerShortLabel: string | null; pillStyle?: React.CSSProperties} => {
+		(
+			event: CalendarEventItem,
+		): {ownerLabel: string | null; ownerShortLabel: string | null; pillStyle?: React.CSSProperties} => {
 			const metadata = parseGoogleEventMetadata(event);
-			const organizerEmail = String(metadata?.organizerEmail || '').trim().toLowerCase() || null;
+			const organizerEmail =
+				String(metadata?.organizerEmail || '')
+					.trim()
+					.toLowerCase() || null;
 			const organizerName = String(metadata?.organizerName || '').trim() || null;
 			const ownerLabel =
 				organizerName && organizerEmail
@@ -777,8 +779,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 					: organizerName || organizerEmail || null;
 			const ownerShortLabel = organizerName || (organizerEmail ? organizerEmail.split('@')[0] : null);
 			const isSharedOrganizer =
-				Boolean(organizerEmail) &&
-				(!selectedAccountEmail || organizerEmail !== selectedAccountEmail);
+				Boolean(organizerEmail) && (!selectedAccountEmail || organizerEmail !== selectedAccountEmail);
 			if (!isSharedOrganizer || !organizerEmail) {
 				return {ownerLabel, ownerShortLabel, pillStyle: undefined};
 			}
@@ -905,10 +906,10 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 					)}
 					{!accountId && <div className="ui-text-muted p-5 text-sm">{statusNoAccountSelected()}</div>}
 					{accountId && (
-							<div className="min-h-0 flex flex-1 overflow-hidden">
-								<div
-									ref={calendarBodyScrollRef}
-									className="ui-surface-content min-h-full min-w-0 flex-1 overflow-auto"
+						<div className="min-h-0 flex flex-1 overflow-hidden">
+							<div
+								ref={calendarBodyScrollRef}
+								className="ui-surface-content min-h-full min-w-0 flex-1 overflow-auto"
 							>
 								{calendarViewMode === 'month' && (
 									<div className="min-h-full ui-surface-card flex flex-col">
@@ -998,11 +999,14 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 																				title={
 																					visuals.ownerLabel
 																						? `${event.summary || '(No title)'} — ${visuals.ownerLabel}`
-																						: (event.summary || '(No title)')
+																						: event.summary || '(No title)'
 																				}
 																			>
-																				{formatEventTime(event.starts_at)} {event.summary || '(No title)'}
-																				{visuals.ownerShortLabel ? ` · ${visuals.ownerShortLabel}` : ''}
+																				{formatEventTime(event.starts_at)}{' '}
+																				{event.summary || '(No title)'}
+																				{visuals.ownerShortLabel
+																					? ` · ${visuals.ownerShortLabel}`
+																					: ''}
 																			</Button>
 																		);
 																	})}
@@ -1173,7 +1177,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 																		title={
 																			visuals.ownerLabel
 																				? `${layout.event.summary || '(No title)'} — ${visuals.ownerLabel}`
-																				: (layout.event.summary || '(No title)')
+																				: layout.event.summary || '(No title)'
 																		}
 																	>
 																		<span className="block truncate font-medium">
@@ -1182,7 +1186,9 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 																		<span className="block truncate opacity-80">
 																			{formatEventTime(layout.event.starts_at)} -{' '}
 																			{formatEventTime(layout.event.ends_at)}
-																			{visuals.ownerShortLabel ? ` · ${visuals.ownerShortLabel}` : ''}
+																			{visuals.ownerShortLabel
+																				? ` · ${visuals.ownerShortLabel}`
+																				: ''}
 																		</span>
 																	</Button>
 																);

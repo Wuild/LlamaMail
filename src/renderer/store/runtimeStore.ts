@@ -72,7 +72,10 @@ export const useRuntimeStore = create<RuntimeStoreState>((set) => ({
 				accountId: payload.accountId,
 				status: payload.status,
 				source: payload.source,
-				lastError: payload.status === 'error' ? String(payload.error || payload.syncError?.message || '').trim() : undefined,
+				lastError:
+					payload.status === 'error'
+						? String(payload.error || payload.syncError?.message || '').trim()
+						: undefined,
 				lastErrorCategory: payload.syncError?.category,
 				lastSyncError: payload.syncError,
 				moduleStatus: payload.summary?.moduleStatus,
@@ -94,7 +97,9 @@ export const useRuntimeStore = create<RuntimeStoreState>((set) => ({
 		set((state) => {
 			const timestampMs = notice.timestampMs ?? Date.now();
 			const key = notice.key.trim();
-			const duplicate = state.syncNotices.some((item) => item.key === key && timestampMs - item.timestampMs < 5000);
+			const duplicate = state.syncNotices.some(
+				(item) => item.key === key && timestampMs - item.timestampMs < 5000,
+			);
 			if (duplicate) return state;
 			const next: SyncNotice = {
 				id: notice.id ?? buildNoticeId(),

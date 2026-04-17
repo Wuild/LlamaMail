@@ -35,7 +35,11 @@ export function normalizeAccountModuleSelection(
 }
 
 export function hasAnyEnabledAccountModule(input: AccountModuleSelectionLike | null | undefined): boolean {
-	return isAccountEmailModuleEnabled(input) || isAccountContactsModuleEnabled(input) || isAccountCalendarModuleEnabled(input);
+	return (
+		isAccountEmailModuleEnabled(input) ||
+		isAccountContactsModuleEnabled(input) ||
+		isAccountCalendarModuleEnabled(input)
+	);
 }
 
 export function isAccountEmailModuleEnabled(input: AccountModuleSelectionLike | null | undefined): boolean {

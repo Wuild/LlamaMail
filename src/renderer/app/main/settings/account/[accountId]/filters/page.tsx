@@ -457,7 +457,9 @@ export default function SettingsAccountFiltersPage() {
 												renderSelectedOption={(option) =>
 													option ? (
 														<span className="flex min-w-0 items-center gap-2">
-															{option.icon ? <span className="shrink-0">{option.icon}</span> : null}
+															{option.icon ? (
+																<span className="shrink-0">{option.icon}</span>
+															) : null}
 															<span className="truncate">{option.label}</span>
 														</span>
 													) : (
@@ -476,8 +478,12 @@ export default function SettingsAccountFiltersPage() {
 													}
 													return (
 														<div className="flex min-w-0 items-center gap-2">
-															{option.icon ? <span className="shrink-0">{option.icon}</span> : null}
-															<span className="min-w-0 flex-1 truncate">{option.label}</span>
+															{option.icon ? (
+																<span className="shrink-0">{option.icon}</span>
+															) : null}
+															<span className="min-w-0 flex-1 truncate">
+																{option.label}
+															</span>
 														</div>
 													);
 												}}

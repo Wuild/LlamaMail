@@ -59,7 +59,16 @@ export function useMailSelection({messages, navigate, locationPathname, onSelect
 			selectionAnchorIndexRef.current = next.anchorIndex;
 			onSelectMail();
 		},
-		[messages, onSelectMail, pendingAutoReadMessageId, selectedMessageId, selectedMessageIds],
+		[
+			messages,
+			onSelectMail,
+			pendingAutoReadMessageId,
+			selectedMessageId,
+			selectedMessageIds,
+			setPendingAutoReadMessageId,
+			setSelectedMessageId,
+			setSelectedMessageIds,
+		],
 	);
 
 	const navigateMessageSelection = useCallback(
@@ -94,6 +103,9 @@ export function useMailSelection({messages, navigate, locationPathname, onSelect
 			pendingAutoReadMessageId,
 			selectedMessageId,
 			selectedMessageIds,
+			setPendingAutoReadMessageId,
+			setSelectedMessageId,
+			setSelectedMessageIds,
 		],
 	);
 
@@ -105,12 +117,19 @@ export function useMailSelection({messages, navigate, locationPathname, onSelect
 		setPendingAutoReadMessageId(next.pendingAutoReadMessageId);
 		selectionAnchorIndexRef.current = next.anchorIndex;
 		onSelectMail();
-	}, [messages, onSelectMail, selectedMessageId]);
+	}, [
+		messages,
+		onSelectMail,
+		selectedMessageId,
+		setPendingAutoReadMessageId,
+		setSelectedMessageId,
+		setSelectedMessageIds,
+	]);
 
 	const clearSelection = useCallback((): void => {
 		setSelectedMessageIds([]);
 		selectionAnchorIndexRef.current = null;
-	}, []);
+	}, [setSelectedMessageIds]);
 
 	return {
 		selectedMessageId,

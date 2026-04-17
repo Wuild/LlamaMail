@@ -160,14 +160,24 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 			tenantId: parseOptionalText(safePayload.tenantId, 'payload.tenantId', 128),
 		});
 		try {
-			const normalizedEmail = String(session?.email || '').trim().toLowerCase();
-			const normalizedProvider = String(session?.provider || '').trim().toLowerCase();
+			const normalizedEmail = String(session?.email || '')
+				.trim()
+				.toLowerCase();
+			const normalizedProvider = String(session?.provider || '')
+				.trim()
+				.toLowerCase();
 			const accounts = await deps.getAccounts();
 			const created = [...accounts]
 				.filter((account) => {
-					const email = String(account?.email || '').trim().toLowerCase();
-					const provider = String(account?.provider || '').trim().toLowerCase();
-					const oauthProvider = String(account?.oauth_provider || '').trim().toLowerCase();
+					const email = String(account?.email || '')
+						.trim()
+						.toLowerCase();
+					const provider = String(account?.provider || '')
+						.trim()
+						.toLowerCase();
+					const oauthProvider = String(account?.oauth_provider || '')
+						.trim()
+						.toLowerCase();
 					const matchesEmail = normalizedEmail && email === normalizedEmail;
 					const matchesProvider =
 						normalizedProvider && (provider === normalizedProvider || oauthProvider === normalizedProvider);
@@ -183,7 +193,10 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 				deps.broadcastAccountAdded(created);
 				deps.notifyAccountCountChanged();
 				void deps.runSyncAndBroadcast(created.id, 'new-account').catch((error) => {
-					console.warn('Initial sync after OAuth account add failed:', (error as any)?.message || String(error));
+					console.warn(
+						'Initial sync after OAuth account add failed:',
+						(error as any)?.message || String(error),
+					);
 				});
 				void deps.ensureIdleWatcher(created.id);
 			}

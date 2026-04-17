@@ -186,7 +186,11 @@ export async function syncAccountMailboxWithCredentials(
 										.filter(Boolean)
 										.join(', ') ?? null,
 							});
-							upsertThread(threadId, msg.envelope?.subject ?? null, messageDate ?? new Date().toISOString());
+							upsertThread(
+								threadId,
+								msg.envelope?.subject ?? null,
+								messageDate ?? new Date().toISOString(),
+							);
 							upsertMessage({
 								accountId,
 								folderId,

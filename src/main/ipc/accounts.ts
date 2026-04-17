@@ -157,7 +157,9 @@ function filterAccountsForCurrentMode<T extends {provider: string | null | undef
 function getVisibleUnreadCount(
 	accounts: Array<{id: number; provider: string | null | undefined; sync_emails?: number | null}>,
 ): number {
-	const visibleAccounts = filterAccountsForCurrentMode(accounts).filter((account) => isAccountEmailModuleEnabled(account));
+	const visibleAccounts = filterAccountsForCurrentMode(accounts).filter((account) =>
+		isAccountEmailModuleEnabled(account),
+	);
 	return visibleAccounts.reduce((sum, account) => {
 		const folders = listFoldersByAccount(account.id);
 		const accountUnread = folders.reduce((acc, folder) => acc + Math.max(0, Number(folder.unread_count) || 0), 0);
@@ -346,7 +348,9 @@ export function registerAccountIpc(): void {
 function getAccountsSyncSnapshot(): Array<{id: number; provider: string | null | undefined; sync_emails: number}> {
 	try {
 		const db = getDb();
-		const rows = db.prepare('SELECT id, provider, sync_emails FROM accounts ORDER BY created_at ASC').all() as Array<{
+		const rows = db
+			.prepare('SELECT id, provider, sync_emails FROM accounts ORDER BY created_at ASC')
+			.all() as Array<{
 			id: number;
 			provider: string | null | undefined;
 			sync_emails: number;
@@ -431,7 +435,8 @@ async function runAutoSyncCycle(source: 'startup' | 'interval'): Promise<void> {
 	try {
 		const accounts = await getAccounts();
 		const syncableAccounts = accounts.filter(
-			(account) => !isDemoProvider(account.provider) && !isDemoModeEnabled() && isAccountEmailModuleEnabled(account),
+			(account) =>
+				!isDemoProvider(account.provider) && !isDemoModeEnabled() && isAccountEmailModuleEnabled(account),
 		);
 		void ensureIdleWatchersForAccounts(syncableAccounts.map((account) => account.id));
 		for (const account of accounts) {
@@ -620,12 +625,14 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 				};
 			}
 			moduleStatus.files = ancillarySummary.moduleStatus?.files ?? moduleStatus.files;
-			const failedModules = (Object.entries(moduleStatus) as Array<[SyncModuleKey, AccountSyncModuleStatusMap[SyncModuleKey]]>)
+			const failedModules = (
+				Object.entries(moduleStatus) as Array<[SyncModuleKey, AccountSyncModuleStatusMap[SyncModuleKey]]>
+			)
 				.filter(([, status]) => status.state === 'failed')
 				.map(([module]) => module);
-			const successModules = (Object.values(moduleStatus) as AccountSyncModuleStatusMap[SyncModuleKey][])
-				.filter((status) => status.state === 'success')
-				.length;
+			const successModules = (Object.values(moduleStatus) as AccountSyncModuleStatusMap[SyncModuleKey][]).filter(
+				(status) => status.state === 'success',
+			).length;
 			const summary: AccountSyncSummary = {
 				...mailSummary,
 				...(davSummary ? {dav: davSummary} : {}),
@@ -676,7 +683,11 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 						},
 					});
 					appLogger.warn('Sync unavailable accountId=%d source=%s error=%s', accountId, source, message);
-				} else if (normalizedError.category === 'auth' || normalizedError.category === 'renewal' || isCredentialFailure(message)) {
+				} else if (
+					normalizedError.category === 'auth' ||
+					normalizedError.category === 'renewal' ||
+					isCredentialFailure(message)
+				) {
 					blockedSyncAccounts.set(accountId, message);
 					stopIdleWatcher(accountId);
 					broadcastSync({
@@ -867,7 +878,8 @@ async function ensureIdleWatchersForAllAccounts(): Promise<void> {
 	ensureIdleWatchersForAccounts(
 		accounts
 			.filter(
-				(account) => !isDemoProvider(account.provider) && !isDemoModeEnabled() && isAccountEmailModuleEnabled(account),
+				(account) =>
+					!isDemoProvider(account.provider) && !isDemoModeEnabled() && isAccountEmailModuleEnabled(account),
 			)
 			.map((account) => account.id),
 	);

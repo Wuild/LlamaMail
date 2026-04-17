@@ -395,7 +395,9 @@ export const FormDateTimeInput = React.forwardRef<HTMLInputElement, FormDateTime
 							>
 								<div className="date-time-picker-calendar">
 									<div className="date-time-picker-header mb-2 flex items-center justify-between">
-										<span className="date-time-picker-month text-base font-semibold">{monthTitle}</span>
+										<span className="date-time-picker-month text-base font-semibold">
+											{monthTitle}
+										</span>
 										<div className="flex items-center gap-1">
 											<Button
 												type="button"
@@ -404,7 +406,11 @@ export const FormDateTimeInput = React.forwardRef<HTMLInputElement, FormDateTime
 												className="date-time-picker-nav-button h-8 w-8 rounded-md"
 												onClick={() =>
 													setVisibleMonth(
-														new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1),
+														new Date(
+															visibleMonth.getFullYear(),
+															visibleMonth.getMonth() - 1,
+															1,
+														),
 													)
 												}
 												aria-label="Previous month"
@@ -418,7 +424,11 @@ export const FormDateTimeInput = React.forwardRef<HTMLInputElement, FormDateTime
 												className="date-time-picker-nav-button h-8 w-8 rounded-md"
 												onClick={() =>
 													setVisibleMonth(
-														new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1),
+														new Date(
+															visibleMonth.getFullYear(),
+															visibleMonth.getMonth() + 1,
+															1,
+														),
 													)
 												}
 												aria-label="Next month"
@@ -441,7 +451,9 @@ export const FormDateTimeInput = React.forwardRef<HTMLInputElement, FormDateTime
 										{calendarCells.map((cellDate) => {
 											const isOutsideMonth = cellDate.getMonth() !== visibleMonthIndex;
 											const isToday = isSameCalendarDay(cellDate, today);
-											const isSelected = selectedDate ? isSameCalendarDay(cellDate, selectedDate) : false;
+											const isSelected = selectedDate
+												? isSameCalendarDay(cellDate, selectedDate)
+												: false;
 											return (
 												<Button
 													key={toIsoDate(cellDate)}

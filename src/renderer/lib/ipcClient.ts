@@ -139,7 +139,8 @@ export const ipcClient = {
 	getSystemLocale: (): Promise<string> => window.electronAPI.getSystemLocale(),
 	discoverMailSettings: (email: string): Promise<DiscoverResult> => window.electronAPI.discoverMailSettings(email),
 	verifyCredentials: (payload: VerifyPayload): Promise<VerifyResult> => window.electronAPI.verifyCredentials(payload),
-	startMailOAuth: (payload: StartMailOAuthPayload): Promise<OAuthSession> => window.electronAPI.startMailOAuth(payload),
+	startMailOAuth: (payload: StartMailOAuthPayload): Promise<OAuthSession> =>
+		window.electronAPI.startMailOAuth(payload),
 	cancelMailOAuth: (): Promise<{ok: true; cancelled: number}> => window.electronAPI.cancelMailOAuth(),
 	discoverDavPreview: (payload: {
 		email: string;

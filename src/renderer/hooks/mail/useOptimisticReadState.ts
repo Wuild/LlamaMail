@@ -2,10 +2,7 @@ import type {Dispatch, SetStateAction} from 'react';
 import {useCallback, useEffect, useRef} from 'react';
 import {useMutation} from '@tanstack/react-query';
 import type {FolderItem, MessageItem} from '@/preload';
-import {
-	applyReadStateToAccountFoldersById,
-	applyReadStateToMessages,
-} from '@renderer/lib/optimisticMailState';
+import {applyReadStateToAccountFoldersById, applyReadStateToMessages} from '@renderer/lib/optimisticMailState';
 import {toErrorMessage} from '@renderer/lib/statusText';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {useRuntimeStore} from '@renderer/store/runtimeStore';
@@ -34,15 +31,18 @@ export function useOptimisticReadState({
 		},
 	});
 
-	const clearPendingReadState = useCallback((messageId: number): void => {
-		pendingReadStateRef.current.delete(messageId);
-		clearOptimisticRead(messageId);
-		const timeoutId = pendingReadTimeoutsRef.current.get(messageId);
-		if (timeoutId !== undefined) {
-			window.clearTimeout(timeoutId);
-			pendingReadTimeoutsRef.current.delete(messageId);
-		}
-	}, [clearOptimisticRead]);
+	const clearPendingReadState = useCallback(
+		(messageId: number): void => {
+			pendingReadStateRef.current.delete(messageId);
+			clearOptimisticRead(messageId);
+			const timeoutId = pendingReadTimeoutsRef.current.get(messageId);
+			if (timeoutId !== undefined) {
+				window.clearTimeout(timeoutId);
+				pendingReadTimeoutsRef.current.delete(messageId);
+			}
+		},
+		[clearOptimisticRead],
+	);
 
 	const hasPendingReadForAccount = useCallback((accountId: number): boolean => {
 		for (const pending of pendingReadStateRef.current.values()) {

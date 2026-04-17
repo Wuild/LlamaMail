@@ -1,11 +1,7 @@
 import {Worker} from 'node:worker_threads';
 import {getSqlitePath} from '@main/db/drizzle.js';
 import type {SyncSummary} from '@main/mail/sync.js';
-import type {
-	MailProviderDriver,
-	ProviderEmailSyncService,
-	WorkerReadyCallback,
-} from './contracts.js';
+import type {MailProviderDriver, ProviderEmailSyncService, WorkerReadyCallback} from './contracts.js';
 
 export class ImapWorkerEmailSyncService implements ProviderEmailSyncService {
 	readonly #driver: MailProviderDriver;

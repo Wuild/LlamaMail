@@ -56,11 +56,7 @@ export function createMainWindowManager(deps: MainWindowManagerDeps): {
 		deps.logger.info('Creating main window');
 		const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
 		const restoredState = loadMainWindowState();
-		const normalizedState = normalizeWindowState(
-			restoredState,
-			deps.mainWindowMinWidth,
-			deps.mainWindowMinHeight,
-		);
+		const normalizedState = normalizeWindowState(restoredState, deps.mainWindowMinWidth, deps.mainWindowMinHeight);
 		deps.logger.debug('Window state restored=%s normalized=%s', Boolean(restoredState), Boolean(normalizedState));
 		const currentSettings = deps.getAppSettingsSync();
 		const useNativeTitleBar = Boolean(currentSettings.useNativeTitleBar);
@@ -78,7 +74,9 @@ export function createMainWindowManager(deps: MainWindowManagerDeps): {
 				spellcheck: currentSettings.spellcheckEnabled,
 			}),
 		};
-		const win = useNativeTitleBar ? deps.createAppWindow(windowOptions) : deps.createFramelessAppWindow(windowOptions);
+		const win = useNativeTitleBar
+			? deps.createAppWindow(windowOptions)
+			: deps.createFramelessAppWindow(windowOptions);
 		deps.attachWindowShortcuts(win);
 		if (normalizedState?.isMaximized) {
 			win.maximize();
@@ -186,7 +184,9 @@ function getSpellCheckerLanguagesSafe(deps: MainWindowManagerDeps, language: str
 	}
 }
 
-function loadMainWindowState(statePath: string = path.join(app.getPath('userData'), 'main-window-state.json')): MainWindowState | null {
+function loadMainWindowState(
+	statePath: string = path.join(app.getPath('userData'), 'main-window-state.json'),
+): MainWindowState | null {
 	try {
 		if (!fs.existsSync(statePath)) return null;
 		const raw = fs.readFileSync(statePath, 'utf8');

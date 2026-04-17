@@ -27,9 +27,7 @@ import {
 	uploadCloudFile,
 } from '@main/cloud/providers.js';
 import {syncCloudDav} from '@main/cloud/davSync.js';
-import {
-	APP_NAME,
-} from '@/shared/appConfig.js';
+import {APP_NAME} from '@/shared/appConfig.js';
 import {
 	ONEDRIVE_APP_ID,
 	ONEDRIVE_AUTHORITY,

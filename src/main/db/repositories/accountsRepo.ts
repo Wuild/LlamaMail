@@ -544,13 +544,17 @@ export async function deleteAccount(accountId: number): Promise<{id: number; ema
 }
 
 function normalizeAuthMethod(value: string): AuthMethod {
-	const method = String(value || '').trim().toLowerCase();
+	const method = String(value || '')
+		.trim()
+		.toLowerCase();
 	if (method === 'oauth2' || method === 'app_password') return method;
 	return 'password';
 }
 
 function normalizeOAuthProvider(value: string | null): OAuthProvider | null {
-	const provider = String(value || '').trim().toLowerCase();
+	const provider = String(value || '')
+		.trim()
+		.toLowerCase();
 	if (provider === 'google' || provider === 'microsoft') return provider;
 	return null;
 }

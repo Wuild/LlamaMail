@@ -100,15 +100,17 @@ function ensureBaselineTables(db: any, migrationsFolder: string): void {
 }
 
 function tableExists(db: any, tableName: string): boolean {
-	const row = db
-		.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1")
-		.get(tableName) as {name?: string} | undefined;
+	const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1").get(tableName) as
+		| {name?: string}
+		| undefined;
 	return Boolean(row?.name);
 }
 
 function readMigrationRowCount(db: any): number {
 	try {
-		const row = db.prepare('SELECT COUNT(*) as count FROM __drizzle_migrations').get() as {count?: number} | undefined;
+		const row = db.prepare('SELECT COUNT(*) as count FROM __drizzle_migrations').get() as
+			| {count?: number}
+			| undefined;
 		return Number(row?.count ?? 0);
 	} catch {
 		return 0;
@@ -119,7 +121,11 @@ function getTableColumns(db: any, tableName: string): Set<string> {
 	const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{name?: string}>;
 	return new Set(
 		rows
-			.map((row) => String(row?.name || '').trim().toLowerCase())
+			.map((row) =>
+				String(row?.name || '')
+					.trim()
+					.toLowerCase(),
+			)
 			.filter(Boolean),
 	);
 }

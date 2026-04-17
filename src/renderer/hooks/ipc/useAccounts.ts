@@ -116,20 +116,26 @@ export function useAccounts() {
 		[queryClient, setAccountsStore],
 	);
 
-	const refreshFoldersUnreadFallback = useCallback(async (rows: PublicAccount[]) => {
-		const emailAccounts = rows.filter((account) => isAccountEmailModuleEnabled(account));
-		if (!emailAccounts.length) {
-			setFoldersUnreadFallback(0);
-			return;
-		}
-		const results = await Promise.allSettled(emailAccounts.map((account) => ipcClient.getFolders(account.id)));
-		const total = results.reduce((sum, result) => {
-			if (result.status !== 'fulfilled') return sum;
-			const next = result.value.reduce((acc, folder) => acc + Math.max(0, Number(folder.unread_count) || 0), 0);
-			return sum + next;
-		}, 0);
-		setFoldersUnreadFallback(Math.max(0, total));
-	}, [setFoldersUnreadFallback]);
+	const refreshFoldersUnreadFallback = useCallback(
+		async (rows: PublicAccount[]) => {
+			const emailAccounts = rows.filter((account) => isAccountEmailModuleEnabled(account));
+			if (!emailAccounts.length) {
+				setFoldersUnreadFallback(0);
+				return;
+			}
+			const results = await Promise.allSettled(emailAccounts.map((account) => ipcClient.getFolders(account.id)));
+			const total = results.reduce((sum, result) => {
+				if (result.status !== 'fulfilled') return sum;
+				const next = result.value.reduce(
+					(acc, folder) => acc + Math.max(0, Number(folder.unread_count) || 0),
+					0,
+				);
+				return sum + next;
+			}, 0);
+			setFoldersUnreadFallback(Math.max(0, total));
+		},
+		[setFoldersUnreadFallback],
+	);
 
 	useEffect(() => {
 		setAccountsStore(accountsQuery.data ?? []);
@@ -225,9 +231,15 @@ export function useAccountDirectory() {
 				}));
 				return rows;
 			};
-			const refreshAccountAndFolders = async (): Promise<{account: PublicAccount | null; folders: FolderItem[]}> => {
+			const refreshAccountAndFolders = async (): Promise<{
+				account: PublicAccount | null;
+				folders: FolderItem[];
+			}> => {
 				const id = requireAccountId();
-				const [accountsRows, folderRows] = await Promise.all([ipcClient.getAccounts(), ipcClient.getFolders(id)]);
+				const [accountsRows, folderRows] = await Promise.all([
+					ipcClient.getAccounts(),
+					ipcClient.getFolders(id),
+				]);
 				setAccounts(accountsRows);
 				setAccountFoldersById((prev) => ({
 					...prev,
@@ -238,7 +250,11 @@ export function useAccountDirectory() {
 					folders: folderRows,
 				};
 			};
-			const refreshCalendarItems = async (startIso?: string, endIso?: string, limit = 5000): Promise<CalendarEventItem[]> => {
+			const refreshCalendarItems = async (
+				startIso?: string,
+				endIso?: string,
+				limit = 5000,
+			): Promise<CalendarEventItem[]> => {
 				const id = requireAccountId();
 				return await ipcClient.getCalendarEvents(id, startIso, endIso, limit);
 			};
@@ -335,12 +351,7 @@ export function useAccountDirectory() {
 				},
 			};
 		},
-		[
-			accountFoldersById,
-			accounts,
-			setAccountFoldersById,
-			setAccounts,
-		],
+		[accountFoldersById, accounts, setAccountFoldersById, setAccounts],
 	);
 
 	return useMemo(

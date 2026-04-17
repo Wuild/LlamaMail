@@ -24,7 +24,9 @@ export const useContactsRuntimeStore = create<ContactsRuntimeStoreState>((set) =
 		set((state) => {
 			const current = state.contactsByAccountId[accountId] ?? [];
 			const exists = current.some((item) => item.id === contact.id);
-			const next = exists ? current.map((item) => (item.id === contact.id ? contact : item)) : [contact, ...current];
+			const next = exists
+				? current.map((item) => (item.id === contact.id ? contact : item))
+				: [contact, ...current];
 			return {
 				contactsByAccountId: {
 					...state.contactsByAccountId,

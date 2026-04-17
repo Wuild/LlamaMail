@@ -17,12 +17,14 @@ function classifyCategory(message: string): ProviderErrorCategory {
 	const text = message.toLowerCase();
 	if (/cancel/.test(text)) return 'cancelled';
 	if (/refresh token|token.*expired|oauth.*refresh/.test(text)) return 'renewal';
-	if (/authentication|auth failed|invalid credentials|login failed|not authenticated|password/.test(text)) return 'auth';
+	if (/authentication|auth failed|invalid credentials|login failed|not authenticated|password/.test(text))
+		return 'auth';
 	if (/timeout|timed out|etimedout|econnaborted/.test(text)) return 'timeout';
 	if (/rate limit|too many requests|429/.test(text)) return 'rate_limit';
 	if (/validation|invalid payload|invalid input|missing required/.test(text)) return 'validation';
 	if (/partial sync|partial success/.test(text)) return 'partial_sync';
-	if (/provider|api|http|request failed|service unavailable|bad gateway|502|503|504/.test(text)) return 'provider_api';
+	if (/provider|api|http|request failed|service unavailable|bad gateway|502|503|504/.test(text))
+		return 'provider_api';
 	return 'unknown';
 }
 

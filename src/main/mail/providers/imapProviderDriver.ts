@@ -1,10 +1,5 @@
 import {getAccountSyncCredentials} from '@main/db/repositories/accountsRepo.js';
-import type {
-	MailProviderDriver,
-	ProviderAccountContext,
-	ProviderCapability,
-	ProviderSyncModules,
-} from './contracts.js';
+import type {MailProviderDriver, ProviderAccountContext, ProviderCapability, ProviderSyncModules} from './contracts.js';
 
 export interface ImapProviderDriverOptions {
 	key: string;

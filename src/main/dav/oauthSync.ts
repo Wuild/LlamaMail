@@ -24,9 +24,7 @@ type OAuthSyncInput = {
 	caldavLogger: ReturnType<typeof createMailDebugLogger>;
 };
 
-function normalizeCalendarRange(
-	calendarRange?: CalendarSyncRange | null,
-): {startIso: string; endIso: string} | null {
+function normalizeCalendarRange(calendarRange?: CalendarSyncRange | null): {startIso: string; endIso: string} | null {
 	const startIso = String(calendarRange?.startIso || '').trim();
 	const endIso = String(calendarRange?.endIso || '').trim();
 	if (!startIso || !endIso) return null;
@@ -46,8 +44,8 @@ async function fetchOAuthJson(
 ): Promise<unknown> {
 	const response = await fetch(url, {
 		headers: {
-			'Authorization': `Bearer ${ctx.accessToken}`,
-			'Accept': 'application/json',
+			Authorization: `Bearer ${ctx.accessToken}`,
+			Accept: 'application/json',
 		},
 	});
 	if (!response.ok) {

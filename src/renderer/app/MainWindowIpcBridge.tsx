@@ -18,7 +18,9 @@ import {isAccountEmailModuleEnabled} from '@/shared/accountModules';
 
 function pickPreferredFolderPath(folderRows: FolderItem[], preferredFolderPath: string | null): string | null {
 	return (
-		(preferredFolderPath && folderRows.some((folder) => folder.path === preferredFolderPath) && preferredFolderPath) ||
+		(preferredFolderPath &&
+			folderRows.some((folder) => folder.path === preferredFolderPath) &&
+			preferredFolderPath) ||
 		folderRows.find((folder) => folder.type === 'inbox')?.path ||
 		folderRows.find((folder) => folder.path.toLowerCase() === 'inbox')?.path ||
 		folderRows[0]?.path ||
@@ -110,9 +112,7 @@ export function MainWindowIpcBridge() {
 
 	const refreshAccountFolders = useCallback(
 		async (accountId: number): Promise<void> => {
-			const selected = useAccountsRuntimeStore
-				.getState()
-				.accounts.find((account) => account.id === accountId);
+			const selected = useAccountsRuntimeStore.getState().accounts.find((account) => account.id === accountId);
 			if (selected && !isAccountEmailModuleEnabled(selected)) return;
 			const folderRows = await ipcClient.getFolders(accountId);
 			setAccountFoldersById((prev) => ({
