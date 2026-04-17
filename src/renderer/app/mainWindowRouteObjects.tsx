@@ -20,6 +20,7 @@ import SettingsAccountFiltersPage from './main/settings/account/[accountId]/filt
 import SettingsApplicationPage from './main/settings/application/page';
 import SettingsLayoutPage from './main/settings/layout/page';
 import SettingsWhitelistPage from './main/settings/whitelist/page';
+import SettingsLegalPage from './main/settings/legal/page';
 import SettingsDeveloperPage from './main/settings/developer/page';
 import ContactsPage from './main/contacts/page';
 import OnboardingPage from './onboarding/page';
@@ -108,6 +109,7 @@ export function buildMainWindowRouteObjects(context: MainWindowRouteContext, sho
 						{path: '/settings/application', element: <SettingsApplicationPage />},
 						{path: '/settings/layout', element: <SettingsLayoutPage />},
 						{path: '/settings/whitelist', element: <SettingsWhitelistPage />},
+						{path: '/settings/legal', element: <SettingsLegalPage />},
 						{path: '/settings/developer', element: <SettingsDeveloperPage />},
 						{path: '/settings/:tab', element: <SettingsTabPage />},
 						{

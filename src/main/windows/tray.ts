@@ -1,0 +1,168 @@
+import {app, Menu, nativeImage, Tray} from 'electron';
+import path from 'path';
+import {APP_NAME} from '@/shared/appConfig.js';
+
+type TrayControllerDeps = {
+	appName?: string;
+	appIconPath: string | null;
+	linuxTrayIconPath: string | null;
+	windowsTrayIconPath: string | null;
+	isActionsEnabled: () => boolean;
+	onShowApp: () => void;
+	onCompose: () => void;
+	onNavigate: (route: string) => void;
+	onQuit: () => void;
+};
+
+export function createTrayController(deps: TrayControllerDeps): {
+	ensureTray: (unreadCount: number) => void;
+	hideTray: () => void;
+	updateTooltip: (unreadCount: number) => void;
+	refreshMenu: () => void;
+} {
+	let tray: Tray | null = null;
+	const appName = deps.appName || APP_NAME;
+
+	function ensureTray(unreadCount: number): void {
+		if (tray) return;
+		tray = new Tray(buildTrayIcon(deps.appIconPath, deps.linuxTrayIconPath, deps.windowsTrayIconPath));
+		tray.setToolTip(buildTrayTooltip(appName, unreadCount));
+		refreshMenu();
+		tray.on('double-click', () => {
+			deps.onShowApp();
+		});
+	}
+
+	function hideTray(): void {
+		if (!tray) return;
+		tray.destroy();
+		tray = null;
+	}
+
+	function refreshMenu(): void {
+		if (!tray) return;
+		const canUseMainWindowActions = deps.isActionsEnabled();
+		const contextMenu = Menu.buildFromTemplate([
+			{
+				label: `Show ${appName}`,
+				click: () => deps.onShowApp(),
+			},
+			{
+				label: 'Compose Email',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onCompose(),
+			},
+			{type: 'separator'},
+			{
+				label: 'Mail',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onNavigate('/email'),
+			},
+			{
+				label: 'Contacts',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onNavigate('/contacts'),
+			},
+			{
+				label: 'Calendar',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onNavigate('/calendar'),
+			},
+			{
+				label: 'Cloud',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onNavigate('/cloud'),
+			},
+			{type: 'separator'},
+			{
+				label: 'Settings',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onNavigate('/settings/application'),
+			},
+			{
+				label: 'Help',
+				enabled: canUseMainWindowActions,
+				click: () => deps.onNavigate('/help'),
+			},
+			{
+				label: 'Quit',
+				click: () => deps.onQuit(),
+			},
+		]);
+		tray.setContextMenu(contextMenu);
+	}
+
+	function updateTooltip(unreadCount: number): void {
+		if (!tray) return;
+		tray.setToolTip(buildTrayTooltip(appName, unreadCount));
+	}
+
+	return {
+		ensureTray,
+		hideTray,
+		updateTooltip,
+		refreshMenu,
+	};
+}
+
+function buildTrayIcon(appIconPath: string | null, linuxTrayIconPath: string | null, windowsTrayIconPath: string | null) {
+	const trayPath =
+		process.platform === 'win32'
+			? windowsTrayIconPath || appIconPath
+			: process.platform === 'linux'
+				? linuxTrayIconPath || appIconPath || path.join(app.getAppPath(), 'build/icons/64x64.png')
+				: appIconPath;
+	const trayBaseImage = trayPath ? nativeImage.createFromPath(trayPath) : null;
+	if (trayBaseImage && !trayBaseImage.isEmpty()) {
+		if (process.platform === 'win32') return trayBaseImage.resize({width: 16, height: 16});
+		if (process.platform === 'linux') return trayBaseImage.resize({width: 22, height: 22});
+		return trayBaseImage;
+	}
+
+	const fallbackIcon = nativeImage.createEmpty();
+	if (process.platform === 'win32') return fallbackIcon.resize({width: 16, height: 16});
+	if (process.platform === 'linux') return fallbackIcon.resize({width: 22, height: 22});
+	return fallbackIcon;
+}
+
+function buildTrayTooltip(appName: string, unreadCount: number): string {
+	if (unreadCount <= 0) return appName;
+	return `${appName} (${unreadCount} unread)`;
+}
+
+export function resolveLinuxTrayIconPath(appIconPath: string | null): string | null {
+	const candidatePaths = [
+		path.join(app.getAppPath(), 'build/lunatray.png'),
+		path.join(app.getAppPath(), 'build/icons/lunatray.png'),
+		path.join(app.getAppPath(), 'build/icons/256x256.png'),
+		path.join(app.getAppPath(), 'build/icons/128x128.png'),
+		path.join(app.getAppPath(), 'build/icons/64x64.png'),
+		appIconPath,
+	];
+	for (const candidate of candidatePaths) {
+		if (!candidate) continue;
+		const icon = nativeImage.createFromPath(candidate);
+		if (!icon.isEmpty()) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+export function resolveWindowsTrayIconPath(appIconPath: string | null): string | null {
+	const candidatePaths = [
+		path.join(app.getAppPath(), 'build/lunatray.ico'),
+		path.join(app.getAppPath(), 'build/icon.ico'),
+		path.join(app.getAppPath(), 'build/icons/icon.ico'),
+		appIconPath,
+	];
+	for (const candidate of candidatePaths) {
+		if (!candidate) continue;
+		const icon = nativeImage.createFromPath(candidate);
+		if (!icon.isEmpty()) {
+			return candidate;
+		}
+	}
+	return null;
+}
+

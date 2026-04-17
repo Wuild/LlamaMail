@@ -54,3 +54,8 @@
 - [x] Render cached calendar/contact data immediately on page open and refresh from background/global account sync without page-entry DAV sync.
 - [x] Move ancillary calendar/contacts sync execution to a worker thread and switch calendar/contacts account handles to page-scoped fetches (no runtime store retention).
 - [x] Add per-account sync-module toggles (`email`/`contacts`/`calendar`) and gate page visibility, worker sync execution, and mail idle/sync loops by enabled modules.
+- [x] On account sync-module disable, purge module-local cached data (`email` messages/folders/unread cache, contacts/address books, calendar events) and trigger sync refresh when a module is re-enabled.
+- [x] Remove Swedish locale exposure from app language options/contracts until localized UI content is implemented; keep language selection English-only.
+- [x] Add add-account confirmation option to auto-link provider-matched cloud storage (Google Drive/OneDrive) when using Google/Microsoft mail providers.
+- [x] Add a dedicated app-protocol page route registry (`llamamail://<page>` / `llamamail://page/<page>`) so protocol page mappings are centralized and extensible outside `main/index.ts`.
+- [x] Extract main-process protocol/deeplink orchestration (auth callbacks, page route handling, mailto queue, second-instance args, protocol client registration) from `main/index.ts` into `main/protocol/handler.ts`.

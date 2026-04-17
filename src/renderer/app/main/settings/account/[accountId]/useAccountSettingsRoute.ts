@@ -14,6 +14,8 @@ import {
 	mapMailFilterToDraft,
 } from '@renderer/app/main/settings/mailFilterHelpers';
 
+const EMPTY_FOLDERS: any[] = [];
+
 export type UseAccountSettingsRouteResult = {
 	editor: AccountEditor | null;
 	setEditor: React.Dispatch<React.SetStateAction<AccountEditor | null>>;
@@ -47,7 +49,7 @@ export function useAccountSettingsRoute(
 	const navigate = useNavigate();
 	const {accounts} = useAccounts();
 	const accountHandle = useAccount(accountId);
-	const runtimeAccountFolders = useMailFoldersStore((state) => state.accountFoldersById[accountId] ?? []);
+	const runtimeAccountFolders = useMailFoldersStore((state) => state.accountFoldersById[accountId] ?? EMPTY_FOLDERS);
 	const selectedAccount = accounts.find((account) => account.id === accountId) ?? null;
 	const [editor, setEditor] = useState<AccountEditor | null>(null);
 	const [accountSection, setAccountSection] = useState<AccountPanelSection>(section);

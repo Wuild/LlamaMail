@@ -29,7 +29,7 @@ export default function AppLayout() {
 		if (path.startsWith('/windows/message')) return 'Message';
 		if (path.startsWith('/windows/add-account')) return 'Add Account';
 		if (path.startsWith('/windows/debug')) return 'Debug Console';
-		if (path.startsWith('/windows/splash')) return 'Splash';
+		if (path.startsWith('/windows/splash')) return '';
 		if (path.startsWith('/onboarding')) return 'Onboarding';
 		if (path.startsWith('/contacts')) return 'Contacts';
 		if (path.startsWith('/calendar')) return 'Calendar';

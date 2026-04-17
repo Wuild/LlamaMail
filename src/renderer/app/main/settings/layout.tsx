@@ -24,6 +24,7 @@ export default function SettingsLayout() {
 		if (accountMatch) return `account:${accountMatch[1]}`;
 		if (location.pathname === '/settings/layout') return 'layout';
 		if (location.pathname === '/settings/whitelist') return 'allowlist';
+		if (location.pathname === '/settings/legal') return 'legal';
 		if (location.pathname === '/settings/developer') return 'developer';
 		return 'app';
 	}, [location.pathname]);
@@ -37,6 +38,7 @@ export default function SettingsLayout() {
 					{id: 'app', label: 'Application', to: '/settings/application'},
 					{id: 'layout', label: 'Appearance', to: '/settings/layout'},
 					{id: 'allowlist', label: 'Whitelist', to: '/settings/whitelist'},
+					{id: 'legal', label: 'Legal', to: '/settings/legal'},
 					{id: 'developer', label: 'Developer', to: '/settings/developer'},
 				],
 			},
@@ -90,6 +92,10 @@ export default function SettingsLayout() {
 		}
 		if (itemId === 'allowlist') {
 			navigate('/settings/whitelist');
+			return;
+		}
+		if (itemId === 'legal') {
+			navigate('/settings/legal');
 			return;
 		}
 		if (itemId === 'developer') {

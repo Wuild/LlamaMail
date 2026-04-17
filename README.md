@@ -58,6 +58,12 @@ Build main, preload, and renderer:
 npm run build
 ```
 
+## Support
+
+If you want to support ongoing development, you can back the project on Patreon:
+
+- https://patreon.com/wuild
+
 ## Environment Overrides
 
 You can create a local `.env` file in the project root to override runtime settings.

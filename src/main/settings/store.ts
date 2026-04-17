@@ -203,10 +203,6 @@ export function resolveLocaleTag(language: AppLanguage): string | undefined {
 	return language;
 }
 
-export function getSpellCheckerLanguages(language: AppLanguage): string[] {
-	if (language === 'sv-SE') return ['sv-SE', 'en-US'];
-	if (language === 'en-US') return ['en-US', 'sv-SE'];
-	const locale = app.getLocale() || 'en-US';
-	if (locale.toLowerCase().startsWith('sv')) return ['sv-SE', 'en-US'];
-	return ['en-US', 'sv-SE'];
+export function getSpellCheckerLanguages(_language: AppLanguage): string[] {
+	return ['en-US'];
 }

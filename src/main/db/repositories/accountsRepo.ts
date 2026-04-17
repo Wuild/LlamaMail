@@ -355,6 +355,7 @@ export async function getAccountSendCredentials(accountId: number): Promise<Acco
 
 export async function updateAccount(accountId: number, payload: UpdateAccountPayload): Promise<PublicAccount> {
 	const db = getDrizzle();
+	const rawDb = getDb();
 	const existing = await db.select().from(accounts).where(eq(accounts.id, accountId)).get();
 	if (!existing?.id) throw new Error(`Account ${accountId} not found`);
 
@@ -386,6 +387,12 @@ export async function updateAccount(accountId: number, payload: UpdateAccountPay
 	if (moduleSelection.sync_emails > 0 && (!imapHost || !payload.imap_port || !smtpHost || !payload.smtp_port)) {
 		throw new Error('Missing required email server fields');
 	}
+	const emailModuleWasEnabled = Number(existing.syncEmails ?? 1) > 0;
+	const contactsModuleWasEnabled = Number(existing.syncContacts ?? 1) > 0;
+	const calendarModuleWasEnabled = Number(existing.syncCalendar ?? 1) > 0;
+	const emailModuleEnabled = moduleSelection.sync_emails > 0;
+	const contactsModuleEnabled = moduleSelection.sync_contacts > 0;
+	const calendarModuleEnabled = moduleSelection.sync_calendar > 0;
 
 	await db
 		.update(accounts)
@@ -417,6 +424,21 @@ export async function updateAccount(accountId: number, payload: UpdateAccountPay
 		})
 		.where(eq(accounts.id, accountId))
 		.run();
+	if (emailModuleWasEnabled && !emailModuleEnabled) {
+		clearAccountEmailCache(rawDb, accountId);
+	}
+	if (contactsModuleWasEnabled && !contactsModuleEnabled) {
+		clearAccountContactsCache(rawDb, accountId);
+	}
+	if (calendarModuleWasEnabled && !calendarModuleEnabled) {
+		clearAccountCalendarCache(rawDb, accountId);
+	}
+	if ((contactsModuleWasEnabled && !contactsModuleEnabled) || (calendarModuleWasEnabled && !calendarModuleEnabled)) {
+		cleanupAccountDavSettings(rawDb, accountId, {
+			keepCardDav: contactsModuleEnabled,
+			keepCalDav: calendarModuleEnabled,
+		});
+	}
 
 	const oldServiceAccount = `${accountId}:${existing.email}`;
 	const newServiceAccount = `${accountId}:${email}`;
@@ -539,6 +561,74 @@ function getAccountPasswordKey(accountId: number, email: string): string {
 
 function getAccountOAuthKey(accountId: number, email: string): string {
 	return `${accountId}:${email}:oauth`;
+}
+
+function clearAccountEmailCache(db: ReturnType<typeof getDb>, accountId: number): void {
+	const tx = db.transaction((id: number) => {
+		db.prepare(
+			`
+                DELETE
+                FROM message_bodies
+                WHERE message_id IN (SELECT id
+                                     FROM messages
+                                     WHERE account_id = ?)
+            `,
+		).run(id);
+		db.prepare(
+			`
+                DELETE
+                FROM attachments
+                WHERE message_id IN (SELECT id
+                                     FROM messages
+                                     WHERE account_id = ?)
+            `,
+		).run(id);
+		db.prepare('DELETE FROM messages WHERE account_id = ?').run(id);
+		db.prepare('DELETE FROM folders WHERE account_id = ?').run(id);
+		// Keep thread table compact after removing account messages.
+		db.prepare(
+			`
+                DELETE
+                FROM threads
+                WHERE id NOT IN (SELECT DISTINCT thread_id
+                                 FROM messages
+                                 WHERE thread_id IS NOT NULL)
+            `,
+		).run();
+	});
+	tx(accountId);
+}
+
+function clearAccountContactsCache(db: ReturnType<typeof getDb>, accountId: number): void {
+	const tx = db.transaction((id: number) => {
+		db.prepare('DELETE FROM contacts WHERE account_id = ?').run(id);
+		db.prepare('DELETE FROM address_books WHERE account_id = ?').run(id);
+	});
+	tx(accountId);
+}
+
+function clearAccountCalendarCache(db: ReturnType<typeof getDb>, accountId: number): void {
+	db.prepare('DELETE FROM calendar_events WHERE account_id = ?').run(accountId);
+}
+
+function cleanupAccountDavSettings(
+	db: ReturnType<typeof getDb>,
+	accountId: number,
+	input: {keepCardDav: boolean; keepCalDav: boolean},
+): void {
+	if (!input.keepCardDav && !input.keepCalDav) {
+		db.prepare('DELETE FROM account_dav_settings WHERE account_id = ?').run(accountId);
+		return;
+	}
+	db.prepare(
+		`
+            UPDATE account_dav_settings
+            SET carddav_url = CASE WHEN ? THEN carddav_url ELSE NULL END,
+                caldav_url = CASE WHEN ? THEN caldav_url ELSE NULL END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE account_id = ?
+        `,
+	).run(input.keepCardDav ? 1 : 0, input.keepCalDav ? 1 : 0, accountId);
 }
 
 async function getAccountOAuthSession(accountId: number, email: string): Promise<OAuthSession | null> {

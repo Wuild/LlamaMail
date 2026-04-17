@@ -1,7 +1,7 @@
 import {DEFAULT_APP_SETTINGS} from './defaults.js';
 import type {AppLanguage, AppTheme, MailView, NavRailItemId} from './ipcTypes';
 
-export const APP_LANGUAGE_VALUES = ['system', 'en-US', 'sv-SE'] as const;
+export const APP_LANGUAGE_VALUES = ['system', 'en-US'] as const;
 export const APP_THEME_VALUES = ['system', 'light', 'dark'] as const;
 export const MAIL_VIEW_VALUES = ['side-list', 'top-table'] as const;
 export const NAV_RAIL_ITEM_VALUES = ['email', 'contacts', 'calendar', 'cloud'] as const;

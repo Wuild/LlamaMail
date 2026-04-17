@@ -1,4 +1,4 @@
-export type AppLanguage = 'system' | 'en-US' | 'sv-SE';
+export type AppLanguage = 'system' | 'en-US';
 export type AppTheme = 'system' | 'light' | 'dark';
 export type MailView = 'side-list' | 'top-table';
 export type NavRailItemId = 'email' | 'contacts' | 'calendar' | 'cloud';

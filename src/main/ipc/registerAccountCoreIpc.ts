@@ -78,6 +78,7 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 	ipcMain.handle('update-account', async (_event, accountId: number, payload: any) => {
 		const safeAccountId = parsePositiveInt(accountId, 'accountId');
 		const rawPayload = parseRequiredObject(payload, 'payload');
+		const before = (await deps.getAccounts()).find((account: any) => Number(account?.id) === safeAccountId) ?? null;
 		const normalizedPayload = {
 			...rawPayload,
 			sync_emails: rawPayload.sync_emails === undefined ? undefined : Number(rawPayload.sync_emails) > 0 ? 1 : 0,
@@ -91,6 +92,26 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 		deps.blockedSyncAccounts.delete(safeAccountId);
 		deps.broadcastAccountUpdated(updated);
 		deps.restartIdleWatcher(safeAccountId);
+		deps.notifyUnreadCountChanged();
+		const emailEnabledBefore = Number(before?.sync_emails ?? 1) > 0;
+		const contactsEnabledBefore = Number(before?.sync_contacts ?? 1) > 0;
+		const calendarEnabledBefore = Number(before?.sync_calendar ?? 1) > 0;
+		const emailEnabledNow = Number(updated?.sync_emails ?? 1) > 0;
+		const contactsEnabledNow = Number(updated?.sync_contacts ?? 1) > 0;
+		const calendarEnabledNow = Number(updated?.sync_calendar ?? 1) > 0;
+		if (
+			(!emailEnabledBefore && emailEnabledNow) ||
+			(!contactsEnabledBefore && contactsEnabledNow) ||
+			(!calendarEnabledBefore && calendarEnabledNow)
+		) {
+			void deps.runSyncAndBroadcast(safeAccountId, 'module-enabled').catch((error) => {
+				console.warn(
+					'Sync after module enable failed accountId=%d error=%s',
+					safeAccountId,
+					(error as any)?.message || String(error),
+				);
+			});
+		}
 		return updated;
 	});
 

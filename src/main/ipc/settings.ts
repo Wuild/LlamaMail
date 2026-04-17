@@ -4,7 +4,6 @@ import {listFoldersByAccount, listMessagesByFolder} from '@main/db/repositories/
 import {createAppLogger} from '@main/debug/debugLog.js';
 import {APP_NAME} from '@/shared/appConfig.js';
 import {type AppSettingsPatch, getAppSettings, updateAppSettings} from '@main/settings/store.js';
-import {openSplashWindow} from '@main/windows/splashWindow.js';
 import {resolveNotificationIconPath} from '@main/notifications/icon.js';
 
 const logger = createAppLogger('ipc:settings');
@@ -12,6 +11,9 @@ const notificationIconPath = resolveNotificationIconPath();
 
 export function registerSettingsIpc(
 	onSettingsUpdated: (settings: Awaited<ReturnType<typeof getAppSettings>>) => void,
+	options?: {
+		onOpenUpdaterView?: () => boolean;
+	},
 ): void {
 	ipcMain.handle('get-app-settings', async () => {
 		logger.debug('IPC get-app-settings');
@@ -125,9 +127,8 @@ export function registerSettingsIpc(
 
 	ipcMain.handle('dev-open-updater-window', async () => {
 		logger.info('IPC dev-open-updater-window');
-		const updaterWin = openSplashWindow({forceTitleBar: true});
-		focusWindow(updaterWin);
-		return {ok: true, opened: true} as const;
+		const opened = options?.onOpenUpdaterView?.() ?? false;
+		return {ok: true, opened} as const;
 	});
 
 	ipcMain.handle('set-default-email-client', async () => {

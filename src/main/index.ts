@@ -5,16 +5,11 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
-	nativeImage,
 	nativeTheme,
 	Notification,
-	screen,
 	shell,
-	Tray,
 } from 'electron';
-import fs from 'fs';
 import path from 'path';
-import {fileURLToPath} from 'url';
 import {createAppLogger, onDebugLog} from './debug/debugLog.js';
 import {initDb} from '@main/db/index.js';
 import {getAccounts} from './db/repositories/accountsRepo.js';
@@ -31,6 +26,7 @@ import {
 import {installTrustedSenderGuard} from './ipc/installTrustedSenderGuard.js';
 import {queueCloudOAuthCallbackUrl, registerCloudIpc} from './ipc/cloud.js';
 import {queueMailOAuthCallbackUrl} from './mail/oauth.js';
+import {createProtocolHandler} from './protocol/handler.js';
 import {registerSettingsIpc} from './ipc/settings.js';
 import {
 	broadcastAccountSyncStatus,
@@ -54,8 +50,7 @@ import {checkForUpdates, initAutoUpdater, runStartupUpdateFlow, setAutoUpdateEna
 import type {GlobalErrorEvent, GlobalErrorSource} from '@/shared/ipcTypes.js';
 import type {ComposeDraftPayload} from './windows/composeWindow.js';
 import {openComposeWindow} from './windows/composeWindow.js';
-import {loadWindowContent} from './windows/loadWindowContent.js';
-import {closeSplashWindow, openSplashWindow} from './windows/splashWindow.js';
+import {createMainWindowManager} from './windows/mainWindow.js';
 import {
 	attachWindowShortcuts,
 	buildSecureWebPreferences,
@@ -63,17 +58,17 @@ import {
 	createFramelessAppWindow,
 	resolveWindowIconPath,
 } from './windows/windowFactory.js';
+import {createTrayController, resolveLinuxTrayIconPath, resolveWindowsTrayIconPath} from './windows/tray.js';
 import {APP_NAME, APP_PROTOCOL} from '@/shared/appConfig.js';
 
 const isDev = !app.isPackaged;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
 let isQuitting = false;
 let currentUnreadCount = 0;
 let mainWindowActionsEnabled = false;
-const pendingMailtoUrls: string[] = [];
+let mainWindowLoaded = false;
+let startupFlowComplete = false;
+let pendingMainWindowNavigation: {route: string; replaceHistory: boolean} | null = null;
 let pendingStartupRoute: string | null = null;
 let pendingStartupCompose = false;
 let stopDebugForwarding: (() => void) | null = null;
@@ -83,14 +78,77 @@ let notificationOpenCooldownTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationOpenInFlight = false;
 const pendingGlobalErrors: GlobalErrorEvent[] = [];
 const appIconPath = resolveWindowIconPath();
-const linuxTrayIconPath = resolveLinuxTrayIconPath();
-const windowsTrayIconPath = resolveWindowsTrayIconPath();
+const linuxTrayIconPath = resolveLinuxTrayIconPath(appIconPath);
+const windowsTrayIconPath = resolveWindowsTrayIconPath(appIconPath);
 const notificationIconPath = resolveNotificationIconPath();
-const mainWindowStatePath = path.join(app.getPath('userData'), 'main-window-state.json');
-const logger = createAppLogger('main');
-installTrustedSenderGuard(ipcMain);
 const MAIN_WINDOW_MIN_WIDTH = 900;
 const MAIN_WINDOW_MIN_HEIGHT = 600;
+const DEV_SPLASH_MIN_DURATION_MS = 1200;
+const logger = createAppLogger('main');
+const mainWindowManager = createMainWindowManager({
+	isDev,
+	logger,
+	mainWindowMinWidth: MAIN_WINDOW_MIN_WIDTH,
+	mainWindowMinHeight: MAIN_WINDOW_MIN_HEIGHT,
+	buildSecureWebPreferences,
+	createAppWindow,
+	createFramelessAppWindow,
+	attachWindowShortcuts,
+	getAppSettingsSync,
+	getSpellCheckerLanguages,
+	shouldMinimizeToTray: () => !isQuitting,
+	onWindowCloseToTray: () => {
+		trayController.ensureTray(currentUnreadCount);
+	},
+	onWindowClosed: () => {
+		mainWindow = null;
+		mainWindowLoaded = false;
+		pendingMainWindowNavigation = null;
+	},
+	onWindowReadyToFlushGlobalErrors: flushPendingGlobalErrors,
+	onWindowDidFinishLoad: () => {
+		mainWindowLoaded = true;
+		if (pendingMainWindowNavigation) {
+			const target = pendingMainWindowNavigation;
+			pendingMainWindowNavigation = null;
+			navigateMainWindowToRouteDirect(target.route, {replaceHistory: target.replaceHistory});
+		}
+		ensureTray();
+		applyTrayContextMenu();
+	},
+	onEnsureBackgroundUpdateChecks: ensureBackgroundUpdateChecks,
+	onWindowCreated: (win) => {
+		mainWindow = win;
+		mainWindowLoaded = false;
+	},
+});
+const trayController = createTrayController({
+	appName: APP_NAME,
+	appIconPath,
+	linuxTrayIconPath,
+	windowsTrayIconPath,
+	isActionsEnabled: () => mainWindowActionsEnabled,
+	onShowApp: () => openMainWindowEntryPoint(),
+	onCompose: () => openComposeQuickAction(),
+	onNavigate: (route) => navigateMainWindowToRoute(route),
+	onQuit: () => {
+		isQuitting = true;
+		app.quit();
+	},
+});
+const protocolHandler = createProtocolHandler({
+	logger,
+	queueMailOAuthCallbackUrl,
+	queueCloudOAuthCallbackUrl,
+	handleFallbackProtocolUrl: handleAppProtocolFallbackUrl,
+	openMainWindowEntryPoint,
+	navigateMainWindowToRoute,
+	openComposeQuickAction,
+	showMainWindow,
+	isMainWindowActionsEnabled: () => mainWindowActionsEnabled,
+	openComposeFromMailtoUrl: openComposeFromMailto,
+});
+installTrustedSenderGuard(ipcMain);
 const LINK_WARNING_WRAPPER_PROTOCOL = `${APP_PROTOCOL}:`;
 const UNSAFE_LINK_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'file:', 'ftp:']);
 const NEVER_OPEN_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'about:']);
@@ -129,14 +187,6 @@ const bootSettings = getAppSettingsBootSnapshotSync();
 if (!bootSettings.hardwareAcceleration) {
 	app.disableHardwareAcceleration();
 }
-
-type MainWindowState = {
-	width: number;
-	height: number;
-	x?: number;
-	y?: number;
-	isMaximized?: boolean;
-};
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message) return error.message;
@@ -225,108 +275,8 @@ function registerGlobalErrorHandlers(): void {
 	});
 }
 
-function createWindow() {
-	logger.info('Creating main window');
-	const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
-	const restoredState = loadMainWindowState();
-	const normalizedState = normalizeWindowState(restoredState);
-	logger.debug('Window state restored=%s normalized=%s', Boolean(restoredState), Boolean(normalizedState));
-	const currentSettings = getAppSettingsSync();
-	const useNativeTitleBar = Boolean(currentSettings.useNativeTitleBar);
-
-	const windowOptions = {
-		width: normalizedState?.width ?? 1200,
-		height: normalizedState?.height ?? 800,
-		minWidth: MAIN_WINDOW_MIN_WIDTH,
-		minHeight: MAIN_WINDOW_MIN_HEIGHT,
-		...(typeof normalizedState?.x === 'number' && typeof normalizedState?.y === 'number'
-			? {x: normalizedState.x, y: normalizedState.y}
-			: {}),
-		webPreferences: buildSecureWebPreferences({
-			preloadPath,
-			spellcheck: currentSettings.spellcheckEnabled,
-		}),
-	};
-	const win = useNativeTitleBar ? createAppWindow(windowOptions) : createFramelessAppWindow(windowOptions);
-	attachWindowShortcuts(win);
-	if (normalizedState?.isMaximized) {
-		win.maximize();
-	}
-	let saveStateTimer: ReturnType<typeof setTimeout> | null = null;
-	const scheduleSaveState = () => {
-		if (saveStateTimer) clearTimeout(saveStateTimer);
-		saveStateTimer = setTimeout(() => {
-			saveStateTimer = null;
-			saveMainWindowState(win);
-		}, 200);
-	};
-	win.on('move', scheduleSaveState);
-	win.on('resize', scheduleSaveState);
-	win.on('maximize', scheduleSaveState);
-	win.on('unmaximize', scheduleSaveState);
-	win.webContents.session.setSpellCheckerLanguages(getSpellCheckerLanguages(currentSettings.language));
-	(
-		win.webContents.session as typeof win.webContents.session & {
-			setSpellCheckerEnabled?: (enabled: boolean) => void;
-		}
-	).setSpellCheckerEnabled?.(currentSettings.spellcheckEnabled);
-	win.on('close', (event) => {
-		const settings = getAppSettingsSync();
-		if (isQuitting || !settings.minimizeToTray) return;
-		event.preventDefault();
-		win.hide();
-		ensureTray();
-	});
-	win.on('closed', () => {
-		if (saveStateTimer) {
-			clearTimeout(saveStateTimer);
-			saveStateTimer = null;
-		}
-		saveMainWindowState(win);
-		if (mainWindow === win) {
-			mainWindow = null;
-		}
-	});
-	mainWindow = win;
-	win.webContents.once('did-finish-load', () => {
-		flushPendingGlobalErrors(win);
-	});
-	logger.info('Main window created id=%d', win.id);
-	ensureBackgroundUpdateChecks();
-	if (isDev) {
-		void loadWindowContent(win, {
-			isDev,
-			devUrls: [
-				{
-					target: 'http://127.0.0.1:5174/window.html',
-				},
-				{
-					target: 'http://127.0.0.1:5174/src/renderer/window.html',
-				},
-			],
-			prodFiles: [],
-			windowName: 'main',
-		}).catch((error) => {
-			console.error('Failed to load main window (dev):', error);
-		});
-		// win.webContents.openDevTools();
-	} else {
-		void loadWindowContent(win, {
-			isDev,
-			devUrls: [],
-			prodFiles: [
-				{
-					target: path.join(__dirname, '../renderer/window.html'),
-				},
-				{
-					target: path.join(__dirname, '../renderer/src/renderer/window.html'),
-				},
-			],
-			windowName: 'main',
-		}).catch((error) => {
-			console.error('Failed to load main window (prod):', error);
-		});
-	}
+function createWindow(initialRoute?: string | null) {
+	mainWindowManager.createWindow({initialRoute});
 }
 
 function triggerBackgroundUpdateCheck(reason: string): void {
@@ -380,173 +330,31 @@ async function applyDemoMode(settings = getAppSettingsSync()): Promise<void> {
 	}
 }
 
-function loadMainWindowState(): MainWindowState | null {
-	try {
-		if (!fs.existsSync(mainWindowStatePath)) return null;
-		const raw = fs.readFileSync(mainWindowStatePath, 'utf8');
-		if (!raw.trim()) return null;
-		const parsed = JSON.parse(raw) as Partial<MainWindowState>;
-		if (!Number.isFinite(parsed.width) || !Number.isFinite(parsed.height)) return null;
-		return {
-			width: Math.max(MAIN_WINDOW_MIN_WIDTH, Number(parsed.width)),
-			height: Math.max(MAIN_WINDOW_MIN_HEIGHT, Number(parsed.height)),
-			...(Number.isFinite(parsed.x) ? {x: Number(parsed.x)} : {}),
-			...(Number.isFinite(parsed.y) ? {y: Number(parsed.y)} : {}),
-			isMaximized: Boolean(parsed.isMaximized),
-		};
-	} catch {
-		return null;
-	}
-}
-
-function saveMainWindowState(win: BrowserWindow): void {
-	try {
-		if (win.isDestroyed()) return;
-		const bounds = win.getBounds();
-		const nextState: MainWindowState = {
-			width: bounds.width,
-			height: bounds.height,
-			x: bounds.x,
-			y: bounds.y,
-			isMaximized: win.isMaximized(),
-		};
-		fs.writeFileSync(mainWindowStatePath, JSON.stringify(nextState));
-	} catch {
-		// ignore state persistence failures
-	}
-}
-
-function normalizeWindowState(state: MainWindowState | null): MainWindowState | null {
-	if (!state) return null;
-	const displays = screen.getAllDisplays();
-	if (displays.length === 0) return state;
-
-	const width = Math.max(MAIN_WINDOW_MIN_WIDTH, state.width);
-	const height = Math.max(MAIN_WINDOW_MIN_HEIGHT, state.height);
-	const x = typeof state.x === 'number' ? state.x : undefined;
-	const y = typeof state.y === 'number' ? state.y : undefined;
-	if (typeof x !== 'number' || typeof y !== 'number') {
-		return {width, height, isMaximized: state.isMaximized};
-	}
-
-	const windowRect = {x, y, width, height};
-	const visible = displays.some((display) => rectsIntersect(windowRect, display.workArea));
-	if (!visible) {
-		return {width, height, isMaximized: state.isMaximized};
-	}
-	return {x, y, width, height, isMaximized: state.isMaximized};
-}
-
-function rectsIntersect(
-	a: {x: number; y: number; width: number; height: number},
-	b: {x: number; y: number; width: number; height: number},
-): boolean {
-	return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-}
-
-function buildTrayIcon() {
-	const trayPath =
-		process.platform === 'win32'
-			? windowsTrayIconPath || appIconPath
-			: process.platform === 'linux'
-				? linuxTrayIconPath || appIconPath || path.join(app.getAppPath(), 'build/icons/64x64.png')
-				: appIconPath;
-	const trayBaseImage = trayPath ? nativeImage.createFromPath(trayPath) : null;
-	if (trayBaseImage && !trayBaseImage.isEmpty()) {
-		if (process.platform === 'win32') return trayBaseImage.resize({width: 16, height: 16});
-		if (process.platform === 'linux') return trayBaseImage.resize({width: 22, height: 22});
-		return trayBaseImage;
-	}
-
-	const fallbackIcon = nativeImage.createEmpty();
-	if (process.platform === 'win32') return fallbackIcon.resize({width: 16, height: 16});
-	if (process.platform === 'linux') return fallbackIcon.resize({width: 22, height: 22});
-	return fallbackIcon;
-}
-
 function ensureTray(): void {
-	if (tray) return;
-	tray = new Tray(buildTrayIcon());
-	tray.setToolTip(buildTrayTooltip(currentUnreadCount));
-	applyTrayContextMenu();
-	tray.on('double-click', () => {
-		openMainWindowEntryPoint();
-	});
+	if (!startupFlowComplete || !mainWindowLoaded) return;
+	trayController.ensureTray(currentUnreadCount);
 }
 
 function applyTrayContextMenu(): void {
-	if (!tray) return;
-	const canUseMainWindowActions = mainWindowActionsEnabled;
-	const contextMenu = Menu.buildFromTemplate([
-		{
-			label: `Show ${APP_NAME}`,
-			click: () => {
-				openMainWindowEntryPoint();
-			},
-		},
-		{
-			label: 'Compose Email',
-			enabled: canUseMainWindowActions,
-			click: () => {
-				openComposeQuickAction();
-			},
-		},
-		{type: 'separator'},
-		{
-			label: 'Mail',
-			enabled: canUseMainWindowActions,
-			click: () => navigateMainWindowToRoute('/email'),
-		},
-		{
-			label: 'Contacts',
-			enabled: canUseMainWindowActions,
-			click: () => navigateMainWindowToRoute('/contacts'),
-		},
-		{
-			label: 'Calendar',
-			enabled: canUseMainWindowActions,
-			click: () => navigateMainWindowToRoute('/calendar'),
-		},
-		{
-			label: 'Cloud',
-			enabled: canUseMainWindowActions,
-			click: () => navigateMainWindowToRoute('/cloud'),
-		},
-		{type: 'separator'},
-		{
-			label: 'Settings',
-			enabled: canUseMainWindowActions,
-			click: () => navigateMainWindowToRoute('/settings/application'),
-		},
-		{
-			label: 'Help',
-			enabled: canUseMainWindowActions,
-			click: () => {
-				navigateMainWindowToRoute('/help');
-			},
-		},
-		{
-			label: 'Quit',
-			click: () => {
-				isQuitting = true;
-				app.quit();
-			},
-		},
-	]);
-	tray.setContextMenu(contextMenu);
+	trayController.refreshMenu();
 }
 
 function openMainWindowEntryPoint(): void {
 	showMainWindow();
 	if (mainWindowActionsEnabled) return;
-	if (!mainWindow || mainWindow.isDestroyed()) return;
-	void mainWindow.webContents.executeJavaScript(`window.location.hash = "/onboarding"`).catch(() => undefined);
+	navigateMainWindowToRouteDirect('/onboarding');
 }
 
 function openAddAccountRouteInMainWindow(): void {
 	showMainWindow();
-	if (!mainWindow || mainWindow.isDestroyed()) return;
-	void mainWindow.webContents.executeJavaScript(`window.location.hash = "/add-account"`).catch(() => undefined);
+	navigateMainWindowToRouteDirect('/add-account');
+}
+
+function openUpdaterRouteInMainWindow(): boolean {
+	const win = showMainWindow();
+	if (!win || win.isDestroyed()) return false;
+	navigateMainWindowToRouteDirect('/windows/splash');
+	return true;
 }
 
 function setMainWindowActionsEnabled(enabled: boolean): void {
@@ -564,10 +372,25 @@ function navigateMainWindowToRoute(route: string): void {
 		return;
 	}
 	showMainWindow();
+	navigateMainWindowToRouteDirect(route);
+}
+
+function navigateMainWindowToRouteDirect(route: string, options: {replaceHistory?: boolean} = {}): void {
 	if (!mainWindow || mainWindow.isDestroyed()) return;
-	void mainWindow.webContents
-		.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`)
-		.catch(() => undefined);
+	const replaceHistory = Boolean(options.replaceHistory);
+	if (!mainWindowLoaded || mainWindow.webContents.isLoadingMainFrame()) {
+		pendingMainWindowNavigation = {route, replaceHistory};
+		return;
+	}
+	pendingMainWindowNavigation = null;
+	if (replaceHistory) {
+		const targetHash = route.startsWith('#') ? route : `#${route}`;
+		void mainWindow.webContents
+			.executeJavaScript(`window.location.replace(${JSON.stringify(targetHash)})`)
+			.catch(() => undefined);
+		return;
+	}
+	void mainWindow.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`).catch(() => undefined);
 }
 
 function openComposeQuickAction(): void {
@@ -656,21 +479,12 @@ function configurePlatformQuickActions(): void {
 	}
 }
 
-function buildTrayTooltip(unreadCount: number): string {
-	if (unreadCount <= 0) return APP_NAME;
-	return `${APP_NAME} (${unreadCount} unread)`;
-}
-
 function updateUnreadIndicators(unreadCount: number): void {
 	currentUnreadCount = Math.max(0, Number(unreadCount) || 0);
 	const settings = getAppSettingsSync();
 	const showUnreadInTitleBar = settings.showUnreadInTitleBar;
 	ensureTray();
-
-	if (tray) {
-		tray.setImage(buildTrayIcon());
-		tray.setToolTip(buildTrayTooltip(currentUnreadCount));
-	}
+	trayController.updateTooltip(currentUnreadCount);
 
 	const label = currentUnreadCount > 0 ? String(currentUnreadCount) : '';
 	try {
@@ -767,51 +581,10 @@ function showMainWindow(): BrowserWindow | null {
 	if (!mainWindow.isVisible()) {
 		mainWindow.show();
 	}
+	trayController.hideTray();
 	mainWindow.moveTop();
 	mainWindow.focus();
 	return mainWindow;
-}
-
-function resolveLinuxTrayIconPath(): string | null {
-	const candidates = [
-		path.join(app.getAppPath(), 'src/resources/llamatray.png'),
-		path.join(__dirname, '../resources/llamatray.png'),
-		path.join(process.cwd(), 'src/resources/llamatray.png'),
-		path.join(app.getAppPath(), 'build/lunatray.png'),
-		path.join(app.getAppPath(), 'src/resources/llama.png'),
-		path.join(app.getAppPath(), 'src/resources/lunatray.png'),
-		path.join(__dirname, '../resources/llama.png'),
-		path.join(__dirname, '../resources/lunatray.png'),
-		path.join(process.cwd(), 'build/lunatray.png'),
-		path.join(process.cwd(), 'src/resources/llama.png'),
-		path.join(process.cwd(), 'src/resources/lunatray.png'),
-	];
-	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) return candidate;
-	}
-	return null;
-}
-
-function resolveWindowsTrayIconPath(): string | null {
-	const candidates = [
-		path.join(app.getAppPath(), 'build/lunatray.ico'),
-		path.join(app.getAppPath(), 'build/icon.ico'),
-		path.join(app.getAppPath(), 'src/resources/llama.ico'),
-		path.join(app.getAppPath(), 'src/resources/lunatray.ico'),
-		path.join(app.getAppPath(), 'src/resources/luna.ico'),
-		path.join(__dirname, '../resources/llama.ico'),
-		path.join(__dirname, '../resources/lunatray.ico'),
-		path.join(__dirname, '../resources/luna.ico'),
-		path.join(process.cwd(), 'build/lunatray.ico'),
-		path.join(process.cwd(), 'build/icon.ico'),
-		path.join(process.cwd(), 'src/resources/llama.ico'),
-		path.join(process.cwd(), 'src/resources/lunatray.ico'),
-		path.join(process.cwd(), 'src/resources/luna.ico'),
-	];
-	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) return candidate;
-	}
-	return null;
 }
 
 function playNotificationSound(): void {
@@ -859,58 +632,6 @@ function notifyNativeThemeUpdated(): void {
 			// ignore renderer messaging failures
 		}
 	}
-}
-
-function registerProtocolHandlers(): void {
-	app.on('open-url', (event, url) => {
-		event.preventDefault();
-		logger.info('Received open-url event url=%s', url);
-		if (queueMailOAuthCallbackUrl(url)) return;
-		if (queueCloudOAuthCallbackUrl(url)) return;
-		if (handleAppProtocolFallbackUrl(url)) return;
-		queueMailtoUrl(url);
-	});
-
-	app.on('second-instance', (_event, argv) => {
-		logger.info('Received second-instance event args=%d', argv.length);
-		const actionArg = findActionArg(argv);
-		if (actionArg === 'compose') {
-			if (!mainWindowActionsEnabled) {
-				openMainWindowEntryPoint();
-				return;
-			}
-			openComposeQuickAction();
-			return;
-		}
-		const routeArg = findRouteArg(argv);
-		if (routeArg) {
-			if (!mainWindowActionsEnabled) {
-				openMainWindowEntryPoint();
-				return;
-			}
-			navigateMainWindowToRoute(routeArg);
-			return;
-		}
-		const protocolUrl = findCustomProtocolArg(argv);
-		if (protocolUrl && queueMailOAuthCallbackUrl(protocolUrl)) {
-			showMainWindow();
-			return;
-		}
-		if (protocolUrl && queueCloudOAuthCallbackUrl(protocolUrl)) {
-			showMainWindow();
-			return;
-		}
-		if (protocolUrl && handleAppProtocolFallbackUrl(protocolUrl)) {
-			showMainWindow();
-			return;
-		}
-		const mailtoUrl = findMailtoArg(argv);
-		if (mailtoUrl) {
-			queueMailtoUrl(mailtoUrl);
-		} else {
-			showMainWindow();
-		}
-	});
 }
 
 function handleAppProtocolFallbackUrl(url: string): boolean {
@@ -1165,7 +886,7 @@ async function handleExternalUrl(url: string, owner?: BrowserWindow): Promise<vo
 		return;
 	}
 	if (/^mailto:/i.test(targetUrl)) {
-		queueMailtoUrl(targetUrl);
+		protocolHandler.queueMailtoUrl(targetUrl);
 		return;
 	}
 	void shell.openExternal(targetUrl);
@@ -1241,54 +962,6 @@ function resolveWrappedMessageLink(url: string): {targetUrl: string; senderUntru
 	}
 }
 
-function registerMailtoProtocolClient(): void {
-	try {
-		logger.info('Registering mailto protocol client');
-		if (process.defaultApp) {
-			if (process.argv.length >= 2) {
-				app.setAsDefaultProtocolClient('mailto', process.execPath, [path.resolve(process.argv[1])]);
-			}
-			return;
-		}
-		app.setAsDefaultProtocolClient('mailto');
-	} catch (error) {
-		logger.warn('Failed to register mailto protocol: %s', (error as any)?.message || String(error));
-		console.warn('Failed to register mailto protocol:', error);
-	}
-}
-
-function registerAppProtocolClient(): void {
-	try {
-		logger.info('Registering %s protocol client', APP_PROTOCOL);
-		if (process.defaultApp) {
-			if (process.argv.length >= 2) {
-				app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
-			}
-			return;
-		}
-		app.setAsDefaultProtocolClient(APP_PROTOCOL);
-	} catch (error) {
-		logger.warn('Failed to register %s protocol: %s', APP_PROTOCOL, (error as any)?.message || String(error));
-		console.warn(`Failed to register ${APP_PROTOCOL} protocol:`, error);
-	}
-}
-
-function queueMailtoUrl(url: string): void {
-	if (!/^mailto:/i.test(url)) return;
-	logger.info('Queueing mailto url=%s', url);
-	pendingMailtoUrls.push(url);
-	flushPendingMailtoUrls();
-}
-
-function flushPendingMailtoUrls(): void {
-	if (!app.isReady()) return;
-	while (pendingMailtoUrls.length > 0) {
-		const next = pendingMailtoUrls.shift();
-		if (!next) continue;
-		openComposeFromMailto(next);
-	}
-}
-
 function openComposeFromMailto(url: string): void {
 	logger.info('Opening compose from mailto');
 	const draft = parseComposeDraftFromMailto(url);
@@ -1354,37 +1027,6 @@ function joinAddressList(items: string[]): string | null {
 	return Array.from(new Set(items)).join(', ');
 }
 
-function findMailtoArg(argv: string[]): string | null {
-	for (const arg of argv) {
-		if (/^mailto:/i.test(arg)) return arg;
-	}
-	return null;
-}
-
-function findCustomProtocolArg(argv: string[]): string | null {
-	for (const arg of argv) {
-		if (new RegExp(`^${APP_PROTOCOL}:\\/\\/`, 'i').test(arg)) return arg;
-	}
-	return null;
-}
-
-function findRouteArg(argv: string[]): string | null {
-	for (const arg of argv) {
-		if (!arg.startsWith('--route=')) continue;
-		const route = arg.slice('--route='.length).trim();
-		if (!route.startsWith('/')) continue;
-		return route;
-	}
-	return null;
-}
-
-function findActionArg(argv: string[]): 'compose' | null {
-	for (const arg of argv) {
-		if (arg === '--action=compose') return 'compose';
-	}
-	return null;
-}
-
 function configureLinuxDesktopEntryName(): void {
 	if (process.platform !== 'linux') return;
 	const runtimeDesktop = String(process.env.CHROME_DESKTOP || '').trim();
@@ -1412,7 +1054,7 @@ if (!gotSingleInstanceLock) {
 } else {
 	configureLinuxDesktopEntryName();
 	registerGlobalErrorHandlers();
-	registerProtocolHandlers();
+	protocolHandler.registerEventHandlers();
 	installExternalNavigationPolicy();
 
 	app.whenReady().then(async () => {
@@ -1424,11 +1066,6 @@ if (!gotSingleInstanceLock) {
 			devStartupWatchdog = setTimeout(() => {
 				console.warn('[main] Dev startup watchdog triggered; forcing main window show.');
 				logger.warn('Dev startup watchdog triggered; forcing main window show');
-				try {
-					closeSplashWindow();
-				} catch {
-					// ignore splash close failures
-				}
 				showMainWindow();
 			}, 7000);
 		}
@@ -1436,10 +1073,15 @@ if (!gotSingleInstanceLock) {
 		// even if a later startup step fails.
 		registerAccountIpc();
 		registerCloudIpc();
-		registerSettingsIpc((settings) => {
-			applyRuntimeSettings();
-			void applyDemoMode(settings);
-		});
+		registerSettingsIpc(
+			(settings) => {
+				applyRuntimeSettings();
+				void applyDemoMode(settings);
+			},
+			{
+				onOpenUpdaterView: () => openUpdaterRouteInMainWindow(),
+			},
+		);
 		registerUpdaterIpc();
 		registerWindowIpc({onOpenAddAccountRoute: openAddAccountRouteInMainWindow});
 		logger.info('IPC handlers registered');
@@ -1508,8 +1150,7 @@ if (!gotSingleInstanceLock) {
 				}
 			})();
 		});
-		registerMailtoProtocolClient();
-		registerAppProtocolClient();
+		protocolHandler.registerProtocolClients();
 		configurePlatformQuickActions();
 		nativeTheme.on('updated', notifyNativeThemeUpdated);
 		initAutoUpdater((state) => {
@@ -1523,50 +1164,47 @@ if (!gotSingleInstanceLock) {
 			}
 		});
 		logger.info('Debug forwarding active');
-
-		if (!isDev) {
-			openSplashWindow();
-			const startupUpdateResult = await runStartupUpdateFlow();
-			logger.info('Startup update flow result=%s', startupUpdateResult);
-			console.log(`[main-startup] startup update flow result=${startupUpdateResult}`);
-			if (startupUpdateResult === 'installing') {
-				return;
+		createWindow('/windows/splash');
+		showMainWindow();
+		const startupFlowStartedAt = Date.now();
+		const startupUpdateResult = await runStartupUpdateFlow();
+		logger.info('Startup update flow result=%s', startupUpdateResult);
+		console.log(`[main-startup] startup update flow result=${startupUpdateResult}`);
+		if (startupUpdateResult === 'installing') {
+			return;
+		}
+		if (isDev) {
+			const elapsed = Date.now() - startupFlowStartedAt;
+			const remaining = Math.max(0, DEV_SPLASH_MIN_DURATION_MS - elapsed);
+			if (remaining > 0) {
+				await new Promise((resolve) => setTimeout(resolve, remaining));
 			}
-			closeSplashWindow();
 		}
 
 		const accounts = dbReady ? await getAccounts().catch(() => []) : [];
 		logger.info('Loaded accounts count=%d', accounts.length);
 		console.log(`[main-startup] accounts loaded count=${accounts.length}`);
+		startupFlowComplete = true;
 		setMainWindowActionsEnabled(accounts.length > 0);
-		pendingStartupRoute = findRouteArg(process.argv);
-		pendingStartupCompose = findActionArg(process.argv) === 'compose';
+		const startupIntent = protocolHandler.resolveLaunchIntent(process.argv);
+		pendingStartupRoute = startupIntent.route;
+		pendingStartupCompose = startupIntent.action === 'compose';
 		if (accounts.length === 0) {
-			createWindow();
-			openMainWindowEntryPoint();
+			navigateMainWindowToRouteDirect('/onboarding', {replaceHistory: true});
 		} else {
-			createWindow();
 			if (pendingStartupRoute) {
-				navigateMainWindowToRoute(pendingStartupRoute);
+				navigateMainWindowToRouteDirect(pendingStartupRoute, {replaceHistory: true});
 				pendingStartupRoute = null;
+			} else {
+				navigateMainWindowToRouteDirect('/email', {replaceHistory: true});
 			}
 			if (pendingStartupCompose) {
 				openComposeQuickAction();
 				pendingStartupCompose = false;
 			}
 		}
-		const initialMailtoUrl = findMailtoArg(process.argv);
-		if (initialMailtoUrl) {
-			queueMailtoUrl(initialMailtoUrl);
-		}
-		const initialProtocolUrl = findCustomProtocolArg(process.argv);
-		if (initialProtocolUrl && queueMailOAuthCallbackUrl(initialProtocolUrl)) {
-			showMainWindow();
-		}
-		if (initialProtocolUrl && queueCloudOAuthCallbackUrl(initialProtocolUrl)) {
-			showMainWindow();
-		}
-		flushPendingMailtoUrls();
+		protocolHandler.handleInitialLaunchArgs(process.argv);
+		protocolHandler.flushPendingMailtoUrls();
 		updateUnreadIndicators(getCurrentUnreadCount());
 		if (dbReady) {
 			startAccountAutoSync();

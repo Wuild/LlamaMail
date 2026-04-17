@@ -47,8 +47,6 @@ import {
 	CLOUD_TABLE_COLUMN_OPTIONS,
 	type CloudTableColumnKey,
 	constrainToViewport,
-	DEFAULT_ONEDRIVE_CLIENT_ID,
-	DEFAULT_ONEDRIVE_TENANT_ID,
 	Field,
 	formatStorageUsage,
 	formatStorageUsagePercent,
@@ -96,7 +94,6 @@ export default function CloudFilesPage() {
 	const [showAddModal, setShowAddModal] = useState(false);
 	const [showEditModal, setShowEditModal] = useState(false);
 	const [adding, setAdding] = useState(false);
-	const [linkingOAuth, setLinkingOAuth] = useState(false);
 	const [savingEdit, setSavingEdit] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const [mutating, setMutating] = useState(false);
@@ -847,31 +844,6 @@ export default function CloudFilesPage() {
 		}
 	}
 
-	async function onLinkOneDriveAccount(): Promise<void> {
-		if (linkingOAuth) return;
-		setLinkingOAuth(true);
-		setStatus('Opening OneDrive sign-in...');
-		try {
-			await ipcClient.linkCloudOAuth('onedrive', {
-				clientId: DEFAULT_ONEDRIVE_CLIENT_ID,
-				tenantId: DEFAULT_ONEDRIVE_TENANT_ID,
-			});
-			setShowAddModal(false);
-			setDraft({
-				provider: 'nextcloud',
-				name: '',
-				base_url: '',
-				user: '',
-				secret: '',
-			});
-			setStatus('OneDrive account linked.');
-		} catch (error: any) {
-			setStatus(`OneDrive sign-in failed: ${error?.message || String(error)}`);
-		} finally {
-			setLinkingOAuth(false);
-		}
-	}
-
 	function navigateToAccount(account: PublicCloudAccount, forceReload = false): void {
 		const rootTrail = buildRootTrail(account.provider);
 		const nextParams = new URLSearchParams(searchParams);
@@ -963,21 +935,8 @@ export default function CloudFilesPage() {
 	}
 
 	const requiresWebDavFields = draft.provider === 'nextcloud' || draft.provider === 'webdav';
-	const isOneDriveOAuthProvider = draft.provider === 'onedrive';
 	const editRequiresWebDavFields = editDraft?.provider === 'nextcloud' || editDraft?.provider === 'webdav';
-	const secretLabel = draft.provider === 'onedrive' ? 'OAuth key / access token' : 'Password / app token';
-	const tokenHelp =
-		draft.provider === 'onedrive'
-			? {
-					title: 'OneDrive sign-in',
-					steps: [
-						'Click "Sign in with OneDrive".',
-						'Complete Microsoft sign-in and consent in your browser.',
-						'Return to LlamaMail after the browser callback finishes.',
-					],
-					link: 'https://support.microsoft.com/onedrive',
-				}
-			: null;
+	const secretLabel = 'Password / app token';
 
 	function toggleAccountExpanded(accountId: number): void {
 		setCollapsedAccountIds((prev) => {
@@ -1673,7 +1632,7 @@ export default function CloudFilesPage() {
 						<div>
 							<h3 className="ui-text-primary text-base font-semibold">Add Cloud Account</h3>
 							<p className="ui-text-muted mt-1 text-xs">
-								Nextcloud/WebDAV uses URL + username + app password. OneDrive can use direct sign-in.
+								Nextcloud/WebDAV uses URL + username + app password.
 							</p>
 						</div>
 						<Cloud size={18} className="icon-muted" />
@@ -1687,17 +1646,14 @@ export default function CloudFilesPage() {
 							options={[
 								{value: 'nextcloud', label: 'Nextcloud (WebDAV)'},
 								{value: 'webdav', label: 'Generic WebDAV'},
-								{value: 'onedrive', label: 'OneDrive (Sign in)'},
 							]}
 						/>
-						{!isOneDriveOAuthProvider && (
-							<Field
-								label="Account name"
-								value={draft.name}
-								onChange={(next) => setDraft((prev) => ({...prev, name: next}))}
-								placeholder="Personal Drive"
-							/>
-						)}
+						<Field
+							label="Account name"
+							value={draft.name}
+							onChange={(next) => setDraft((prev) => ({...prev, name: next}))}
+							placeholder="Personal Drive"
+						/>
 						{requiresWebDavFields && (
 							<>
 								<Field
@@ -1714,39 +1670,13 @@ export default function CloudFilesPage() {
 								/>
 							</>
 						)}
-						{!isOneDriveOAuthProvider && (
-							<Field
-								label={secretLabel}
-								value={draft.secret}
-								onChange={(next) => setDraft((prev) => ({...prev, secret: next}))}
-								placeholder={
-									draft.provider === 'onedrive' ? 'Paste OAuth key or access token' : 'App password'
-								}
-								type="password"
-							/>
-						)}
-						{tokenHelp && (
-							<div className="surface-muted rounded-md border ui-border-default px-3 py-2">
-								<p className="ui-text-secondary text-xs font-semibold">{tokenHelp.title}</p>
-								<p className="ui-text-secondary mt-1 text-xs">
-									LlamaMail handles OneDrive OAuth tokens automatically, including refresh when the
-									access token expires.
-								</p>
-								<ol className="ui-text-secondary mt-1 list-decimal space-y-0.5 pl-4 text-xs">
-									{tokenHelp.steps.map((step) => (
-										<li key={step}>{step}</li>
-									))}
-								</ol>
-								<a
-									href={tokenHelp.link}
-									target="_blank"
-									rel="noreferrer noopener"
-									className="link-primary mt-1 inline-block text-xs underline underline-offset-2"
-								>
-									Open helper page
-								</a>
-							</div>
-						)}
+						<Field
+							label={secretLabel}
+							value={draft.secret}
+							onChange={(next) => setDraft((prev) => ({...prev, secret: next}))}
+							placeholder="App password"
+							type="password"
+						/>
 					</div>
 					<div className="mt-4 flex items-center justify-between gap-2">
 						<Button
@@ -1761,26 +1691,12 @@ export default function CloudFilesPage() {
 							type="button"
 							variant="default"
 							className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-							disabled={
-								isOneDriveOAuthProvider
-									? linkingOAuth
-									: adding || !draft.name.trim() || !draft.secret.trim()
-							}
+							disabled={adding || !draft.name.trim() || !draft.secret.trim()}
 							onClick={() => {
-								if (isOneDriveOAuthProvider) {
-									void onLinkOneDriveAccount();
-									return;
-								}
 								void onAddCloudAccount();
 							}}
 						>
-							{isOneDriveOAuthProvider
-								? linkingOAuth
-									? 'Signing in...'
-									: 'Sign in with OneDrive'
-								: adding
-									? 'Adding...'
-									: 'Add Cloud Account'}
+							{adding ? 'Adding...' : 'Add Cloud Account'}
 						</Button>
 					</div>
 				</Modal>

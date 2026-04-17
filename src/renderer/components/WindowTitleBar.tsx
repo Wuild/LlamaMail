@@ -31,6 +31,7 @@ export default function WindowTitleBar({
 	const {appSettings} = useAppSettings(DEFAULT_APP_SETTINGS);
 	const {isMaximized, capabilities, toggleMaximize, minimize, close} = useWindowControlsState();
 	const {appVersion} = useAutoUpdateState();
+	const hasPageTitle = String(title || '').trim().length > 0;
 	if (appSettings.useNativeTitleBar) {
 		return null;
 	}
@@ -60,10 +61,12 @@ export default function WindowTitleBar({
 						{appVersion}
 					</span>
 				</div>
-				<span aria-hidden className="titlebar-divider h-3.5 w-px shrink-0" />
-				<span className="titlebar-title block min-w-0 flex-1 truncate text-xs font-semibold tracking-wide">
-					{title}
-				</span>
+				{hasPageTitle ? <span aria-hidden className="titlebar-divider h-3.5 w-px shrink-0" /> : null}
+				{hasPageTitle ? (
+					<span className="titlebar-title block min-w-0 flex-1 truncate text-xs font-semibold tracking-wide">
+						{title}
+					</span>
+				) : null}
 			</div>
 			<div
 				className="titlebar-actions flex shrink-0 items-center justify-end gap-1"

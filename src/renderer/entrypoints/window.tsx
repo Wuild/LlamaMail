@@ -18,10 +18,10 @@ const DebugWindow = React.lazy(DEBUG_LOADER);
 const SplashWindow = React.lazy(SPLASH_LOADER);
 
 const routeObjects: RouteObject[] = [
-	{path: '/windows/splash', element: <SplashWindow />},
 	{
 		element: <AppLayout />,
 		children: [
+			{path: '/windows/splash', element: <SplashWindow />},
 			{path: '/windows/add-account', element: <AddAccountWindow />},
 			{path: '/windows/compose', element: <ComposeWindow />},
 			{path: '/windows/message', element: <MessageWindow />},

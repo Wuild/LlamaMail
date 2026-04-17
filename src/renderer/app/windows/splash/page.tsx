@@ -23,7 +23,7 @@ export default function SplashScreenPage() {
 	const isDownloading = state.phase === 'downloading';
 
 	return (
-		<div className="splash-screen h-screen w-screen overflow-hidden">
+		<div className="splash-screen h-full w-full overflow-hidden">
 			<div className="relative flex h-full items-center justify-center overflow-hidden p-8">
 				<div className="splash-screen-glow pointer-events-none absolute inset-0" />
 				<div className="mx-auto flex w-full max-w-[360px] flex-col items-center">

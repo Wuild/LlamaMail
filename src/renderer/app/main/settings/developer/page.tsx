@@ -94,21 +94,21 @@ export default function SettingsDeveloperPage() {
 	}
 
 	async function onShowUpdaterWindow() {
-		setDeveloperStatus('Opening updater window in first app window...');
+		setDeveloperStatus('Opening updater/startup view in main window...');
 		try {
 			const result = await ipcClient.devOpenUpdaterWindow();
 			if (result.opened) {
-				setDeveloperStatus('Updater window opened in first app window.');
+				setDeveloperStatus('Updater/startup view opened in main window.');
 				return;
 			}
-			setDeveloperStatus('No app window available to open updater window.');
+			setDeveloperStatus('No app window available to open updater/startup view.');
 		} catch (e: any) {
-			setDeveloperStatus(`Failed to open updater window: ${e?.message || String(e)}`);
+			setDeveloperStatus(`Failed to open updater/startup view: ${e?.message || String(e)}`);
 		}
 	}
 
 	return (
-		<div className="mx-auto h-full min-h-0 w-full max-w-5xl space-y-4">
+		<div className="mx-auto h-full min-h-0 w-full max-w-5xl space-y-4 pb-4 md:pb-6">
 			<section className="panel rounded-xl p-4">
 				<h2 className="ui-text-primary text-base font-semibold">Developer Settings</h2>
 				<p className="mt-1 ui-text-muted text-sm">
