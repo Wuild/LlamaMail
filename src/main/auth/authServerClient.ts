@@ -112,11 +112,7 @@ export function buildMailOAuthStartUrl(
 	const url = new URL(buildAuthServerUrl(`/api/auth/${provider}/start`));
 	url.searchParams.set('redirect_to', redirectTo);
 	const normalizedAdditionalScopes = Array.from(
-		new Set(
-			(options.additionalScopes ?? [])
-				.map((value) => String(value || '').trim())
-				.filter(Boolean),
-		),
+		new Set((options.additionalScopes ?? []).map((value) => String(value || '').trim()).filter(Boolean)),
 	);
 	if (normalizedAdditionalScopes.length > 0) {
 		url.searchParams.set('scopes', normalizedAdditionalScopes.join(' '));

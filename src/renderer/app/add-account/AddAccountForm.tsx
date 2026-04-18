@@ -467,9 +467,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 			if (linkCloudStorage && autoCloudProvider && selectedAuthMethod === 'oauth2') {
 				try {
 					const preferredEmailRaw = String(oauthSession?.email || email || '').trim();
-					const preferredEmail = preferredEmailRaw
-						.trim()
-						.toLowerCase();
+					const preferredEmail = preferredEmailRaw.trim().toLowerCase();
 					const existingCloudAccounts = await ipcClient.getCloudAccounts();
 					const hasMatchingAccount = preferredEmail
 						? existingCloudAccounts.some(
@@ -501,7 +499,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 							const displayName = String(oauthSession?.displayName || '').trim();
 							await ipcClient.addCloudAccount({
 								provider: 'google-drive',
-								name: preferredEmailRaw || (displayName ? `${displayName} (Google Drive)` : 'Google Drive'),
+								name:
+									preferredEmailRaw ||
+									(displayName ? `${displayName} (Google Drive)` : 'Google Drive'),
 								user: preferredEmail || null,
 								base_url: null,
 								secret: secretPayload,

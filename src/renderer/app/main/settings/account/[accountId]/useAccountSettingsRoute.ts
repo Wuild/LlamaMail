@@ -150,7 +150,10 @@ export function useAccountSettingsRoute(
 		};
 	}, []);
 
-	const linkedCloudDrive = useMemo(() => resolveLinkedCloudDrive(selectedAccount, cloudAccounts), [cloudAccounts, selectedAccount]);
+	const linkedCloudDrive = useMemo(
+		() => resolveLinkedCloudDrive(selectedAccount, cloudAccounts),
+		[cloudAccounts, selectedAccount],
+	);
 	const canLinkCloudDrive = useMemo(
 		() => canAccountManageCloudDrive(selectedAccount) && !linkedCloudDrive,
 		[linkedCloudDrive, selectedAccount],
@@ -467,14 +470,12 @@ export function useAccountSettingsRoute(
 }
 
 function resolveLinkedCloudDrive(
-	account:
-		| {
-				email: string;
-				provider?: string | null;
-				oauth_provider?: string | null;
-				auth_method?: string | null;
-		  }
-		| null,
+	account: {
+		email: string;
+		provider?: string | null;
+		oauth_provider?: string | null;
+		auth_method?: string | null;
+	} | null,
 	cloudAccounts: PublicCloudAccount[],
 ): PublicCloudAccount | null {
 	if (!account) return null;
@@ -496,16 +497,19 @@ function resolveLinkedCloudDrive(
 }
 
 function canAccountManageCloudDrive(
-	account:
-		| {
-				provider?: string | null;
-				oauth_provider?: string | null;
-				auth_method?: string | null;
-		  }
-		| null,
+	account: {
+		provider?: string | null;
+		oauth_provider?: string | null;
+		auth_method?: string | null;
+	} | null,
 ): boolean {
 	if (!account) return false;
-	if (String(account.auth_method || '').trim().toLowerCase() !== 'oauth2') return false;
+	if (
+		String(account.auth_method || '')
+			.trim()
+			.toLowerCase() !== 'oauth2'
+	)
+		return false;
 	return resolveCloudProvider(account.provider, account.oauth_provider) !== null;
 }
 

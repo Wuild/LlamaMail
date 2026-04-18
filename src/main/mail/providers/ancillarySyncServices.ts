@@ -143,7 +143,9 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 }
 
 function looksLikeJwt(token: string): boolean {
-	return String(token || '')
-		.trim()
-		.split('.').length === 3;
+	return (
+		String(token || '')
+			.trim()
+			.split('.').length === 3
+	);
 }

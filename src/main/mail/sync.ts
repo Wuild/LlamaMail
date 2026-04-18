@@ -290,8 +290,12 @@ function isExchangeImapPlaceholderEnvelope(envelope: unknown): boolean {
 	const fromList = Array.isArray(unsafeEnvelope?.from) ? unsafeEnvelope.from : [];
 	const hasMissingHostMarker = fromList.some((entry: any) => {
 		if (!entry || typeof entry !== 'object') return false;
-		const host = String(entry.host ?? '').trim().toLowerCase();
-		const address = String(entry.address ?? '').trim().toLowerCase();
+		const host = String(entry.host ?? '')
+			.trim()
+			.toLowerCase();
+		const address = String(entry.address ?? '')
+			.trim()
+			.toLowerCase();
 		return host === '.missing-host-name.' || address.includes('.missing-host-name.');
 	});
 	return subject.startsWith(EXCHANGE_IMAP_PLACEHOLDER_SUBJECT_PREFIX) || hasMissingHostMarker;

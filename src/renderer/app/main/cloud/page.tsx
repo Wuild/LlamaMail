@@ -1655,7 +1655,10 @@ export default function CloudFilesPage() {
 					</ContextMenuItem>
 					{isOAuthManagedCloudAccount(accountMenu.account) ? (
 						<>
-							<ContextMenuItem type="button" onClick={() => onOpenLinkedAccountSettings(accountMenu.account)}>
+							<ContextMenuItem
+								type="button"
+								onClick={() => onOpenLinkedAccountSettings(accountMenu.account)}
+							>
 								Open linked account settings
 							</ContextMenuItem>
 							<ContextMenuItem type="button" disabled>
@@ -1667,7 +1670,11 @@ export default function CloudFilesPage() {
 							<ContextMenuItem type="button" onClick={() => onOpenAccountSettings(accountMenu.account)}>
 								Edit account
 							</ContextMenuItem>
-							<ContextMenuItem type="button" danger onClick={() => void onDeleteAccount(accountMenu.account)}>
+							<ContextMenuItem
+								type="button"
+								danger
+								onClick={() => void onDeleteAccount(accountMenu.account)}
+							>
 								Delete account
 							</ContextMenuItem>
 						</>
@@ -1959,7 +1966,8 @@ function resolveLinkedMailAccountId(account: PublicCloudAccount, mailAccounts: P
 	const cloudUser = String(account.user || '')
 		.trim()
 		.toLowerCase();
-	const targetProvider = account.provider === 'google-drive' ? 'google' : account.provider === 'onedrive' ? 'microsoft' : '';
+	const targetProvider =
+		account.provider === 'google-drive' ? 'google' : account.provider === 'onedrive' ? 'microsoft' : '';
 	if (!targetProvider) return null;
 
 	const byProvider = mailAccounts.filter((mailAccount) => {

@@ -206,9 +206,7 @@ function toErrorDetail(error: unknown): string | null {
 async function runStartupUpdateFlowWithTimeout(timeoutMs: number): Promise<'proceed' | 'installing'> {
 	const startupPromise = runStartupUpdateFlow();
 	while (true) {
-		const raceResult = await Promise.race<
-			{type: 'done'; result: 'proceed' | 'installing'} | {type: 'timeout'}
-		>([
+		const raceResult = await Promise.race<{type: 'done'; result: 'proceed' | 'installing'} | {type: 'timeout'}>([
 			startupPromise.then((result) => ({type: 'done' as const, result})),
 			new Promise<{type: 'timeout'}>((resolve) => {
 				setTimeout(() => resolve({type: 'timeout'}), timeoutMs);

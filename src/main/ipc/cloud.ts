@@ -144,7 +144,10 @@ export function registerCloudIpc(): void {
 		if (!mailAccount) {
 			throw new Error(`Account ${safeAccountId} not found.`);
 		}
-		const cloudProvider = resolveOAuthCloudProvider(mailAccount.provider ?? null, mailAccount.oauth_provider ?? null);
+		const cloudProvider = resolveOAuthCloudProvider(
+			mailAccount.provider ?? null,
+			mailAccount.oauth_provider ?? null,
+		);
 		if (!cloudProvider) {
 			return {removed: false as const, reason: 'provider-not-supported' as const, cloudAccountId: null};
 		}
@@ -179,7 +182,10 @@ export function registerCloudIpc(): void {
 		if (!mailAccount) {
 			throw new Error(`Account ${safeAccountId} not found.`);
 		}
-		const cloudProvider = resolveOAuthCloudProvider(mailAccount.provider ?? null, mailAccount.oauth_provider ?? null);
+		const cloudProvider = resolveOAuthCloudProvider(
+			mailAccount.provider ?? null,
+			mailAccount.oauth_provider ?? null,
+		);
 		if (!cloudProvider) {
 			return {linked: false as const, reason: 'provider-not-supported' as const, cloudAccount: null};
 		}
@@ -205,7 +211,9 @@ export function registerCloudIpc(): void {
 		}
 		const oauthSession = credentials.oauth_session;
 		const providerClientId =
-			cloudProvider === 'onedrive' ? String(oauthSession.clientId || '').trim() || ONEDRIVE_APP_ID : String(oauthSession.clientId || '').trim() || null;
+			cloudProvider === 'onedrive'
+				? String(oauthSession.clientId || '').trim() || ONEDRIVE_APP_ID
+				: String(oauthSession.clientId || '').trim() || null;
 		const providerTenantId =
 			cloudProvider === 'onedrive' ? String(oauthSession.tenantId || '').trim() || ONEDRIVE_TENANT_ID : null;
 		const secretPayload = JSON.stringify({
@@ -218,7 +226,10 @@ export function registerCloudIpc(): void {
 			clientId: providerClientId,
 			tenantId: providerTenantId,
 		});
-		const accountName = String(mailAccount.email || '').trim() || String(mailAccount.display_name || '').trim() || (cloudProvider === 'google-drive' ? 'Google Drive' : 'OneDrive');
+		const accountName =
+			String(mailAccount.email || '').trim() ||
+			String(mailAccount.display_name || '').trim() ||
+			(cloudProvider === 'google-drive' ? 'Google Drive' : 'OneDrive');
 		const created = await addCloudAccount({
 			provider: cloudProvider,
 			name: accountName,
