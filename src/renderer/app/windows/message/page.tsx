@@ -1,7 +1,7 @@
-import {Button} from '@renderer/components/ui/button';
-import {ContextMenu, ContextMenuItem} from '@renderer/components/ui/ContextMenu';
+import {Button} from '@llamamail/ui/button';
+import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {FileText, Forward, Reply, ReplyAll, Trash2} from 'lucide-react';
+import {FileText, Forward, Reply, ReplyAll, Trash2} from '@llamamail/ui/icon';
 import type {MessageBodyResult, MessageDetails} from '@/preload';
 import {toErrorMessage} from '@renderer/lib/statusText';
 import {
@@ -17,7 +17,7 @@ import {
 	normalizeMessageId,
 } from '@renderer/features/mail/composeDraft';
 import {clampToViewport} from '@renderer/lib/format';
-import {Modal, ModalHeader} from '@renderer/components/ui/Modal';
+import {Modal, ModalHeader} from '@llamamail/ui/modal';
 import {MessageHeaderCard} from '@renderer/components/mail/MessageHeaderCard';
 import {MessageBodyPane} from '@renderer/components/mail/MessageBodyPane';
 import {useAppTheme} from '@renderer/hooks/useAppTheme';
@@ -31,7 +31,7 @@ import {ipcClient} from '@renderer/lib/ipcClient';
 import {useIpcEvent} from '@renderer/hooks/ipc/useIpcEvent';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {useSystemLocale} from '@renderer/hooks/ipc/useSystemLocale';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {buildMessageIframeSrcDoc, formatMessageTagLabel} from '@renderer/app/main/email/mailPageHelpers';
 import {useApp} from '@renderer/app/AppContext';
 

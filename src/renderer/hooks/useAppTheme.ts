@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useIpcEvent} from './ipc/useIpcEvent';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import type {AppTheme} from '@/shared/ipcTypes';
+import type {AppTheme} from '@llamamail/app/ipcTypes';
 
 export type ThemePreference = AppTheme;
 

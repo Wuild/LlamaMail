@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import tls from 'tls';
 import net from 'net';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
-import type {AuthMethod, OAuthSession} from '@/shared/ipcTypes.js';
+import type {AuthMethod, OAuthSession} from '@llamamail/app/ipcTypes';
 
 export interface VerifyPayload {
 	type: 'imap' | 'pop3' | 'smtp';

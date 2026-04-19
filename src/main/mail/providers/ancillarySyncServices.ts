@@ -4,7 +4,7 @@ import {syncOauthProviderDav} from '@main/dav/oauthSync.js';
 import {refreshMailOAuthSessionWithOptions} from '@main/auth/authServerClient.js';
 import {getMicrosoftGraphOAuthScopes} from '@main/mail/oauth.js';
 import type {MailProviderDriver, ProviderAncillarySyncResult, ProviderAncillarySyncService} from './contracts.js';
-import type {DavSyncOptions, OAuthProvider} from '@/shared/ipcTypes.js';
+import type {DavSyncOptions, OAuthProvider} from '@llamamail/app/ipcTypes';
 
 export class DavAncillarySyncService implements ProviderAncillarySyncService {
 	readonly #driver: MailProviderDriver;
@@ -31,8 +31,14 @@ export class DavAncillarySyncService implements ProviderAncillarySyncService {
 		if (!shouldSyncContacts && !shouldSyncCalendar) {
 			return {
 				moduleStatus: {
-					contacts: {state: 'skipped', reason: resolveSkippedReason('contacts', supportsContacts, syncContacts)},
-					calendar: {state: 'skipped', reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar)},
+					contacts: {
+						state: 'skipped',
+						reason: resolveSkippedReason('contacts', supportsContacts, syncContacts),
+					},
+					calendar: {
+						state: 'skipped',
+						reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar),
+					},
 				},
 			};
 		}
@@ -95,8 +101,14 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 		if (!shouldSyncContacts && !shouldSyncCalendar) {
 			return {
 				moduleStatus: {
-					contacts: {state: 'skipped', reason: resolveSkippedReason('contacts', supportsContacts, syncContacts)},
-					calendar: {state: 'skipped', reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar)},
+					contacts: {
+						state: 'skipped',
+						reason: resolveSkippedReason('contacts', supportsContacts, syncContacts),
+					},
+					calendar: {
+						state: 'skipped',
+						reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar),
+					},
 				},
 			};
 		}
@@ -111,13 +123,19 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 					moduleStatus: {
 						contacts: shouldSyncContacts
 							? {state: 'success'}
-							: {state: 'skipped', reason: resolveSkippedReason('contacts', supportsContacts, syncContacts)},
+							: {
+									state: 'skipped',
+									reason: resolveSkippedReason('contacts', supportsContacts, syncContacts),
+								},
 						calendar: shouldSyncCalendar
 							? {state: 'success'}
-							: {state: 'skipped', reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar)},
-						},
-					};
-				}
+							: {
+									state: 'skipped',
+									reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar),
+								},
+					},
+				};
+			}
 			if (this.#provider === 'microsoft' && credentials.oauth_session?.refreshToken) {
 				const refreshed = await refreshMailOAuthSessionWithOptions(credentials.oauth_session, {
 					additionalScopes: getMicrosoftGraphOAuthScopes(),
@@ -165,11 +183,7 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 	}
 }
 
-function resolveSkippedReason(
-	module: 'contacts' | 'calendar',
-	isSupported: boolean,
-	isEnabled: boolean,
-): string {
+function resolveSkippedReason(module: 'contacts' | 'calendar', isSupported: boolean, isEnabled: boolean): string {
 	if (!isSupported) {
 		return module === 'contacts'
 			? 'Provider does not support contacts sync.'

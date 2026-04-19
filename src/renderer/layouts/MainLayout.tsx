@@ -1,7 +1,7 @@
 import React from 'react';
-import {Star} from 'lucide-react';
+import {Star} from '@llamamail/ui/icon';
 import type {FolderItem, MessageItem, PublicAccount} from '@/preload';
-import type {MailView} from '@/shared/ipcTypes';
+import type {MailView} from '@llamamail/app/ipcTypes';
 import AccountContextMenu from '@renderer/components/mail/AccountContextMenu';
 import AccountFolderSidebar from '@renderer/components/mail/AccountFolderSidebar';
 import CreateFolderModal from '@renderer/components/mail/CreateFolderModal';
@@ -34,7 +34,7 @@ import {
 import {getTagDotClass, getTagLabel} from '@renderer/lib/mail/tagPresentation';
 import {useResizableSidebar} from '@renderer/hooks/useResizableSidebar';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import type {Workspace} from '@renderer/lib/workspace';
 import WorkspaceLayout from './WorkspaceLayout';
 
@@ -1214,13 +1214,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 						onOpenAccountContextMenu={(account, x, y) => {
 							setAccountMenu({x, y, account});
 						}}
-							onOpenCompose={(accountId) => {
-								void ipcClient.openComposeWindow(accountId ? {accountId} : undefined);
-							}}
-							onOpenAddAccount={() => {
-								window.location.hash = '/add-account';
-							}}
-							onHandleMessageDropOnFolder={handleMessageDropOnFolder}
+						onOpenCompose={(accountId) => {
+							void ipcClient.openComposeWindow(accountId ? {accountId} : undefined);
+						}}
+						onOpenAddAccount={() => {
+							window.location.hash = '/add-account';
+						}}
+						onHandleMessageDropOnFolder={handleMessageDropOnFolder}
 						onOpenFolderContextMenu={(accountId, folder, x, y) => {
 							if (accountId !== selectedAccountId) onSelectAccount(accountId);
 							setMenu({kind: 'folder', x, y, folder});

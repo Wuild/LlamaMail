@@ -1,7 +1,7 @@
 import {type CloudAccountCredentials, setCloudAccountSecret} from '@main/db/repositories/cloudRepo.js';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {refreshMailOAuthSession} from '@main/auth/authServerClient.js';
-import type {OAuthSession} from '@/shared/ipcTypes.js';
+import type {OAuthSession} from '@llamamail/app/ipcTypes';
 
 export interface CloudItem {
 	id: string;
@@ -1300,7 +1300,9 @@ function resolveGoogleDriveExportTarget(
 
 function ensureFilenameExtension(name: string, extension: string): string {
 	const normalizedName = String(name || '').trim() || 'download';
-	const normalizedExtension = String(extension || '').trim().toLowerCase();
+	const normalizedExtension = String(extension || '')
+		.trim()
+		.toLowerCase();
 	if (!normalizedExtension.startsWith('.')) return normalizedName;
 	if (normalizedName.toLowerCase().endsWith(normalizedExtension)) return normalizedName;
 	return `${normalizedName}${normalizedExtension}`;
@@ -1576,7 +1578,11 @@ async function oneDriveFetch(account: CloudAccountCredentials, input: string, in
 	return fetch(input, withBearerToken(init, refreshedToken));
 }
 
-async function googleDriveFetch(account: CloudAccountCredentials, input: string, init?: RequestInit): Promise<Response> {
+async function googleDriveFetch(
+	account: CloudAccountCredentials,
+	input: string,
+	init?: RequestInit,
+): Promise<Response> {
 	const token = await resolveCloudBearerToken(account);
 	const response = await fetch(input, withBearerToken(init, token));
 	if (response.status !== 401) return response;

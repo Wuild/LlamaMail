@@ -55,7 +55,7 @@ export function openRouteWindow(route: string): BrowserWindow {
 			{target: 'http://127.0.0.1:5174/window.html', hash: routeHash},
 			{target: 'http://127.0.0.1:5174/src/renderer/window.html', hash: routeHash},
 		],
-		prodFiles: [{target: path.join(__dirname, '..', '..', 'renderer/window.html'), hash: routeHash}],
+		prodFiles: [{target: path.join(__dirname, '..', '..', 'build', 'renderer', 'window.html'), hash: routeHash}],
 		windowName: `route:${routeHash}`,
 	}).catch((error) => {
 		console.error(`Failed to load route window (${routeHash}):`, error);

@@ -5,7 +5,7 @@ import type {
 	DiscoverResult,
 	ServiceProtocolType,
 	ServiceSettings,
-} from '@/shared/ipcTypes.js';
+} from '@llamamail/app/ipcTypes';
 
 export type DiscoveredSettings = DiscoverResult & {
 	candidates: Array<{type: ServiceProtocolType; host: string; port: number; secure: boolean; source: string}>;

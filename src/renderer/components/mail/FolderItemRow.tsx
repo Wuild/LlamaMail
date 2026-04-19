@@ -1,9 +1,9 @@
-import {Button} from '../ui/button';
+import {Button} from '@llamamail/ui/button';
 import React from 'react';
 import {Link} from 'react-router-dom';
-import {RefreshCw, Settings} from 'lucide-react';
+import {RefreshCw, Settings} from '@llamamail/ui/icon';
 import NewEmailBadge from './NewEmailBadge';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 
 type FolderItemRowProps = {
 	to?: string;

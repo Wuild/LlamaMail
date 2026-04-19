@@ -1,5 +1,5 @@
 import React from 'react';
-import {Archive, FileText, Inbox, Send, ShieldAlert, Trash2} from 'lucide-react';
+import {Archive, FileText, Inbox, Send, ShieldAlert, Trash2} from '@llamamail/ui/icon';
 import type {FolderItem} from '@/preload';
 
 export function getFolderIcon(folder: FolderItem): React.ReactNode {

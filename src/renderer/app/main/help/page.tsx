@@ -1,4 +1,4 @@
-import {Button} from '@renderer/components/ui/button';
+import {Button} from '@llamamail/ui/button';
 import React, {useEffect, useState} from 'react';
 import {useAppTheme} from '@renderer/hooks/useAppTheme';
 import {ipcClient} from '@renderer/lib/ipcClient';
@@ -68,9 +68,9 @@ export default function SupportPage() {
 						</section>
 
 						<div className="columns-1 gap-4 md:columns-2">
-						<section className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
-							<h2 className="ui-text-primary font-semibold">Project Snapshot</h2>
-							<div className="ui-text-secondary mt-2 grid gap-2">
+							<section className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
+								<h2 className="ui-text-primary font-semibold">Project Snapshot</h2>
+								<div className="ui-text-secondary mt-2 grid gap-2">
 									<div>
 										<span className="ui-text-muted font-medium">App version:</span> {version}
 									</div>
@@ -106,11 +106,11 @@ export default function SupportPage() {
 											</span>
 										</span>
 									</a>
-							</div>
-						</section>
+								</div>
+							</section>
 
-						<section className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
-							<h2 className="ui-text-primary font-semibold">How It Works</h2>
+							<section className="panel mb-4 break-inside-avoid rounded-xl p-4 text-sm">
+								<h2 className="ui-text-primary font-semibold">How It Works</h2>
 								<div className="ui-text-secondary mt-2 space-y-2">
 									<p>
 										<span className="ui-text-secondary font-medium">Accounts & sync:</span> Each

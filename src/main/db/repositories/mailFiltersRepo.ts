@@ -8,7 +8,7 @@ import type {
 	MailFilterMatchMode,
 	MailFilterOperator,
 	UpsertMailFilterPayload,
-} from '@/shared/ipcTypes.js';
+} from '@llamamail/app/ipcTypes';
 
 // Filter CRUD remains intentionally raw SQL for now because it spans parent/child tables with transactional upsert
 // semantics. Keep all statements parameterized and scoped to repository functions.
@@ -21,7 +21,7 @@ export type {
 	MailFilterMatchMode,
 	MailFilterOperator,
 	UpsertMailFilterPayload,
-} from '@/shared/ipcTypes.js';
+} from '@llamamail/app/ipcTypes';
 
 export function listMailFilters(accountId: number): MailFilter[] {
 	const db = getDb();

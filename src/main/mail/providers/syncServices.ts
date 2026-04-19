@@ -16,7 +16,7 @@ export class ImapWorkerEmailSyncService implements ProviderEmailSyncService {
 		}
 
 		const credentials = await this.#driver.resolveSyncCredentials(accountId);
-		const worker = new Worker(new URL('../../workers/mailSyncWorker.mjs', import.meta.url), {
+		const worker = new Worker(new URL('../mailSyncWorker.js', import.meta.url), {
 			workerData: {
 				dbPath: getSqlitePath(),
 				credentials,

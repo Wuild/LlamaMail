@@ -1,5 +1,7 @@
 import {ipcMain} from 'electron';
 import {parseOptionalText, parsePositiveInt, parseRequiredObject, parseRequiredText} from './validation.js';
+import {tray} from '@main/windows/tray';
+import {getAppSettings} from '@main/settings/store';
 
 type AccountCoreIpcDeps = {
 	appLogger: {debug: (...args: any[]) => void; info: (...args: any[]) => void; warn: (...args: any[]) => void};
@@ -72,6 +74,8 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 			console.warn('Initial sync after account add failed:', (error as any)?.message || String(error));
 		});
 		void deps.ensureIdleWatcher(created.id);
+
+		tray.refresh();
 		return created;
 	});
 
@@ -133,6 +137,8 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 		deps.stopIdleWatcher(safeAccountId);
 		deps.notifyAccountCountChanged();
 		deps.notifyUnreadCountChanged();
+
+		tray.refresh();
 		return deleted;
 	});
 

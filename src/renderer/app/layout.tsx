@@ -1,10 +1,10 @@
 import {type ReactNode, useCallback, useEffect, useMemo, useState} from 'react';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
-import {Download} from 'lucide-react';
-import {Button} from '@renderer/components/ui/button';
+import {Download} from '@llamamail/ui/icon';
+import {Button} from '@llamamail/ui/button';
 import AppShell from '@renderer/components/AppShell';
 import ShellLayout from '@renderer/layouts/ShellLayout';
-import {APP_NAME} from '@/shared/appConfig';
+import {APP_NAME} from '@llamamail/app/appConfig';
 import {useAutoUpdateState} from '@renderer/hooks/ipc/useAutoUpdateState';
 import {AppContextProvider} from '@renderer/app/AppContext';
 import MainNavRail from '@renderer/components/navigation/MainNavRail';

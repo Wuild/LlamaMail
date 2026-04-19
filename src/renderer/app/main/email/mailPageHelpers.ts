@@ -1,5 +1,5 @@
 import mailFrameCss from '@renderer/styles/mail-frame.css?raw';
-import {APP_PROTOCOL} from '@/shared/appConfig';
+import {APP_PROTOCOL} from '@llamamail/app/appConfig';
 
 export function parseRouteNumber(value?: string): number | null {
 	if (!value) return null;

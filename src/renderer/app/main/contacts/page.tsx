@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {BookPlus, Download, Pencil, Plus, RefreshCw, Settings, Trash2, X} from 'lucide-react';
+import {BookPlus, Download, Pencil, Plus, RefreshCw, Settings, Trash2, X} from '@llamamail/ui/icon';
 import {useNavigate} from 'react-router-dom';
 import type {AddressBookItem, ContactItem, PublicAccount, SyncStatusEvent} from '@/preload';
 import {
@@ -11,9 +11,9 @@ import {useIpcEvent} from '@renderer/hooks/ipc/useIpcEvent';
 import {useAccount, useAccountDirectory} from '@renderer/hooks/ipc/useAccounts';
 import {useResizableSidebar} from '@renderer/hooks/useResizableSidebar';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {Button} from '@renderer/components/ui/button';
-import {FormInput, FormSelect, FormTextarea} from '@renderer/components/ui/FormControls';
-import {Modal, ModalHeader, ModalTitle} from '@renderer/components/ui/Modal';
+import {Button} from '@llamamail/ui/button';
+import {FormInput, FormSelect, FormTextarea} from '@llamamail/ui/form';
+import {Modal, ModalHeader, ModalTitle} from '@llamamail/ui/modal';
 import {
 	statusNoAccountSelected,
 	statusSyncPartial,
@@ -23,7 +23,7 @@ import {
 	statusSyncing,
 	toErrorMessage,
 } from '@renderer/lib/statusText';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import WorkspaceLayout from '@renderer/layouts/WorkspaceLayout';
 
 type ContactsPageProps = {
@@ -435,20 +435,20 @@ export default function ContactsPage({accountId, accounts, onSelectAccount}: Con
 							</div>
 						);
 					})}
-						{accounts.length === 0 && (
-							<Button
-								type="button"
-								variant="secondary"
-								className="w-full justify-center rounded-md px-3 py-2 text-sm"
-								onClick={() => navigate('/add-account')}
-							>
-								Add account
-							</Button>
-						)}
-					</div>
+					{accounts.length === 0 && (
+						<Button
+							type="button"
+							variant="secondary"
+							className="w-full justify-center rounded-md px-3 py-2 text-sm"
+							onClick={() => navigate('/add-account')}
+						>
+							Add account
+						</Button>
+					)}
 				</div>
-			</aside>
-		);
+			</div>
+		</aside>
+	);
 	const contactsToolbar = (
 		<div className="flex h-10 min-w-0 items-center gap-2">
 			<FormSelect

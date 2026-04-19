@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Check, Mail, Sparkles} from 'lucide-react';
+import {Check, Mail, Sparkles} from '@llamamail/ui/icon';
 import type {
 	AuthCapabilities,
 	DavDiscoveryResult,
@@ -8,8 +8,8 @@ import type {
 	ProviderDriverCatalogItem,
 } from '@/preload';
 import ServiceSettingsCard, {type ServiceSecurityMode} from '@renderer/components/settings/ServiceSettingsCard';
-import {Button} from '@renderer/components/ui/button';
-import {FormCheckbox, FormInput} from '@renderer/components/ui/FormControls';
+import {Button} from '@llamamail/ui/button';
+import {FormCheckbox, FormInput} from '@llamamail/ui/form';
 import {useAppTheme} from '@renderer/hooks/useAppTheme';
 import {isEditableTarget} from '@renderer/lib/dom';
 import {ipcClient} from '@renderer/lib/ipcClient';
@@ -353,7 +353,9 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 			} catch (e: any) {
 				const message = e?.message || String(e);
 				if (isCredentialErrorMessage(message)) {
-					setError(buildAuthFailureMessage(buildProviderPresetAuth(providerChoice), message, selectedAuthMethod));
+					setError(
+						buildAuthFailureMessage(buildProviderPresetAuth(providerChoice), message, selectedAuthMethod),
+					);
 					return;
 				}
 				setError(`Could not verify settings: ${message}`);
@@ -1245,8 +1247,12 @@ function normalizeAuthPassword(
 ): string {
 	const value = String(rawPassword || '');
 	if (authMethod !== 'app_password') return value;
-	const choice = String(providerChoice || '').trim().toLowerCase();
-	const resolvedProvider = String(provider || '').trim().toLowerCase();
+	const choice = String(providerChoice || '')
+		.trim()
+		.toLowerCase();
+	const resolvedProvider = String(provider || '')
+		.trim()
+		.toLowerCase();
 	const emailDomain = String(accountEmail || '')
 		.trim()
 		.toLowerCase()

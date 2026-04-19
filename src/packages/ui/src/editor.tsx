@@ -1,4 +1,4 @@
-import {Button} from './ui/button';
+import {Button} from './button';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {LexicalComposer} from '@lexical/react/LexicalComposer';
 import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
@@ -62,8 +62,6 @@ import {
 } from 'lucide-react';
 import {$createImageNode, ImageNode} from './lexical/ImageNode';
 import ImageDnDPlugin from './lexical/ImageDnDPlugin';
-import {createDefaultAppSettings} from '@/shared/defaults';
-import {useAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 
 interface HtmlLexicalEditorProps {
 	value: string;
@@ -71,6 +69,7 @@ interface HtmlLexicalEditorProps {
 	onChange: (html: string, plainText: string) => void;
 	appearance?: 'default' | 'embedded';
 	onDropNonImageFiles?: (files: File[]) => void;
+	spellcheckEnabled?: boolean;
 }
 
 const editorTheme = {
@@ -492,12 +491,11 @@ export default function HtmlLexicalEditor({
 	onChange,
 	appearance = 'default',
 	onDropNonImageFiles,
+	spellcheckEnabled = true,
 }: HtmlLexicalEditorProps) {
 	const lastInternalHtmlRef = useRef('');
 	const lastInternalPlainRef = useRef('');
 	const [isFileDragActive, setIsFileDragActive] = useState(false);
-	const defaultSettings = useMemo(() => createDefaultAppSettings(), []);
-	const {appSettings} = useAppSettings(defaultSettings);
 	const initialConfig = useMemo(
 		() => ({
 			namespace: 'llamamail-html-editor',
@@ -528,7 +526,7 @@ export default function HtmlLexicalEditor({
 					<RichTextPlugin
 						contentEditable={
 							<ContentEditable
-								spellCheck={Boolean(appSettings.spellcheckEnabled)}
+								spellCheck={spellcheckEnabled}
 								className={
 									appearance === 'embedded'
 										? 'editor-content editor-content-embedded editor-content-shell lexical-editor-input'

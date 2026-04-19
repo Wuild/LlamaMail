@@ -9,7 +9,7 @@ import type {
 	ProviderDriverRegistration,
 	ProviderSyncModules,
 } from './contracts.js';
-import type {ProviderDriverCatalogItem} from '@/shared/ipcTypes.js';
+import type {ProviderDriverCatalogItem} from '@llamamail/app/ipcTypes';
 import {discoverProviderDriverRegistrations} from './driverDiscovery.js';
 
 type MailProviderKey = string;

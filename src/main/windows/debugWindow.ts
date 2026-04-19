@@ -61,7 +61,7 @@ export function openDebugWindow(): void {
 		],
 		prodFiles: [
 			{
-				target: path.join(__dirname, '..', '..', 'renderer/window.html'),
+				target: path.join(__dirname, '..', '..', 'build', 'renderer', 'window.html'),
 				hash: '/windows/debug',
 			},
 		],

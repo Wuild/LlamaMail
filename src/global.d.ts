@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 declare module 'better-sqlite3';
 declare module 'nodemailer';
 declare module 'mailparser';
@@ -7,3 +9,8 @@ declare module '*.css?raw' {
 	export default content;
 }
 declare module '*.png';
+
+declare module '*?worker&url' {
+	const url: string;
+	export default url;
+}

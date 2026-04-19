@@ -23,7 +23,7 @@ import {ipcClient} from '@renderer/lib/ipcClient';
 import {useIpcEvent} from './useIpcEvent';
 import {selectTotalUnreadCount, useAccountsRuntimeStore} from '@renderer/store/accountsRuntimeStore';
 import {useMailFoldersStore} from '@renderer/store/mailFoldersStore';
-import {isAccountEmailModuleEnabled} from '@/shared/accountModules';
+import {isAccountEmailModuleEnabled} from '@llamamail/app/accountModules';
 
 type AccountEmailHandle = {
 	address: string | null;

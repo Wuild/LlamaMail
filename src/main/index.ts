@@ -43,7 +43,7 @@ import {
 	runStartupUpdateFlow,
 	setAutoUpdateEnabled,
 } from './updater/autoUpdate.js';
-import type {GlobalErrorEvent, GlobalErrorSource} from '@/shared/ipcTypes.js';
+import type {GlobalErrorEvent, GlobalErrorSource} from '@llamamail/app/ipcTypes';
 import type {ComposeDraftPayload} from './windows/composeWindow.js';
 import {openComposeWindow} from './windows/composeWindow.js';
 import {createMainWindowManager} from './windows/mainWindow.js';
@@ -54,8 +54,8 @@ import {
 	createFramelessAppWindow,
 	resolveWindowIconPath,
 } from './windows/windowFactory.js';
-import {createTrayController} from './windows/tray.js';
-import {APP_NAME, APP_PROTOCOL} from '@/shared/appConfig.js';
+import {initTray, tray} from './windows/tray';
+import {APP_NAME, APP_PROTOCOL} from '@llamamail/app/appConfig';
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -93,9 +93,7 @@ const mainWindowManager = createMainWindowManager({
 	getAppSettingsSync,
 	getSpellCheckerLanguages,
 	shouldMinimizeToTray: () => !isQuitting,
-	onWindowCloseToTray: () => {
-		trayController.ensureTray(currentUnreadCount);
-	},
+	onWindowCloseToTray: () => {},
 	onWindowClosed: () => {
 		mainWindow = null;
 		mainWindowLoaded = false;
@@ -110,8 +108,6 @@ const mainWindowManager = createMainWindowManager({
 			pendingMainWindowNavigation = null;
 			navigateMainWindowToRouteDirect(target.route, {replaceHistory: target.replaceHistory});
 		}
-		ensureTray();
-		applyTrayContextMenu();
 	},
 	onEnsureBackgroundUpdateChecks: ensureBackgroundUpdateChecks,
 	onWindowCreated: (win) => {
@@ -119,18 +115,19 @@ const mainWindowManager = createMainWindowManager({
 		mainWindowLoaded = false;
 	},
 });
-const trayController = createTrayController({
-	appName: APP_NAME,
+
+initTray({
 	appIconPath,
 	isActionsEnabled: () => mainWindowActionsEnabled,
-	onShowApp: () => openMainWindowEntryPoint(),
-	onCompose: () => openComposeQuickAction(),
+	onShowApp: showMainWindow,
+	onCompose: openComposeQuickAction,
 	onNavigate: (route) => navigateMainWindowToRoute(route),
 	onQuit: () => {
 		isQuitting = true;
 		app.quit();
 	},
 });
+
 const protocolHandler = createProtocolHandler({
 	logger,
 	queueMailOAuthCallbackUrl,
@@ -206,7 +203,12 @@ function toErrorDetail(error: unknown): string | null {
 async function runStartupUpdateFlowWithTimeout(timeoutMs: number): Promise<'proceed' | 'installing'> {
 	const startupPromise = runStartupUpdateFlow();
 	while (true) {
-		const raceResult = await Promise.race<{type: 'done'; result: 'proceed' | 'installing'} | {type: 'timeout'}>([
+		const raceResult = await Promise.race<
+			| {type: 'done'; result: 'proceed' | 'installing'}
+			| {
+					type: 'timeout';
+			  }
+		>([
 			startupPromise.then((result) => ({type: 'done' as const, result})),
 			new Promise<{type: 'timeout'}>((resolve) => {
 				setTimeout(() => resolve({type: 'timeout'}), timeoutMs);
@@ -350,21 +352,11 @@ async function applyDemoMode(settings = getAppSettingsSync()): Promise<void> {
 	}
 }
 
-function ensureTray(): void {
-	if (!startupFlowComplete || !mainWindowLoaded || !trayReadyAfterSplash) return;
-	trayController.ensureTray(currentUnreadCount);
-}
-
-function applyTrayContextMenu(): void {
-	trayController.refreshMenu();
-}
-
 function openMainWindowEntryPoint(): void {
 	showMainWindow();
 	if (!startupFlowComplete) return;
 	if (!trayReadyAfterSplash) {
 		trayReadyAfterSplash = true;
-		ensureTray();
 	}
 	if (mainWindowActionsEnabled) return;
 	void getAccounts()
@@ -393,8 +385,6 @@ function setMainWindowActionsEnabled(enabled: boolean): void {
 	const next = Boolean(enabled);
 	if (mainWindowActionsEnabled === next) return;
 	mainWindowActionsEnabled = next;
-	ensureTray();
-	applyTrayContextMenu();
 	configurePlatformQuickActions();
 }
 
@@ -517,8 +507,6 @@ function updateUnreadIndicators(unreadCount: number): void {
 	currentUnreadCount = Math.max(0, Number(unreadCount) || 0);
 	const settings = getAppSettingsSync();
 	const showUnreadInTitleBar = settings.showUnreadInTitleBar;
-	ensureTray();
-	trayController.updateTooltip(currentUnreadCount);
 
 	const label = currentUnreadCount > 0 ? String(currentUnreadCount) : '';
 	try {
@@ -615,7 +603,6 @@ function showMainWindow(): BrowserWindow | null {
 	if (!mainWindow.isVisible()) {
 		mainWindow.show();
 	}
-	trayController.hideTray();
 	mainWindow.moveTop();
 	mainWindow.focus();
 	return mainWindow;
@@ -652,7 +639,6 @@ function applyRuntimeSettings(): void {
 		).setSpellCheckerEnabled?.(settings.spellcheckEnabled);
 	}
 	updateUnreadIndicators(currentUnreadCount);
-	ensureTray();
 }
 
 function notifyNativeThemeUpdated(): void {
@@ -1078,9 +1064,8 @@ function configureLinuxDesktopEntryName(): void {
 	}
 }
 
-const allowMultipleInstances = String(
-	process.env.LLAMA_ALLOW_MULTI_INSTANCE || process.env.LUNAMAIL_ALLOW_MULTI_INSTANCE || '',
-).trim() === '1';
+const allowMultipleInstances =
+	String(process.env.LLAMA_ALLOW_MULTI_INSTANCE || process.env.LUNAMAIL_ALLOW_MULTI_INSTANCE || '').trim() === '1';
 const gotSingleInstanceLock = allowMultipleInstances ? true : app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
 	console.warn('[main] Another app instance is already running; exiting current process.');
@@ -1154,7 +1139,6 @@ if (!gotSingleInstanceLock) {
 			});
 			setAccountCountChangedListener((_count) => {
 				setMainWindowActionsEnabled(true);
-				trayController.reloadTray(currentUnreadCount);
 			});
 			setNewMailListener(({newMessages, source, target}) => {
 				if (newMessages <= 0) return;
@@ -1238,9 +1222,6 @@ if (!gotSingleInstanceLock) {
 				pendingStartupCompose = false;
 			}
 			trayReadyAfterSplash = true;
-			ensureTray();
-			trayController.reloadTray(currentUnreadCount);
-			applyTrayContextMenu();
 			protocolHandler.handleInitialLaunchArgs(process.argv);
 			protocolHandler.flushPendingMailtoUrls();
 			updateUnreadIndicators(getCurrentUnreadCount());
@@ -1252,6 +1233,8 @@ if (!gotSingleInstanceLock) {
 				clearTimeout(devStartupWatchdog);
 				devStartupWatchdog = null;
 			}
+
+			tray.ensure();
 
 			app.on('activate', () => {
 				if (mainWindow && !mainWindow.isDestroyed()) {

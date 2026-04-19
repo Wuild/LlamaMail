@@ -12,7 +12,7 @@ import {
 	parseRequiredObject,
 	parseRequiredText,
 } from './validation.js';
-import type {DavSyncOptions} from '@/shared/ipcTypes.js';
+import type {DavSyncOptions} from '@llamamail/app/ipcTypes';
 
 type ExportContactsPayload = {
 	format: 'csv' | 'vcf';

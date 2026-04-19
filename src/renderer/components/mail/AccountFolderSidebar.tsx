@@ -1,6 +1,6 @@
-import {Button} from '../ui/button';
+import {Button} from '@llamamail/ui/button';
 import React from 'react';
-import {ChevronRight, Folder, PenSquare, RefreshCw, Settings} from 'lucide-react';
+import {ChevronRight, Folder, PenSquare, RefreshCw, Settings} from '@llamamail/ui/icon';
 import {useDrop} from 'react-dnd';
 import {
 	closestCenter,
@@ -22,9 +22,9 @@ import {
 } from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import type {FolderItem, PublicAccount} from '@/preload';
-import {ScrollArea} from '../ui/scroll-area';
+import {ScrollArea} from '@llamamail/ui/scroll-area';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import FolderItemRow from './FolderItemRow';
 import NewEmailBadge from './NewEmailBadge';
 import {DND_ITEM} from '@renderer/lib/dndTypes';
@@ -408,16 +408,16 @@ export default function AccountFolderSidebar({
 							</Button>
 						</div>
 
-							{accounts.length === 0 && (
-								<Button
-									type="button"
-									variant="secondary"
-									className="w-full justify-center rounded-lg px-3 py-2.5 text-sm"
-									onClick={onOpenAddAccount}
-								>
-									Add account
-								</Button>
-							)}
+						{accounts.length === 0 && (
+							<Button
+								type="button"
+								variant="secondary"
+								className="w-full justify-center rounded-lg px-3 py-2.5 text-sm"
+								onClick={onOpenAddAccount}
+							>
+								Add account
+							</Button>
+						)}
 
 						<DndContext
 							sensors={accountSensors}

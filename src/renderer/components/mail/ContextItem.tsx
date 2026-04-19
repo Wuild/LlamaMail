@@ -1,5 +1,5 @@
 import React from 'react';
-import {ContextMenuItem} from '../ui/ContextMenu';
+import {ContextMenuItem} from '@llamamail/ui/contextmenu';
 
 type ContextItemProps = {
 	label: string;

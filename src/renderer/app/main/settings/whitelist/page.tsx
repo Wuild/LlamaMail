@@ -2,10 +2,10 @@ import {useState} from 'react';
 import type {AppSettings} from '@/preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {normalizeAllowlistEntry} from '@renderer/features/mail/remoteContent';
-import {Button} from '@renderer/components/ui/button';
-import {FormCheckbox, FormInput} from '@renderer/components/ui/FormControls';
+import {Button} from '@llamamail/ui/button';
+import {FormCheckbox, FormInput} from '@llamamail/ui/form';
 
 export default function SettingsWhitelistPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);

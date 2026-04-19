@@ -1,6 +1,6 @@
 import React from 'react';
 import {NavLink, useLocation} from 'react-router-dom';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import NewEmailBadge from '../mail/NewEmailBadge';
 
 type NavRailItemProps = {

@@ -141,7 +141,7 @@ export default function ImageDnDPlugin() {
 
 		const unregisterDragOver = editor.registerCommand(
 			DRAGOVER_COMMAND,
-			(event) => {
+			(event: DragEvent) => {
 				if (!event.dataTransfer?.types.includes('application/x-llamamail-image')) return false;
 				event.preventDefault();
 				draggingRef.current = true;
@@ -156,7 +156,7 @@ export default function ImageDnDPlugin() {
 
 		const unregisterDrop = editor.registerCommand(
 			DROP_COMMAND,
-			(event) => {
+			(event: DragEvent) => {
 				const raw = event.dataTransfer?.getData('application/x-llamamail-image') || '';
 				if (!raw) return false;
 				let payload: DragImagePayload;

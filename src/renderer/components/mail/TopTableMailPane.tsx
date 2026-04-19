@@ -1,5 +1,5 @@
 import React from 'react';
-import {Search, Settings} from 'lucide-react';
+import {Search, Settings} from '@llamamail/ui/icon';
 import {
 	closestCenter,
 	DndContext,
@@ -14,10 +14,10 @@ import {CSS} from '@dnd-kit/utilities';
 import {useDrag} from 'react-dnd';
 import {getEmptyImage} from 'react-dnd-html5-backend';
 import type {MessageItem} from '@/preload';
-import {ScrollArea} from '../ui/scroll-area';
-import {cn} from '@renderer/lib/utils';
-import {Button} from '../ui/button';
-import {FormInput} from '../ui/FormControls';
+import {ScrollArea} from '@llamamail/ui/scroll-area';
+import {cn} from '@llamamail/ui/utils';
+import {Button} from '@llamamail/ui/button';
+import {FormInput} from '@llamamail/ui/form';
 import {DND_ITEM} from '@renderer/lib/dndTypes';
 
 type MailTableColumnKey =

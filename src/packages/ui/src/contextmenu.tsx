@@ -1,6 +1,6 @@
-import * as React from 'react';
-import {cn} from '@renderer/lib/utils';
+import {cn} from './utils';
 import {Button, type ButtonProps} from './button';
+import {Children, CSSProperties, forwardRef, HTMLAttributes} from 'react';
 
 type ContextMenuSize = 'sm' | 'md' | 'lg' | 'nav';
 type ContextMenuLayer = '50' | '1000' | '1015' | '1100' | '1202';
@@ -21,7 +21,7 @@ const layerClassByValue: Record<ContextMenuLayer, string> = {
 	'1202': 'context-menu-layer-1202',
 };
 
-export type ContextMenuProps = React.HTMLAttributes<HTMLDivElement> & {
+export type ContextMenuProps = HTMLAttributes<HTMLDivElement> & {
 	size?: ContextMenuSize;
 	layer?: ContextMenuLayer;
 	position?: {left: number; top: number};
@@ -30,7 +30,7 @@ export type ContextMenuProps = React.HTMLAttributes<HTMLDivElement> & {
 	dismissOnInteractOutside?: boolean;
 };
 
-export const ContextMenu = React.forwardRef<HTMLDivElement, ContextMenuProps>(
+export const ContextMenu = forwardRef<HTMLDivElement, ContextMenuProps>(
 	(
 		{
 			size = 'lg',
@@ -45,7 +45,7 @@ export const ContextMenu = React.forwardRef<HTMLDivElement, ContextMenuProps>(
 		},
 		ref,
 	) => {
-		const mergedStyle: React.CSSProperties = {
+		const mergedStyle: CSSProperties = {
 			...style,
 			...(position ? {left: position.left, top: position.top} : null),
 			...(ready === undefined ? null : {visibility: ready ? 'visible' : 'hidden'}),
@@ -82,21 +82,19 @@ export const ContextMenu = React.forwardRef<HTMLDivElement, ContextMenuProps>(
 	},
 );
 
-ContextMenu.displayName = 'ContextMenu';
-
-export function ContextMenuLabel({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+export function ContextMenuLabel({className, ...props}: HTMLAttributes<HTMLDivElement>) {
 	return <div className={cn('context-menu-title', className)} {...props} />;
 }
 
-export function ContextMenuSeparator({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+export function ContextMenuSeparator({className, ...props}: HTMLAttributes<HTMLDivElement>) {
 	return <div className={cn('divider-default my-1 h-px', className)} {...props} />;
 }
 
-export function ContextMenuAnchor({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+export function ContextMenuAnchor({className, ...props}: HTMLAttributes<HTMLDivElement>) {
 	return <div className={cn('context-menu-anchor', className)} {...props} />;
 }
 
-export type ContextMenuSubmenuProps = React.HTMLAttributes<HTMLDivElement> & {
+export type ContextMenuSubmenuProps = HTMLAttributes<HTMLDivElement> & {
 	size?: Exclude<ContextMenuSize, 'nav'>;
 };
 
@@ -109,9 +107,9 @@ export type ContextMenuItemProps = Omit<ButtonProps, 'variant'> & {
 	align?: ContextMenuItemAlign;
 };
 
-export const ContextMenuItem = React.forwardRef<HTMLButtonElement, ContextMenuItemProps>(
+export const ContextMenuItem = forwardRef<HTMLButtonElement, ContextMenuItemProps>(
 	({danger = false, align = 'start', className, children, ...props}, ref) => {
-		const normalizedChildren = React.Children.map(children, (child) => {
+		const normalizedChildren = Children.map(children, (child) => {
 			if (typeof child === 'string' || typeof child === 'number') {
 				return <span className="context-menu-item-label">{child}</span>;
 			}

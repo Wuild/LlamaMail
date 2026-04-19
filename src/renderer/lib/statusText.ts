@@ -1,4 +1,4 @@
-import type {SyncModuleKey} from '@/shared/ipcTypes';
+import type {SyncModuleKey} from '@llamamail/app/ipcTypes';
 
 export function toErrorMessage(error: unknown, fallback = 'unknown error'): string {
 	if (error && typeof error === 'object' && 'message' in error) {

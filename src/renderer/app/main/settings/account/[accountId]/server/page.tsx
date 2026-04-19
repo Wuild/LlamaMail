@@ -1,15 +1,11 @@
 import {useOutletContext} from 'react-router-dom';
 import ServiceSettingsCard from '@renderer/components/settings/ServiceSettingsCard';
-import {FormCheckbox} from '@renderer/components/ui/FormControls';
+import {FormCheckbox} from '@llamamail/ui/form';
 import {Field} from '@renderer/app/main/settings/formParts';
 import type {UseAccountSettingsRouteResult} from '../useAccountSettingsRoute';
 
 export default function SettingsAccountServerPage() {
-	const {
-		editor,
-		setEditor,
-		accountStatus,
-	} = useOutletContext<UseAccountSettingsRouteResult>();
+	const {editor, setEditor, accountStatus} = useOutletContext<UseAccountSettingsRouteResult>();
 	if (!editor) return null;
 	const hasAnyModuleEnabled = !!editor.sync_emails || !!editor.sync_contacts || !!editor.sync_calendar;
 

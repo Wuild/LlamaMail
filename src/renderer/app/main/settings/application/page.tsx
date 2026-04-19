@@ -3,12 +3,12 @@ import type {AppSettings} from '@/preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {useAutoUpdateState} from '@renderer/hooks/ipc/useAutoUpdateState';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {describeUpdatePhase} from '../mailFilterHelpers';
-import {Button} from '@renderer/components/ui/button';
-import {FormCheckbox, FormSelect} from '@renderer/components/ui/FormControls';
-import {normalizeSyncIntervalMinutes, parseAppLanguage} from '@/shared/settingsRules';
-import {APP_LANGUAGE_OPTIONS, SYNC_INTERVAL_OPTIONS} from '@/shared/settingsOptions';
+import {Button} from '@llamamail/ui/button';
+import {FormCheckbox, FormSelect} from '@llamamail/ui/form';
+import {normalizeSyncIntervalMinutes, parseAppLanguage} from '@llamamail/app/settingsRules';
+import {APP_LANGUAGE_OPTIONS, SYNC_INTERVAL_OPTIONS} from '@llamamail/app/settingsOptions';
 
 export default function SettingsApplicationPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);

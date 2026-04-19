@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import type {OAuthProvider, OAuthSession} from '@/shared/ipcTypes.js';
+import type {OAuthProvider, OAuthSession} from '@llamamail/app/ipcTypes';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {
 	AuthServerClientError,
@@ -34,12 +34,7 @@ const MICROSOFT_GRAPH_REQUIRED_SCOPES = [
 	'https://graph.microsoft.com/Files.ReadWrite.All',
 	'https://graph.microsoft.com/Sites.ReadWrite.All',
 ];
-const GOOGLE_CLOUD_REQUIRED_SCOPES = [
-	'openid',
-	'profile',
-	'email',
-	'https://www.googleapis.com/auth/drive',
-];
+const GOOGLE_CLOUD_REQUIRED_SCOPES = ['openid', 'profile', 'email', 'https://www.googleapis.com/auth/drive'];
 const MICROSOFT_CLOUD_REQUIRED_SCOPES = [
 	'offline_access',
 	'openid',

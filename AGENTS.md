@@ -400,13 +400,13 @@ Use electron-builder:
 - FAVOR route consolidation over adding more windows for settings/help/debug style pages
 - WHEN refactoring renderer code, remove dead files/imports and fold duplicated page logic into reusable modules
 - USE shared renderer UI primitives for all new/updated form controls and buttons:
-    - Form controls: `src/renderer/components/ui/FormControls.tsx`
+    - Form controls: `@llamamail/ui/form`
         - `FormInput`, `FormSelect`, `FormTextarea`, `FormCheckbox`, `FormControlGroup`
         - Prefer variants (`variant`, `size`) over inline one-off styling.
         - Use icon slots (`leftIcon`, `rightIcon`) where applicable.
         - Use grouped controls with `FormControlGroup` plus `groupPosition` (`first`/`middle`/`last`) for toolbar-style
           rows.
-    - Buttons: `src/renderer/components/ui/button.tsx`
+    - Buttons: `@llamamail/ui/button`
         - `Button`, `ButtonGroup`
         - Prefer button variants (`default`, `secondary`, `outline`, `ghost`, `danger`, `success`) and sizes.
         - Use icon slots (`leftIcon`, `rightIcon`) instead of manual icon spacing wrappers.

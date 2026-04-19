@@ -1,12 +1,12 @@
-import {Button} from './ui/button';
+import {Button} from '@llamamail/ui/button';
 import React from 'react';
-import {Copy, Minus, Square, X} from 'lucide-react';
-import {cn} from '@renderer/lib/utils';
+import {Copy, Minus, Square, X} from '@llamamail/ui/icon';
+import {cn} from '@llamamail/ui/utils';
 import llamaLogo from '@resource/llamatray.png';
 import {useWindowControlsState} from '@renderer/hooks/ipc/useWindowControlsState';
 import {useAppSettings} from '@renderer/hooks/ipc/useAppSettings';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
-import {APP_NAME} from '@/shared/appConfig';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
+import {APP_NAME} from '@llamamail/app/appConfig';
 import {useAutoUpdateState} from '@renderer/hooks/ipc/useAutoUpdateState';
 
 interface WindowTitleBarProps {

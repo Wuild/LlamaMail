@@ -1,6 +1,6 @@
 import React from 'react';
-import {cn} from '@renderer/lib/utils';
-import {ContextMenu, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator} from '../ui/ContextMenu';
+import {cn} from '@llamamail/ui/utils';
+import {ContextMenu, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator} from '@llamamail/ui/contextmenu';
 
 type TableColumnOption<TColumn extends string> = {
 	key: TColumn;

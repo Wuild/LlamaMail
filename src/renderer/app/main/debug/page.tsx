@@ -1,9 +1,9 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Activity, TerminalSquare, Trash2, X} from 'lucide-react';
+import {Activity, TerminalSquare, Trash2, X} from '@llamamail/ui/icon';
 import type {DebugLogEntry} from '@/preload';
 import {Navigate} from 'react-router-dom';
-import {FormCheckbox} from '@renderer/components/ui/FormControls';
-import {Button} from '@renderer/components/ui/button';
+import {FormCheckbox} from '@llamamail/ui/form';
+import {Button} from '@llamamail/ui/button';
 import {useAppTheme} from '@renderer/hooks/useAppTheme';
 import {useIpcEvent} from '@renderer/hooks/ipc/useIpcEvent';
 import {ipcClient} from '@renderer/lib/ipcClient';

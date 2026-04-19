@@ -1,4 +1,4 @@
-import {Button} from '@renderer/components/ui/button';
+import {Button} from '@llamamail/ui/button';
 import React from 'react';
 
 export default function ToolboxButton({

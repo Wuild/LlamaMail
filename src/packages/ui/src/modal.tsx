@@ -1,12 +1,12 @@
-import * as React from 'react';
-import {cn} from '@renderer/lib/utils';
+import {cn} from './utils';
+import {HTMLAttributes, ReactNode, useEffect} from 'react';
 
 type ModalAlign = 'center' | 'top';
 
 export type ModalProps = {
 	open: boolean;
 	onClose: () => void;
-	children: React.ReactNode;
+	children: ReactNode;
 	align?: ModalAlign;
 	closeOnEscape?: boolean;
 	closeOnBackdrop?: boolean;
@@ -32,7 +32,7 @@ export function Modal({
 	ariaLabelledBy,
 	ariaDescribedBy,
 }: ModalProps) {
-	React.useEffect(() => {
+	useEffect(() => {
 		if (!open || !closeOnEscape) return;
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== 'Escape') return;
@@ -45,7 +45,7 @@ export function Modal({
 		};
 	}, [closeOnEscape, onClose, open]);
 
-	React.useEffect(() => {
+	useEffect(() => {
 		if (!open || !lockBodyScroll) return;
 		const previousOverflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
@@ -84,22 +84,22 @@ export function Modal({
 	);
 }
 
-export function ModalHeader({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+export function ModalHeader({className, ...props}: HTMLAttributes<HTMLDivElement>) {
 	return <div className={cn('modal-header', className)} {...props} />;
 }
 
-export function ModalTitle({className, ...props}: React.HTMLAttributes<HTMLHeadingElement>) {
+export function ModalTitle({className, ...props}: HTMLAttributes<HTMLHeadingElement>) {
 	return <h3 className={cn('modal-title', className)} {...props} />;
 }
 
-export function ModalDescription({className, ...props}: React.HTMLAttributes<HTMLParagraphElement>) {
+export function ModalDescription({className, ...props}: HTMLAttributes<HTMLParagraphElement>) {
 	return <p className={cn('modal-description', className)} {...props} />;
 }
 
-export function ModalBody({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+export function ModalBody({className, ...props}: HTMLAttributes<HTMLDivElement>) {
 	return <div className={cn('modal-body', className)} {...props} />;
 }
 
-export function ModalFooter({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+export function ModalFooter({className, ...props}: HTMLAttributes<HTMLDivElement>) {
 	return <div className={cn('modal-footer', className)} {...props} />;
 }

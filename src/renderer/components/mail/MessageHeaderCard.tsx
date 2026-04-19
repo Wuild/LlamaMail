@@ -1,9 +1,9 @@
-import {ContextMenu, ContextMenuItem, ContextMenuSeparator} from '@renderer/components/ui/ContextMenu';
-import {Button} from '@renderer/components/ui/button';
+import {ContextMenu, ContextMenuItem, ContextMenuSeparator} from '@llamamail/ui/contextmenu';
+import {Button} from '@llamamail/ui/button';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
 import {clampToViewport} from '@renderer/lib/format';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {ChevronDown, Filter, MailCheck, MailOpen, Paperclip, Star, Tag, UserPlus} from 'lucide-react';
+import {ChevronDown, Filter, MailCheck, MailOpen, Paperclip, Star, Tag, UserPlus} from '@llamamail/ui/icon';
 import {useEffect, useMemo, useRef, useState} from 'react';
 
 type MessageHeaderModel = {

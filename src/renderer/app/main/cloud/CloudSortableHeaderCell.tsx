@@ -1,7 +1,7 @@
 import React, {useCallback, useRef} from 'react';
 import {useDrag, useDrop} from 'react-dnd';
-import {ArrowDown, ArrowUp} from 'lucide-react';
-import {Button} from '@renderer/components/ui/button';
+import {ArrowDown, ArrowUp} from '@llamamail/ui/icon';
+import {Button} from '@llamamail/ui/button';
 import {CLOUD_TABLE_RESIZE_HANDLE_CLASS, type CloudTableColumnKey} from './cloudFilesHelpers';
 import {DND_ITEM} from '@renderer/lib/dndTypes';
 

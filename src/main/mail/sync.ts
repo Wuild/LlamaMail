@@ -2,7 +2,7 @@ import {ImapFlow} from 'imapflow';
 import {simpleParser} from 'mailparser';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {getAccountSyncCredentials} from '@main/db/repositories/accountsRepo.js';
-import type {OAuthSession} from '@/shared/ipcTypes.js';
+import type {OAuthSession} from '@llamamail/app/ipcTypes';
 import {resolveImapSecurity} from './security.js';
 import {resolveImapAuth} from './auth.js';
 import {
@@ -277,10 +277,7 @@ function formatMailboxSyncError(error: any): string {
 	const responseText = String(error?.responseText || '').trim();
 	const serverResponse = String(error?.serverResponse || '').trim();
 	const executedCommand = String(error?.executedCommand || error?.command || '').trim();
-	const merged = [message, responseText, serverResponse, executedCommand]
-		.filter(Boolean)
-		.join(' | ')
-		.toLowerCase();
+	const merged = [message, responseText, serverResponse, executedCommand].filter(Boolean).join(' | ').toLowerCase();
 
 	if (merged.includes('noaduserbysid')) {
 		return 'Microsoft OAuth authenticated, but this account has no Exchange mailbox (NoAdUserBySid).';

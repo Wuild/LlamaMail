@@ -1,5 +1,5 @@
 import React from 'react';
-import {FormInput, FormSelect} from '../ui/FormControls';
+import {FormInput, FormSelect} from '@llamamail/ui/form';
 
 export type ServiceSecurityMode = 'ssl' | 'starttls' | 'none';
 type ControlVariant = 'default' | 'subtle';

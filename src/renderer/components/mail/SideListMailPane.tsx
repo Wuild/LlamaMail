@@ -1,13 +1,13 @@
 import React from 'react';
-import {Search, Star} from 'lucide-react';
+import {Search, Star} from '@llamamail/ui/icon';
 import {useDrag} from 'react-dnd';
 import {getEmptyImage} from 'react-dnd-html5-backend';
 import type {MessageItem} from '@/preload';
-import {ScrollArea} from '../ui/scroll-area';
+import {ScrollArea} from '@llamamail/ui/scroll-area';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
-import {cn} from '@renderer/lib/utils';
-import {Button} from '../ui/button';
-import {FormInput} from '../ui/FormControls';
+import {cn} from '@llamamail/ui/utils';
+import {Button} from '@llamamail/ui/button';
+import {FormInput} from '@llamamail/ui/form';
 import {DND_ITEM} from '@renderer/lib/dndTypes';
 
 type MailMessageDragItem = {

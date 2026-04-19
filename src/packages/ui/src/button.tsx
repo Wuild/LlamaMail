@@ -1,15 +1,15 @@
-import * as React from 'react';
-import {cn} from '@renderer/lib/utils';
+import {cn} from './utils';
+import {ButtonHTMLAttributes, forwardRef, ReactNode} from 'react';
 
 type ButtonVariant = 'unstyled' | 'default' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
 type ButtonSize = 'none' | 'default' | 'sm' | 'lg' | 'icon';
 type GroupPosition = 'none' | 'first' | 'middle' | 'last';
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
 	size?: ButtonSize;
-	leftIcon?: React.ReactNode;
-	rightIcon?: React.ReactNode;
+	leftIcon?: ReactNode;
+	rightIcon?: ReactNode;
 	groupPosition?: GroupPosition;
 }
 
@@ -38,7 +38,7 @@ const groupStyles: Record<GroupPosition, string> = {
 	last: 'rounded-l-none rounded-r-lg',
 };
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 	(
 		{
 			className,

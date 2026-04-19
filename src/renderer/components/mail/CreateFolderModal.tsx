@@ -1,8 +1,8 @@
 import React from 'react';
-import {Button} from '../ui/button';
-import {FormInput, FormSelect} from '../ui/FormControls';
-import {Modal, ModalBody, ModalFooter, ModalTitle} from '../ui/Modal';
-import {cn} from '@renderer/lib/utils';
+import {Button} from '@llamamail/ui/button';
+import {FormInput, FormSelect} from '@llamamail/ui/form';
+import {Modal, ModalBody, ModalFooter, ModalTitle} from '@llamamail/ui/modal';
+import {cn} from '@llamamail/ui/utils';
 
 type Option = {
 	value: string;

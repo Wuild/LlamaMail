@@ -34,11 +34,9 @@ export function resolveWindowIconPath(): string | null {
 		path.join(app.getAppPath(), 'build/icons/512x512.png'),
 		path.join(app.getAppPath(), 'build/icon.png'),
 		path.join(app.getAppPath(), 'src/resources/llama.png'),
-		path.join(app.getAppPath(), 'src/resources/luna.png'),
 		path.join(process.cwd(), 'build/icons/512x512.png'),
 		path.join(process.cwd(), 'build/icon.png'),
 		path.join(process.cwd(), 'src/resources/llama.png'),
-		path.join(process.cwd(), 'src/resources/luna.png'),
 	];
 	const defaultCandidates = [
 		path.join(app.getAppPath(), 'build/icon.ico'),
@@ -46,15 +44,11 @@ export function resolveWindowIconPath(): string | null {
 		path.join(app.getAppPath(), 'build/icon.png'),
 		path.join(app.getAppPath(), 'src/resources/llama.ico'),
 		path.join(app.getAppPath(), 'src/resources/llama.png'),
-		path.join(app.getAppPath(), 'src/resources/luna.ico'),
-		path.join(app.getAppPath(), 'src/resources/luna.png'),
 		path.join(process.cwd(), 'build/icon.ico'),
 		path.join(process.cwd(), 'build/icons/512x512.png'),
 		path.join(process.cwd(), 'build/icon.png'),
 		path.join(process.cwd(), 'src/resources/llama.ico'),
 		path.join(process.cwd(), 'src/resources/llama.png'),
-		path.join(process.cwd(), 'src/resources/luna.ico'),
-		path.join(process.cwd(), 'src/resources/luna.png'),
 	];
 	const candidates = process.platform === 'linux' ? linuxCandidates : defaultCandidates;
 	for (const candidate of candidates) {

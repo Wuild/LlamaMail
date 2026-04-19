@@ -14,7 +14,7 @@ import {
 } from '@renderer/lib/statusText';
 import type {FolderItem, PublicAccount, SyncStatusEvent} from '@/preload';
 import {readPersistedAccountOrder, sortAccountsByOrder} from '@renderer/app/main/email/mailAccountOrder';
-import {isAccountEmailModuleEnabled} from '@/shared/accountModules';
+import {isAccountEmailModuleEnabled} from '@llamamail/app/accountModules';
 
 function pickPreferredFolderPath(folderRows: FolderItem[], preferredFolderPath: string | null): string | null {
 	return (

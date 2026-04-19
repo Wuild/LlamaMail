@@ -15,7 +15,7 @@ export function useAppSettings(defaultSettings: AppSettings) {
 	const appSettings = appSettingsQuery.data;
 	const setAppSettings = useCallback(
 		(value: React.SetStateAction<AppSettings>) => {
-			queryClient.setQueryData<AppSettings>(['app-settings'], (prev) =>
+			queryClient.setQueryData<AppSettings>(['app-settings'], (prev: AppSettings | undefined) =>
 				typeof value === 'function'
 					? (value as (current: AppSettings) => AppSettings)(prev ?? defaultSettings)
 					: value,

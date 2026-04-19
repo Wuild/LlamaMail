@@ -24,7 +24,7 @@ import type {
 	ServiceSettings,
 	SyncModuleKey,
 	UpsertMailFilterPayload,
-} from '@/shared/ipcTypes';
+} from '@llamamail/app/ipcTypes';
 
 export type {
 	AppLanguage,
@@ -62,7 +62,7 @@ export type {
 	ServiceSettings,
 	SyncModuleKey,
 	UpsertMailFilterPayload,
-} from '@/shared/ipcTypes';
+} from '@llamamail/app/ipcTypes';
 
 export interface AddAccountPayload {
 	email: string;

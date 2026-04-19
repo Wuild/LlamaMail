@@ -1,0 +1,22 @@
+{
+	"name": "@llamamail/ui",
+	"version": "0.1.0",
+	"type": "module",
+	"peerDependencies": {
+		"react": "^19.0.0"
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"dev": "tsc -p tsconfig.json -w"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./*": {
+			"types": "./dist/*.d.ts",
+			"import": "./dist/*.js"
+		}
+	}
+}

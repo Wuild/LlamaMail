@@ -4,8 +4,8 @@ import WorkspaceLayout from '@renderer/layouts/WorkspaceLayout';
 import {useResizableSidebar} from '@renderer/hooks/useResizableSidebar';
 import {useAccounts} from '@renderer/hooks/ipc/useAccounts';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
-import {cn} from '@renderer/lib/utils';
-import {Plus} from 'lucide-react';
+import {cn} from '@llamamail/ui/utils';
+import {Plus} from '@llamamail/ui/icon';
 import {useMemo} from 'react';
 
 export default function SettingsLayout() {

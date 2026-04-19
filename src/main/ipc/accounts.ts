@@ -65,13 +65,13 @@ import {registerAccountCoreIpc} from './registerAccountCoreIpc.js';
 import {registerComposeIpc} from './registerComposeIpc.js';
 import {registerDavIpc} from './registerDavIpc.js';
 import {registerMailIpc} from './registerMailIpc.js';
-import {normalizeSyncIntervalMinutes} from '@/shared/settingsRules.js';
-import type {AccountSyncModuleStatusMap, DavSyncOptions, SyncModuleKey} from '@/shared/ipcTypes.js';
+import {normalizeSyncIntervalMinutes} from '@llamamail/app/settingsRules';
+import type {AccountSyncModuleStatusMap, DavSyncOptions, SyncModuleKey} from '@llamamail/app/ipcTypes';
 import {
 	isAccountCalendarModuleEnabled,
 	isAccountContactsModuleEnabled,
 	isAccountEmailModuleEnabled,
-} from '@/shared/accountModules.js';
+} from '@llamamail/app/accountModules';
 import {getAppSettingsSync} from '@main/settings/store.js';
 import {
 	broadcastAccountSyncStatus,
@@ -797,10 +797,7 @@ async function maybeDisableEmailSyncForMailboxlessMicrosoftAccount(
 		user: account.user,
 	});
 
-	blockedSyncAccounts.set(
-		account.id,
-		'Microsoft sign-in succeeded, but this account has no Exchange mailbox.',
-	);
+	blockedSyncAccounts.set(account.id, 'Microsoft sign-in succeeded, but this account has no Exchange mailbox.');
 	stopIdleWatcher(account.id);
 	broadcastToAllWindows('account-updated', updated);
 	const syncMessage =
@@ -847,7 +844,7 @@ async function syncAccountAncillaryInWorker(
 			},
 		};
 	}
-	const worker = new Worker(new URL('../workers/ancillarySyncWorker.mjs', import.meta.url), {
+	const worker = new Worker(new URL('../main/ancillarySyncWorker.js', import.meta.url), {
 		workerData: {
 			dbPath: getSqlitePath(),
 			accountId,
@@ -1093,7 +1090,11 @@ async function connectIdleWatcher(state: IdleWatcherState): Promise<void> {
 		if (!state.stopped) {
 			const message = error?.message || String(error);
 			const account = (await getAccounts()).find((item) => item.id === state.accountId) ?? null;
-			const autoDisabled = await maybeDisableEmailSyncForMailboxlessMicrosoftAccount(account, message, 'idle-probe');
+			const autoDisabled = await maybeDisableEmailSyncForMailboxlessMicrosoftAccount(
+				account,
+				message,
+				'idle-probe',
+			);
 			if (autoDisabled) return;
 			console.error(`IMAP IDLE connect failed for account ${state.accountId}:`, message);
 			for (const folder of state.folders.values()) {

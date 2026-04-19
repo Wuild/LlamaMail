@@ -1,6 +1,6 @@
-import {Button} from '@renderer/components/ui/button';
+import {Button} from '@llamamail/ui/button';
 import {formatBytes} from '@renderer/lib/format';
-import {Paperclip} from 'lucide-react';
+import {Paperclip} from '@llamamail/ui/icon';
 
 type MessageAttachment = {
 	filename: string | null;

@@ -1,6 +1,6 @@
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {upsertCalendarEvents, upsertContacts} from '@main/db/repositories/davRepo.js';
-import type {CalendarSyncRange, DavSyncModules, OAuthProvider} from '@/shared/ipcTypes.js';
+import type {CalendarSyncRange, DavSyncModules, OAuthProvider} from '@llamamail/app/ipcTypes';
 
 type OAuthTokenContext = {
 	accountId: number;

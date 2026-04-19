@@ -1,8 +1,8 @@
 import React from 'react';
-import {FolderPlus, Settings} from 'lucide-react';
+import {FolderPlus, Settings} from '@llamamail/ui/icon';
 import type {PublicAccount} from '@/preload';
 import ContextItem from './ContextItem';
-import {ContextMenu, ContextMenuSeparator} from '../ui/ContextMenu';
+import {ContextMenu, ContextMenuSeparator} from '@llamamail/ui/contextmenu';
 
 type CreateFolderState = {
 	accountId: number;

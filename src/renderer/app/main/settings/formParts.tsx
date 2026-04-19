@@ -1,5 +1,5 @@
 import React from 'react';
-import {FormInput} from '@renderer/components/ui/FormControls';
+import {FormInput} from '@llamamail/ui/form';
 
 type FieldProps = {
 	label?: string;

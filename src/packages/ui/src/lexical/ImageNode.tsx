@@ -1,4 +1,4 @@
-import {Button} from '../ui/button';
+import {Button} from '../button';
 import React, {useEffect, useRef} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {useLexicalNodeSelection} from '@lexical/react/useLexicalNodeSelection';

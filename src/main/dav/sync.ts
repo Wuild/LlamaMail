@@ -27,7 +27,7 @@ import {
 } from '@main/db/repositories/davRepo.js';
 import {randomUUID} from 'node:crypto';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
-import type {DavSyncOptions} from '@/shared/ipcTypes.js';
+import type {DavSyncOptions} from '@llamamail/app/ipcTypes';
 
 const CONTACT_META_PREFIX = '[LUNAMAIL_CONTACT_META_V1]';
 

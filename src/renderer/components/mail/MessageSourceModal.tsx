@@ -1,6 +1,6 @@
-import {Button} from '../ui/button';
+import {Button} from '@llamamail/ui/button';
 import React from 'react';
-import {Modal, ModalHeader} from '../ui/Modal';
+import {Modal, ModalHeader} from '@llamamail/ui/modal';
 
 type MessageSourceModalProps = {
 	open: boolean;

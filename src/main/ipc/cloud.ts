@@ -31,7 +31,7 @@ import {
 	uploadCloudFile,
 } from '@main/cloud/providers.js';
 import {syncCloudDav} from '@main/cloud/davSync.js';
-import {APP_NAME, APP_PROTOCOL} from '@/shared/appConfig.js';
+import {APP_NAME, APP_PROTOCOL} from '@llamamail/app/appConfig';
 import {confirmFileOpen, isRiskyFileOpenTarget} from '@main/security/fileOpenRisk.js';
 
 const logger = createMailDebugLogger('cloud', 'ipc:cloud');

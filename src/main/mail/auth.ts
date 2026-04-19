@@ -1,4 +1,4 @@
-import type {AuthMethod, OAuthProvider, OAuthSession} from '@/shared/ipcTypes.js';
+import type {AuthMethod, OAuthProvider, OAuthSession} from '@llamamail/app/ipcTypes';
 
 export type MailAuthCredentials = {
 	user: string;

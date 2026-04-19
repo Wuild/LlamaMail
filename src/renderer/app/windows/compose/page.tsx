@@ -18,7 +18,7 @@ import {
 	RefreshCw,
 	SendHorizonal,
 	X,
-} from 'lucide-react';
+} from '@llamamail/ui/icon';
 import type {
 	CloudItem,
 	ComposeDraftPayload,
@@ -28,11 +28,11 @@ import type {
 	RecentRecipientItem,
 	SaveDraftPayload,
 } from '@/preload';
-import HtmlLexicalEditor from '@renderer/components/HtmlLexicalEditor';
-import AutoComplete, {type AutoCompleteRow} from '@renderer/components/inputs/AutoComplete';
-import {FormControlGroup, FormInput, FormSelect, type FormSelectOption} from '@renderer/components/ui/FormControls';
-import {Modal} from '@renderer/components/ui/Modal';
-import {Button, ButtonGroup} from '@renderer/components/ui/button';
+import HtmlLexicalEditor from '@llamamail/ui/editor';
+import AutoComplete, {type AutoCompleteRow} from '@llamamail/ui/form';
+import {FormControlGroup, FormInput, FormSelect, type FormSelectOption} from '@llamamail/ui/form';
+import {Modal} from '@llamamail/ui/modal';
+import {Button, ButtonGroup} from '@llamamail/ui/button';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
 import {formatBytes} from '@renderer/lib/format';
 import {useAppTheme} from '@renderer/hooks/useAppTheme';
@@ -42,7 +42,7 @@ import {useApp} from '@renderer/app/AppContext';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
 import {buildSourceDocCsp, enrichAnchorTitles} from '@renderer/features/mail/remoteContent';
 import {buildMessageIframeSrcDoc} from '@renderer/app/main/email/mailPageHelpers';
-import {createDefaultAppSettings} from '@/shared/defaults';
+import {createDefaultAppSettings} from '@llamamail/app/defaults';
 import {useComposeWindowGuards} from '@renderer/app/windows/compose/useComposeWindowGuards';
 import {useComposeRecipients} from '@renderer/app/windows/compose/useComposeRecipients';
 import {useComposeAttachments} from '@renderer/app/windows/compose/useComposeAttachments';

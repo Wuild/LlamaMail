@@ -7,7 +7,7 @@ import type {
 	ProviderCapabilities,
 	ProviderDriverSyncMetadata,
 	ProviderLogoKey,
-} from '@/shared/ipcTypes.js';
+} from '@llamamail/app/ipcTypes';
 import type {SyncSummary} from '@main/mail/sync.js';
 import type {Worker} from 'node:worker_threads';
 import type {DavSyncSummary} from '@main/dav/sync.js';

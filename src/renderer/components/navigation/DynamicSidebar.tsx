@@ -1,7 +1,7 @@
-import {Button} from '../ui/button';
+import {Button} from '@llamamail/ui/button';
 import React from 'react';
 import {NavLink} from 'react-router-dom';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 
 export type DynamicSidebarItem = {
 	id: string;

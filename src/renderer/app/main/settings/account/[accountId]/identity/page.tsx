@@ -1,6 +1,6 @@
 import {useOutletContext} from 'react-router-dom';
-import {FormCheckbox} from '@renderer/components/ui/FormControls';
-import HtmlLexicalEditor from '@renderer/components/HtmlLexicalEditor';
+import {FormCheckbox} from '@llamamail/ui/form';
+import HtmlLexicalEditor from '@llamamail/ui/editor';
 import {Field, Label} from '@renderer/app/main/settings/formParts';
 import type {UseAccountSettingsRouteResult} from '../useAccountSettingsRoute';
 

@@ -10,17 +10,17 @@ import {
 	SquareArrowOutUpRight,
 	Star,
 	Trash2,
-} from 'lucide-react';
+} from '@llamamail/ui/icon';
 import type {FolderItem, MessageItem} from '@/preload';
 import ContextItem from './ContextItem';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import {
 	ContextMenu,
 	ContextMenuAnchor,
 	ContextMenuItem,
 	ContextMenuSeparator,
 	ContextMenuSubmenu,
-} from '../ui/ContextMenu';
+} from '@llamamail/ui/contextmenu';
 
 type TagOption = {
 	value: string;

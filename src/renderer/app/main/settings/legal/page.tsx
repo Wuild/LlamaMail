@@ -1,5 +1,5 @@
-import {ExternalLink, FileText, Shield} from 'lucide-react';
-import {Button} from '@renderer/components/ui/button';
+import {ExternalLink, FileText, Shield} from '@llamamail/ui/icon';
+import {Button} from '@llamamail/ui/button';
 
 const LEGAL_BASE_URL = 'https://llama.voracious.se/';
 const PRIVACY_URL = 'https://llama.voracious.se/privacy';

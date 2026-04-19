@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Bug, CalendarDays, CircleHelp, Cloud, Mail, Settings, Users} from 'lucide-react';
+import {Bug, CalendarDays, CircleHelp, Cloud, Mail, Settings, Users} from '@llamamail/ui/icon';
 import {
 	closestCenter,
 	DndContext,
@@ -14,13 +14,13 @@ import {
 import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {useNavigate} from 'react-router-dom';
-import type {AppSettings} from '@/shared/ipcTypes';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
+import type {AppSettings} from '@llamamail/app/ipcTypes';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {useAccounts} from '@renderer/hooks/ipc/useAccounts';
 import {useAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import NavRailItem from './NavRailItem';
-import {ContextMenu, ContextMenuItem} from '@renderer/components/ui/ContextMenu';
+import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 
 export type TopNavItemId = AppSettings['navRailOrder'][number];
 export type TopNavItemDef = {
@@ -164,7 +164,7 @@ export default function MainNavRail() {
 	const persistTopNavOrder = useCallback(
 		(nextOrder: TopNavItemId[]) => {
 			setTopNavOrder(nextOrder);
-			setAppSettings((prev) => ({...prev, navRailOrder: nextOrder}));
+			setAppSettings((prev: AppSettings) => ({...prev, navRailOrder: nextOrder}));
 			void ipcClient.updateAppSettings({navRailOrder: nextOrder}).catch(() => undefined);
 		},
 		[setAppSettings],

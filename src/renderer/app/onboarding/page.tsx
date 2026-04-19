@@ -1,12 +1,12 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
-import {Check, Globe2, LayoutTemplate, MonitorCog, Moon, Sparkles, Sun} from 'lucide-react';
-import {Button} from '@renderer/components/ui/button';
-import {FormCheckbox, FormSelect} from '@renderer/components/ui/FormControls';
-import {APP_LANGUAGE_OPTIONS, APP_THEME_OPTIONS, MAIL_VIEW_OPTIONS} from '@/shared/settingsOptions';
-import {parseAppLanguage} from '@/shared/settingsRules';
-import {createDefaultAppSettings} from '@/shared/defaults';
-import type {AppLanguage, AppTheme, MailView} from '@/shared/ipcTypes';
+import {Check, Globe2, LayoutTemplate, MonitorCog, Moon, Sparkles, Sun} from '@llamamail/ui/icon';
+import {Button} from '@llamamail/ui/button';
+import {FormCheckbox, FormSelect} from '@llamamail/ui/form';
+import {APP_LANGUAGE_OPTIONS, APP_THEME_OPTIONS, MAIL_VIEW_OPTIONS} from '@llamamail/app/settingsOptions';
+import {parseAppLanguage} from '@llamamail/app/settingsRules';
+import {createDefaultAppSettings} from '@llamamail/app/defaults';
+import type {AppLanguage, AppTheme, MailView} from '@llamamail/app/ipcTypes';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import llamaArt from '@resource/llama.png';
 import {useThemePreference} from '@renderer/hooks/useAppTheme';
@@ -175,131 +175,129 @@ export default function OnboardingPage() {
 									</div>
 								</div>
 							</header>
-								<main className="min-h-0 flex-1 overflow-y-auto px-6 py-5 md:px-8 md:py-6">
-									<div className="mx-auto w-full max-w-4xl space-y-5">
-										<section className="panel rounded-xl p-4 md:p-5">
-											<h3 className="ui-text-primary text-sm font-semibold uppercase tracking-wide">
-												Theme
-											</h3>
-											<div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-												{APP_THEME_OPTIONS.map((option) => {
-													const meta = THEME_OPTION_META[option.value as ThemeOptionValue];
-													const selected = theme === option.value;
-													return (
-														<Button
-															key={option.value}
-															type="button"
-															variant={selected ? 'default' : 'secondary'}
-															size="none"
-															className={`h-auto rounded-lg border px-3 py-2.5 text-left ${selected ? 'border-transparent' : 'ui-border-default'}`}
-															onClick={() => setTheme(option.value)}
-														>
-															<span className="flex w-full items-start gap-2.5">
-																<span className="mt-0.5">{meta.icon}</span>
-																<span className="min-w-0">
-																	<span className="block text-sm font-semibold">
-																		{option.label}
-																	</span>
-																	<span
-																		className={`${selected ? 'text-inverse/80' : 'ui-text-secondary'} block text-xs`}
-																	>
-																		{meta.subtitle}
-																	</span>
+							<main className="min-h-0 flex-1 overflow-y-auto px-6 py-5 md:px-8 md:py-6">
+								<div className="mx-auto w-full max-w-4xl space-y-5">
+									<section className="panel rounded-xl p-4 md:p-5">
+										<h3 className="ui-text-primary text-sm font-semibold uppercase tracking-wide">
+											Theme
+										</h3>
+										<div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+											{APP_THEME_OPTIONS.map((option) => {
+												const meta = THEME_OPTION_META[option.value as ThemeOptionValue];
+												const selected = theme === option.value;
+												return (
+													<Button
+														key={option.value}
+														type="button"
+														variant={selected ? 'default' : 'secondary'}
+														size="none"
+														className={`h-auto rounded-lg border px-3 py-2.5 text-left ${selected ? 'border-transparent' : 'ui-border-default'}`}
+														onClick={() => setTheme(option.value)}
+													>
+														<span className="flex w-full items-start gap-2.5">
+															<span className="mt-0.5">{meta.icon}</span>
+															<span className="min-w-0">
+																<span className="block text-sm font-semibold">
+																	{option.label}
+																</span>
+																<span
+																	className={`${selected ? 'text-inverse/80' : 'ui-text-secondary'} block text-xs`}
+																>
+																	{meta.subtitle}
 																</span>
 															</span>
-														</Button>
-													);
-												})}
-											</div>
-										</section>
-										<section className="grid gap-4 md:grid-cols-2">
-											<label className="block text-sm">
-												<span className="ui-text-secondary mb-1.5 inline-flex items-center gap-1.5 font-medium">
-													<Globe2 size={14} />
-													Language
+														</span>
+													</Button>
+												);
+											})}
+										</div>
+									</section>
+									<section className="grid gap-4 md:grid-cols-2">
+										<label className="block text-sm">
+											<span className="ui-text-secondary mb-1.5 inline-flex items-center gap-1.5 font-medium">
+												<Globe2 size={14} />
+												Language
+											</span>
+											<FormSelect
+												value={language}
+												onChange={(event) => setLanguage(parseAppLanguage(event.target.value))}
+											>
+												{APP_LANGUAGE_OPTIONS.map((option) => (
+													<option key={option.value} value={option.value}>
+														{option.label}
+													</option>
+												))}
+											</FormSelect>
+										</label>
+										<label className="block text-sm">
+											<span className="ui-text-secondary mb-1.5 inline-flex items-center gap-1.5 font-medium">
+												<LayoutTemplate size={14} />
+												Mail layout
+											</span>
+											<FormSelect
+												value={mailView}
+												onChange={(event) => setMailView(event.target.value as MailView)}
+											>
+												{MAIL_VIEW_OPTIONS.map((option) => (
+													<option key={option.value} value={option.value}>
+														{option.label}
+													</option>
+												))}
+											</FormSelect>
+										</label>
+									</section>
+									<section className="space-y-3">
+										<label className="ui-border-default flex items-start justify-between rounded-lg border px-3 py-3 text-sm">
+											<span className="pr-4">
+												<span className="ui-text-primary block font-medium">
+													Minimize to tray
 												</span>
-												<FormSelect
-													value={language}
-													onChange={(event) =>
-														setLanguage(parseAppLanguage(event.target.value))
-													}
-												>
-													{APP_LANGUAGE_OPTIONS.map((option) => (
-														<option key={option.value} value={option.value}>
-															{option.label}
-														</option>
-													))}
-												</FormSelect>
-											</label>
-											<label className="block text-sm">
-												<span className="ui-text-secondary mb-1.5 inline-flex items-center gap-1.5 font-medium">
-													<LayoutTemplate size={14} />
-													Mail layout
+												<span className="ui-text-secondary block text-xs">
+													Keep LlamaMail running in the background.
 												</span>
-												<FormSelect
-													value={mailView}
-													onChange={(event) => setMailView(event.target.value as MailView)}
-												>
-													{MAIL_VIEW_OPTIONS.map((option) => (
-														<option key={option.value} value={option.value}>
-															{option.label}
-														</option>
-													))}
-												</FormSelect>
-											</label>
-										</section>
-										<section className="space-y-3">
-											<label className="ui-border-default flex items-start justify-between rounded-lg border px-3 py-3 text-sm">
-												<span className="pr-4">
-													<span className="ui-text-primary block font-medium">
-														Minimize to tray
-													</span>
-													<span className="ui-text-secondary block text-xs">
-														Keep LlamaMail running in the background.
-													</span>
+											</span>
+											<FormCheckbox
+												checked={minimizeToTray}
+												onChange={(event) => setMinimizeToTray(event.target.checked)}
+											/>
+										</label>
+										<label className="ui-border-default flex items-start justify-between rounded-lg border px-3 py-3 text-sm">
+											<span className="pr-4">
+												<span className="ui-text-primary block font-medium">
+													Enable auto updates
 												</span>
-												<FormCheckbox
-													checked={minimizeToTray}
-													onChange={(event) => setMinimizeToTray(event.target.checked)}
-												/>
-											</label>
-											<label className="ui-border-default flex items-start justify-between rounded-lg border px-3 py-3 text-sm">
-												<span className="pr-4">
-													<span className="ui-text-primary block font-medium">
-														Enable auto updates
-													</span>
-													<span className="ui-text-secondary block text-xs">
-														Download and apply updates automatically.
-													</span>
+												<span className="ui-text-secondary block text-xs">
+													Download and apply updates automatically.
 												</span>
-												<FormCheckbox
-													checked={autoUpdateEnabled}
-													onChange={(event) => setAutoUpdateEnabled(event.target.checked)}
-												/>
-											</label>
-										</section>
-										{error && <p className="notice-danger rounded-lg px-4 py-2 text-sm">{error}</p>}
-										<p className="ui-text-muted text-xs">
-											You can change any of these options later in Settings.
-										</p>
-									</div>
-								</main>
-								<footer className="app-footer flex shrink-0 items-center justify-end px-6 py-4 md:px-8">
-									<div className="mx-auto flex w-full max-w-4xl justify-end">
-										<Button
-											type="button"
-											variant="default"
-											size="default"
-											className="rounded-md px-5 font-semibold"
-											disabled={saving}
-											onClick={() => {
-												void onSaveAndContinue();
-											}}
-										>
-											{saving ? 'Saving...' : 'Save and continue'}
-										</Button>
-									</div>
-								</footer>
+											</span>
+											<FormCheckbox
+												checked={autoUpdateEnabled}
+												onChange={(event) => setAutoUpdateEnabled(event.target.checked)}
+											/>
+										</label>
+									</section>
+									{error && <p className="notice-danger rounded-lg px-4 py-2 text-sm">{error}</p>}
+									<p className="ui-text-muted text-xs">
+										You can change any of these options later in Settings.
+									</p>
+								</div>
+							</main>
+							<footer className="app-footer flex shrink-0 items-center justify-end px-6 py-4 md:px-8">
+								<div className="mx-auto flex w-full max-w-4xl justify-end">
+									<Button
+										type="button"
+										variant="default"
+										size="default"
+										className="rounded-md px-5 font-semibold"
+										disabled={saving}
+										onClick={() => {
+											void onSaveAndContinue();
+										}}
+									>
+										{saving ? 'Saving...' : 'Save and continue'}
+									</Button>
+								</div>
+							</footer>
 						</section>
 					</div>
 				</div>

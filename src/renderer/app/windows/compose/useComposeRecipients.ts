@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import type {AutoCompleteRow} from '@renderer/components/inputs/AutoComplete';
+import type {AutoCompleteRow} from '@llamamail/ui/form';
 import type {RecipientFieldKey} from './types';
 
 export function useComposeRecipients() {

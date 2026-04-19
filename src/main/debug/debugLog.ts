@@ -28,7 +28,7 @@ export function pushDebugLog(entry: Omit<DebugLogEntry, 'id' | 'timestamp'>): De
 		scope: entry.scope || 'mail',
 		message: sanitizeDebugText(entry.message || ''),
 	};
-	emitDebugToConsole(normalized);
+	// emitDebugToConsole(normalized);
 	entries.push(normalized);
 	if (entries.length > MAX_DEBUG_LOGS) {
 		entries.splice(0, entries.length - MAX_DEBUG_LOGS);
@@ -44,16 +44,16 @@ export function pushDebugLog(entry: Omit<DebugLogEntry, 'id' | 'timestamp'>): De
 }
 
 function emitDebugToConsole(entry: DebugLogEntry): void {
-	const line = `[debug:${entry.level}] [${entry.source}] [${entry.scope}] ${entry.message}`;
-	if (entry.level === 'warn') {
-		console.warn(line);
-		return;
-	}
-	if (entry.level === 'error' || entry.level === 'fatal') {
-		console.error(line);
-		return;
-	}
-	console.log(line);
+	// const line = `[debug:${entry.level}] [${entry.source}] [${entry.scope}] ${entry.message}`;
+	// if (entry.level === 'warn') {
+	// 	console.warn(line);
+	// 	return;
+	// }
+	// if (entry.level === 'error' || entry.level === 'fatal') {
+	// 	console.error(line);
+	// 	return;
+	// }
+	// console.log(line);
 }
 
 export function getDebugLogs(limit = 500): DebugLogEntry[] {

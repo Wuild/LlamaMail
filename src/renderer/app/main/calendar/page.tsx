@@ -1,5 +1,15 @@
 import React, {startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState} from 'react';
-import {CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Settings, Trash2, X} from 'lucide-react';
+import {
+	CalendarDays,
+	ChevronLeft,
+	ChevronRight,
+	Pencil,
+	Plus,
+	RefreshCw,
+	Settings,
+	Trash2,
+	X,
+} from '@llamamail/ui/icon';
 import {useNavigate} from 'react-router-dom';
 import type {CalendarEventItem, PublicAccount, SyncStatusEvent} from '@/preload';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
@@ -10,10 +20,10 @@ import {useIpcEvent} from '@renderer/hooks/ipc/useIpcEvent';
 import {useAccount, useAccountDirectory} from '@renderer/hooks/ipc/useAccounts';
 import {useSystemLocale} from '@renderer/hooks/ipc/useSystemLocale';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {Button} from '@renderer/components/ui/button';
-import {FormDateTimeInput, FormInput, FormTextarea} from '@renderer/components/ui/FormControls';
-import {Modal, ModalHeader, ModalTitle} from '@renderer/components/ui/Modal';
-import {ContextMenu, ContextMenuItem} from '@renderer/components/ui/ContextMenu';
+import {Button} from '@llamamail/ui/button';
+import {FormDateTimeInput, FormInput, FormTextarea} from '@llamamail/ui/form';
+import {Modal, ModalHeader, ModalTitle} from '@llamamail/ui/modal';
+import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 import {
 	statusAutoSyncFailed,
 	statusNoAccountSelected,
@@ -21,7 +31,7 @@ import {
 	statusSyncing,
 	toErrorMessage,
 } from '@renderer/lib/statusText';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import WorkspaceLayout from '@renderer/layouts/WorkspaceLayout';
 import {
 	addHours,
@@ -36,7 +46,7 @@ import {
 	toDateKey,
 	toTimeInputValue,
 } from '@renderer/lib/date/calendar';
-import {composeLocalDateTimeValue, splitLocalDateTimeValue} from '@renderer/lib/date/localeInput';
+import {composeLocalDateTimeValue, splitLocalDateTimeValue} from '@llamamail/ui/libs/localeInput';
 
 type CalendarPageProps = {
 	accountId: number | null;
@@ -753,20 +763,20 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 							</div>
 						);
 					})}
-						{accounts.length === 0 && (
-							<Button
-								type="button"
-								variant="secondary"
-								className="w-full justify-center rounded-md px-3 py-2 text-sm"
-								onClick={() => navigate('/add-account')}
-							>
-								Add account
-							</Button>
-						)}
-					</div>
+					{accounts.length === 0 && (
+						<Button
+							type="button"
+							variant="secondary"
+							className="w-full justify-center rounded-md px-3 py-2 text-sm"
+							onClick={() => navigate('/add-account')}
+						>
+							Add account
+						</Button>
+					)}
 				</div>
-			</aside>
-		);
+			</div>
+		</aside>
+	);
 	const selectedDayEvents = selectedDayForModal ? (eventsByDay.get(selectedDayForModal) ?? []) : [];
 	const selectedAccountEmail =
 		String(selectedAccount.account?.email || '')

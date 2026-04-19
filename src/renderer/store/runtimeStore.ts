@@ -1,6 +1,6 @@
 import {create} from 'zustand';
 import type {SyncStatusEvent} from '@/preload';
-import type {AccountSyncModuleStatusMap, ProviderErrorCategory, ProviderSyncError} from '@/shared/ipcTypes';
+import type {AccountSyncModuleStatusMap, ProviderErrorCategory, ProviderSyncError} from '@llamamail/app/ipcTypes';
 
 export type SyncNotice = {
 	id: string;

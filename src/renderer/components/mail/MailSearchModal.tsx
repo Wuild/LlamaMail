@@ -1,9 +1,9 @@
-import {FormControlGroup, FormInput, FormSelect} from '../ui/FormControls';
-import {Button} from '../ui/button';
-import {Modal} from '../ui/Modal';
+import {FormControlGroup, FormInput, FormSelect} from '@llamamail/ui/form';
+import {Button} from '@llamamail/ui/button';
+import {Modal} from '@llamamail/ui/modal';
 import React, {useMemo} from 'react';
 import {Link} from 'react-router-dom';
-import {Search, Star, X} from 'lucide-react';
+import {Search, Star, X} from '@llamamail/ui/icon';
 import type {FolderItem, MessageItem, PublicAccount} from '@/preload';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';

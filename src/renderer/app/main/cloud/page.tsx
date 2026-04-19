@@ -1,11 +1,6 @@
-import {Button} from '@renderer/components/ui/button';
-import {Modal} from '@renderer/components/ui/Modal';
-import {
-	ContextMenu,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuSeparator,
-} from '@renderer/components/ui/ContextMenu';
+import {Button} from '@llamamail/ui/button';
+import {Modal} from '@llamamail/ui/modal';
+import {ContextMenu, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator} from '@llamamail/ui/contextmenu';
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
 	ChevronRight,
@@ -24,7 +19,7 @@ import {
 	Share2,
 	Trash2,
 	Upload,
-} from 'lucide-react';
+} from '@llamamail/ui/icon';
 import {Link, useSearchParams} from 'react-router-dom';
 import type {
 	AddCloudAccountPayload,
@@ -519,7 +514,11 @@ export default function CloudFilesPage() {
 				if (!active) return;
 				if (!persistedCached) setItems([]);
 				const message = String(error?.message || error || 'Unknown error');
-				if (selectedAccount && isOAuthCloudProvider(selectedAccount.provider) && isCloudAuthErrorMessage(message)) {
+				if (
+					selectedAccount &&
+					isOAuthCloudProvider(selectedAccount.provider) &&
+					isCloudAuthErrorMessage(message)
+				) {
 					setStatus(`Load failed: ${message}. Reconnect this account from the account menu.`);
 				} else {
 					setStatus(`Load failed: ${message}`);
@@ -1664,29 +1663,29 @@ export default function CloudFilesPage() {
 					>
 						Open
 					</ContextMenuItem>
-						<ContextMenuItem type="button" onClick={() => onOpenAccountInNewWindow(accountMenu.account)}>
-							Open in new window
+					<ContextMenuItem type="button" onClick={() => onOpenAccountInNewWindow(accountMenu.account)}>
+						Open in new window
+					</ContextMenuItem>
+					<ContextMenuItem type="button" onClick={() => void onRefreshAccount(accountMenu.account)}>
+						Refresh
+					</ContextMenuItem>
+					{isOAuthCloudProvider(accountMenu.account.provider) && (
+						<ContextMenuItem
+							type="button"
+							onClick={() => void onRelinkAccount(accountMenu.account)}
+							disabled={relinkingAccountId === accountMenu.account.id}
+						>
+							{relinkingAccountId === accountMenu.account.id ? (
+								<Loader2 size={14} className="animate-spin" />
+							) : (
+								<Cloud size={14} />
+							)}
+							{relinkingAccountId === accountMenu.account.id ? 'Reconnecting...' : 'Reconnect account'}
 						</ContextMenuItem>
-						<ContextMenuItem type="button" onClick={() => void onRefreshAccount(accountMenu.account)}>
-							Refresh
-						</ContextMenuItem>
-						{isOAuthCloudProvider(accountMenu.account.provider) && (
-							<ContextMenuItem
-								type="button"
-								onClick={() => void onRelinkAccount(accountMenu.account)}
-								disabled={relinkingAccountId === accountMenu.account.id}
-							>
-								{relinkingAccountId === accountMenu.account.id ? (
-									<Loader2 size={14} className="animate-spin" />
-								) : (
-									<Cloud size={14} />
-								)}
-								{relinkingAccountId === accountMenu.account.id ? 'Reconnecting...' : 'Reconnect account'}
-							</ContextMenuItem>
-						)}
-						<ContextMenuItem type="button" onClick={() => onOpenAccountSettings(accountMenu.account)}>
-							Edit account
-						</ContextMenuItem>
+					)}
+					<ContextMenuItem type="button" onClick={() => onOpenAccountSettings(accountMenu.account)}>
+						Edit account
+					</ContextMenuItem>
 					<ContextMenuItem type="button" danger onClick={() => void onDeleteAccount(accountMenu.account)}>
 						Delete account
 					</ContextMenuItem>
@@ -1825,40 +1824,40 @@ export default function CloudFilesPage() {
 							onChange={(next) => setEditDraft((prev) => (prev ? {...prev, name: next} : prev))}
 							placeholder="Personal Drive"
 						/>
-							{editRequiresWebDavBaseUrlFields && (
-								<Field
-									label="WebDAV URL"
-									value={editDraft.base_url}
-									onChange={(next) =>
-										setEditDraft((prev) =>
-											prev
-												? {
-														...prev,
-														base_url: next,
-													}
-												: prev,
-										)
-									}
-									placeholder="https://cloud.example.com/remote.php/dav/files/username/"
-								/>
-							)}
-							{editRequiresWebDavAuthFields && (
-								<Field
-									label="Username"
-									value={editDraft.user}
-									onChange={(next) =>
-										setEditDraft((prev) =>
-											prev
-												? {
-														...prev,
-														user: next,
-													}
-												: prev,
-										)
-									}
-									placeholder="username"
-								/>
-							)}
+						{editRequiresWebDavBaseUrlFields && (
+							<Field
+								label="WebDAV URL"
+								value={editDraft.base_url}
+								onChange={(next) =>
+									setEditDraft((prev) =>
+										prev
+											? {
+													...prev,
+													base_url: next,
+												}
+											: prev,
+									)
+								}
+								placeholder="https://cloud.example.com/remote.php/dav/files/username/"
+							/>
+						)}
+						{editRequiresWebDavAuthFields && (
+							<Field
+								label="Username"
+								value={editDraft.user}
+								onChange={(next) =>
+									setEditDraft((prev) =>
+										prev
+											? {
+													...prev,
+													user: next,
+												}
+											: prev,
+									)
+								}
+								placeholder="username"
+							/>
+						)}
 						<Field
 							label="Secret (optional)"
 							value={editDraft.secret}

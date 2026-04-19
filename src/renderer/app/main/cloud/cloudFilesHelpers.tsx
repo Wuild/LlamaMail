@@ -1,6 +1,15 @@
-import {FormInput, FormSelect} from '@renderer/components/ui/FormControls';
+import {FormInput, FormSelect} from '@llamamail/ui/form';
 import React from 'react';
-import {File, FileArchive, FileAudio2, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo} from 'lucide-react';
+import {
+	File,
+	FileArchive,
+	FileAudio2,
+	FileCode,
+	FileImage,
+	FileSpreadsheet,
+	FileText,
+	FileVideo,
+} from '@llamamail/ui/icon';
 import type {CloudItem, CloudProvider, CloudStorageUsage} from '@/preload';
 
 export type NavigationEntry = {token: string; label: string};

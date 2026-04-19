@@ -10,10 +10,10 @@ import {
 	Search,
 	Settings,
 	Users,
-} from 'lucide-react';
-import {Button} from '../ui/button';
+} from '@llamamail/ui/icon';
+import {Button} from '@llamamail/ui/button';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import type {Workspace} from '@renderer/lib/workspace';
 
 type MainLayoutMenubarProps = {

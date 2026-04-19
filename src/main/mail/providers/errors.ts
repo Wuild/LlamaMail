@@ -1,4 +1,4 @@
-import type {ProviderErrorCategory, ProviderSyncError} from '@/shared/ipcTypes.js';
+import type {ProviderErrorCategory, ProviderSyncError} from '@llamamail/app/ipcTypes';
 
 function toMessage(error: unknown): string {
 	if (error instanceof Error && error.message) return error.message;

@@ -1,15 +1,15 @@
 import Store from 'electron-store';
-import type {AppLanguage, AppSettings, AppSettingsPatch, AppTheme, MailView} from '@/shared/ipcTypes.js';
-import {createDefaultAppSettings, DEFAULT_APP_SETTINGS} from '@/shared/defaults.js';
+import type {AppLanguage, AppSettings, AppSettingsPatch, AppTheme, MailView} from '@llamamail/app/ipcTypes';
+import {createDefaultAppSettings, DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {
 	normalizeNavRailOrder,
 	normalizeSyncIntervalMinutes,
 	parseAppLanguage,
 	parseAppTheme,
 	parseMailView,
-} from '@/shared/settingsRules.js';
+} from '@llamamail/app/settingsRules';
 
-export type {AppLanguage, AppSettings, AppSettingsPatch, AppTheme, MailView} from '@/shared/ipcTypes.js';
+export type {AppLanguage, AppSettings, AppSettingsPatch, AppTheme, MailView} from '@llamamail/app/ipcTypes';
 
 let settingsCache: AppSettings = createDefaultAppSettings();
 let hasLoaded = false;

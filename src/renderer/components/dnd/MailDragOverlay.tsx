@@ -1,5 +1,5 @@
 import React from 'react';
-import {Mail} from 'lucide-react';
+import {Mail} from '@llamamail/ui/icon';
 import {useDragLayer} from 'react-dnd';
 import {DND_ITEM} from '@renderer/lib/dndTypes';
 

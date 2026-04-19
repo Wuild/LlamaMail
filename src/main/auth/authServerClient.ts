@@ -1,12 +1,12 @@
-import {AUTH_SERVER_BASE_URL, AUTH_SERVER_MAX_RETRIES, AUTH_SERVER_TIMEOUT_MS} from '@/shared/authServerConfig.js';
+import {AUTH_SERVER_BASE_URL, AUTH_SERVER_MAX_RETRIES, AUTH_SERVER_TIMEOUT_MS} from '@llamamail/app/authServerConfig';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {
 	extractAuthServerErrorMessage,
 	parseAuthServerExchangeDto,
 	parseAuthServerRefreshDto,
 	type AuthServerOAuthTokenDto,
-} from '@/shared/authServerTypes.js';
-import type {OAuthProvider, OAuthSession} from '@/shared/ipcTypes.js';
+} from '@llamamail/app/authServerTypes';
+import type {OAuthProvider, OAuthSession} from '@llamamail/app/ipcTypes';
 
 const logger = createMailDebugLogger('app', 'auth-server-client');
 const REQUEST_TIMEOUT_MS = Number.isFinite(AUTH_SERVER_TIMEOUT_MS) ? Math.max(1_000, AUTH_SERVER_TIMEOUT_MS) : 8_000;

@@ -3,12 +3,12 @@ import type {AppSettings} from '@/preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {useAutoUpdateState} from '@renderer/hooks/ipc/useAutoUpdateState';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {describeUpdatePhase} from '../mailFilterHelpers';
 import {useOpenUpdaterToken} from '../settingsRouteHelpers';
-import {Button} from '@renderer/components/ui/button';
-import {FormCheckbox} from '@renderer/components/ui/FormControls';
-import {Modal} from '@renderer/components/ui/Modal';
+import {Button} from '@llamamail/ui/button';
+import {FormCheckbox} from '@llamamail/ui/form';
+import {Modal} from '@llamamail/ui/modal';
 
 export default function SettingsDeveloperPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);

@@ -2,10 +2,10 @@ import {useState} from 'react';
 import type {AppSettings} from '@/preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
-import {Button} from '@renderer/components/ui/button';
-import {cn} from '@renderer/lib/utils';
-import {APP_THEME_OPTIONS, MAIL_VIEW_OPTIONS} from '@/shared/settingsOptions';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
+import {Button} from '@llamamail/ui/button';
+import {cn} from '@llamamail/ui/utils';
+import {APP_THEME_OPTIONS, MAIL_VIEW_OPTIONS} from '@llamamail/app/settingsOptions';
 
 export default function SettingsLayoutPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);

@@ -1,7 +1,7 @@
 import {parentPort, workerData} from 'node:worker_threads';
 import {setSqlitePathOverride} from '../db/drizzle.js';
 import {providerManager} from '../mail/providers/providerManager.js';
-import type {DavSyncOptions} from '@/shared/ipcTypes.js';
+import type {DavSyncOptions} from '@llamamail/app/ipcTypes';
 import type {ProviderAncillarySyncResult} from '../mail/providers/contracts.js';
 
 type WorkerInput = {

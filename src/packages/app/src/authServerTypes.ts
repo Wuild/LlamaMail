@@ -1,4 +1,4 @@
-import type {OAuthProvider} from './ipcTypes.js';
+import type {OAuthProvider} from './ipcTypes';
 
 export interface AuthServerOAuthTokenDto {
 	provider: OAuthProvider | null;

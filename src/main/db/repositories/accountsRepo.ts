@@ -4,13 +4,13 @@ import path from 'node:path';
 import {eq} from 'drizzle-orm';
 import {getDb, getDrizzle, getSqlitePath} from '@main/db/drizzle.js';
 import {accounts, type InsertAccount} from '@main/db/schema.js';
-import {APP_NAME} from '@/shared/appConfig.js';
+import {APP_NAME} from '@llamamail/app/appConfig';
 import {
 	hasAnyEnabledAccountModule,
 	normalizeAccountModuleSelection,
 	type AccountModuleSelection,
-} from '@/shared/accountModules.js';
-import type {AuthMethod, OAuthProvider, OAuthSession} from '@/shared/ipcTypes.js';
+} from '@llamamail/app/accountModules';
+import type {AuthMethod, OAuthProvider, OAuthSession} from '@llamamail/app/ipcTypes';
 import {ensureFreshMailOAuthSession, getDefaultMailOAuthAdditionalScopes} from '@main/mail/oauth.js';
 
 // This repository still contains parameterized raw SQL for a few multi-step cleanup paths while Drizzle migration is

@@ -1,6 +1,6 @@
-import {ContextMenu, ContextMenuItem} from '@renderer/components/ui/ContextMenu';
+import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 import React, {useCallback, useEffect, useMemo, useRef, useState, type SetStateAction} from 'react';
-import {ArrowLeft, FileText, Forward, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2} from 'lucide-react';
+import {ArrowLeft, FileText, Forward, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2} from '@llamamail/ui/icon';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import MainLayout from '@renderer/layouts/MainLayout';
 import {
@@ -52,9 +52,9 @@ import {useMailMessagesStore} from '@renderer/store/mailMessagesStore';
 import {buildMessageIframeSrcDoc, formatMessageTagLabel, parseRouteNumber} from './mailPageHelpers';
 import {normalizeAccountOrder, readPersistedAccountOrder, writePersistedAccountOrder} from './mailAccountOrder';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import {DEFAULT_APP_SETTINGS} from '@/shared/defaults';
+import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import type {FolderItem, MessageItem, OpenMessageTargetEvent, PublicAccount} from '@/preload';
-import {isAccountEmailModuleEnabled} from '@/shared/accountModules';
+import {isAccountEmailModuleEnabled} from '@llamamail/app/accountModules';
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEARCH_FALLBACK_MESSAGES_PER_FOLDER = 1000;
@@ -1175,13 +1175,13 @@ function MailPage() {
 				);
 				setSyncStatusText(options?.successStatus || 'Move synced');
 			})
-				.catch((error: unknown) => {
-					setSyncStatusText(`${options?.failurePrefix || 'Move failed'}: ${toErrorMessage(error)}`);
-					queueReconcileReload(message.account_id, selectedFolderPathRef.current, selectedMessageIdRef.current);
-				})
-				.finally(() => {
-					pendingMoveMessageIdsRef.current.delete(message.id);
-				});
+			.catch((error: unknown) => {
+				setSyncStatusText(`${options?.failurePrefix || 'Move failed'}: ${toErrorMessage(error)}`);
+				queueReconcileReload(message.account_id, selectedFolderPathRef.current, selectedMessageIdRef.current);
+			})
+			.finally(() => {
+				pendingMoveMessageIdsRef.current.delete(message.id);
+			});
 	}
 
 	function resolveMessageFolder(accountId: number, folderId: number): FolderItem | null {
@@ -1211,8 +1211,7 @@ function MailPage() {
 			return;
 		}
 		const inboxFolderPath = resolveInboxFolderPath(message.account_id);
-		const targetFolderPath =
-			preference === 'junk' ? junkFolderPath : sourceIsJunk ? inboxFolderPath : null;
+		const targetFolderPath = preference === 'junk' ? junkFolderPath : sourceIsJunk ? inboxFolderPath : null;
 		if (preference === 'not-junk' && sourceIsJunk && !targetFolderPath) {
 			setSyncStatusText('No Inbox folder found for this account.');
 			return;
@@ -1858,7 +1857,7 @@ function MailPage() {
 						.catch((error: unknown) => {
 							setSyncStatusText(`Archive sync failed: ${toErrorMessage(error)}`);
 							queueReconcileReload(selectedAccountId, selectedFolderPath, null);
-					});
+						});
 				})()
 			}
 			onMessageMarkJunk={(message) =>

@@ -1,5 +1,5 @@
 import React from 'react';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 
 type WorkspaceLayoutProps = {
 	menubar?: React.ReactNode;

@@ -1,4 +1,4 @@
-import {DEFAULT_APP_SETTINGS} from './defaults.js';
+import {DEFAULT_APP_SETTINGS} from './defaults';
 import type {AppLanguage, AppTheme, MailView, NavRailItemId} from './ipcTypes';
 
 export const APP_LANGUAGE_VALUES = ['system', 'en-US'] as const;

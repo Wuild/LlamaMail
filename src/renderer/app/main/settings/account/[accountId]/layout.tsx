@@ -1,7 +1,7 @@
 import {Navigate, Outlet, useLocation} from 'react-router-dom';
 import WorkspaceLayout from '@renderer/layouts/WorkspaceLayout';
-import {Button} from '@renderer/components/ui/button';
-import {cn} from '@renderer/lib/utils';
+import {Button} from '@llamamail/ui/button';
+import {cn} from '@llamamail/ui/utils';
 import {useRouteAccountId} from './accountRouteHelpers';
 import {useAccountSettingsRoute, type UseAccountSettingsRouteResult} from './useAccountSettingsRoute';
 import type {AccountPanelSection} from '@renderer/app/main/settings/settingsTypes';

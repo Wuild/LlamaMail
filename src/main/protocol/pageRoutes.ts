@@ -1,4 +1,4 @@
-import {APP_PROTOCOL} from '@/shared/appConfig.js';
+import {APP_PROTOCOL} from '@llamamail/app/appConfig';
 
 type ProtocolPageRouteResolver = string | ((url: URL) => string | null);
 

@@ -1,11 +1,11 @@
 import {useOutletContext} from 'react-router-dom';
 import type {MailFilterActionType, MailFilterField, MailFilterMatchMode, MailFilterOperator} from '@/preload';
-import {Button} from '@renderer/components/ui/button';
-import {FormCheckbox, FormInput, FormSelect} from '@renderer/components/ui/FormControls';
-import {Modal} from '@renderer/components/ui/Modal';
+import {Button} from '@llamamail/ui/button';
+import {FormCheckbox, FormInput, FormSelect} from '@llamamail/ui/form';
+import {Modal} from '@llamamail/ui/modal';
 import {isProtectedFolder} from '@renderer/features/mail/folders';
 import {getFolderColorClass, getFolderIcon} from '@renderer/lib/mail/folderPresentation';
-import {cn} from '@renderer/lib/utils';
+import {cn} from '@llamamail/ui/utils';
 import type {UseAccountSettingsRouteResult} from '../useAccountSettingsRoute';
 
 export default function SettingsAccountFiltersPage() {
