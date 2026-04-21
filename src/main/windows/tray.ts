@@ -16,12 +16,14 @@ type TrayState = {
 	tray: Tray | null;
 	deps: TrayControllerDeps | null;
 	unreadCount: number;
+	lastGoodIcon: Electron.NativeImage | null;
 };
 
 const state: TrayState = {
 	tray: null,
 	deps: null,
 	unreadCount: 0,
+	lastGoodIcon: null,
 };
 
 function runAsync(fn: () => void) {
@@ -45,7 +47,8 @@ export const tray = {
 		const deps = state.deps;
 		const appName = deps.appName || APP_NAME;
 
-		state.tray = new Tray(buildTrayIcon(deps.appIconPath));
+		const icon = resolveBestTrayIcon(deps.appIconPath);
+		state.tray = new Tray(icon);
 		state.tray.setToolTip(buildTrayTooltip(appName, state.unreadCount));
 
 		buildMenu();
@@ -83,6 +86,12 @@ export const tray = {
 	},
 
 	refresh() {
+		if (!state.tray || !state.deps) return;
+		// Re-apply image/tooltip together with menu updates; some Linux tray hosts drop the image on menu refresh.
+		const icon = resolveBestTrayIcon(state.deps.appIconPath);
+		state.tray.setImage(icon);
+		const appName = state.deps.appName || APP_NAME;
+		state.tray.setToolTip(buildTrayTooltip(appName, state.unreadCount));
 		buildMenu();
 	},
 
@@ -181,6 +190,15 @@ function buildTrayIcon(appIconPath: string | null) {
 	}
 
 	return nativeImage.createEmpty();
+}
+
+function resolveBestTrayIcon(appIconPath: string | null): Electron.NativeImage {
+	const icon = buildTrayIcon(appIconPath);
+	if (!icon.isEmpty()) {
+		state.lastGoodIcon = icon;
+		return icon;
+	}
+	return state.lastGoodIcon || nativeImage.createEmpty();
 }
 
 export function resolveLinuxTrayIconPath(appIconPath: string | null): string | null {

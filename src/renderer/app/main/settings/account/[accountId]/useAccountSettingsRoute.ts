@@ -5,7 +5,7 @@ import {useAccount, useAccounts} from '@renderer/hooks/ipc/useAccounts';
 import {useResizableSidebar} from '@renderer/hooks/useResizableSidebar';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {useMailFoldersStore} from '@renderer/store/mailFoldersStore';
-import type {UpdateAccountPayload} from '@/preload';
+import type {UpdateAccountPayload} from '@preload';
 import type {AccountEditor, AccountPanelSection} from '@renderer/app/main/settings/settingsTypes';
 import {
 	createDefaultMailFilterDraft,

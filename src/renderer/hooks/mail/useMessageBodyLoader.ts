@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {MessageBodyResult} from '@/preload';
+import type {MessageBodyResult} from '@preload';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {toErrorMessage} from '@renderer/lib/statusText';
 

@@ -125,7 +125,7 @@ export default function SettingsLayout() {
 			}
 			sidebarWidth={settingsSidebarWidth}
 			onSidebarResizeStart={onSettingsSidebarResizeStart}
-			contentClassName={cn('min-h-0 flex-1 overflow-y-auto', isAccountSettingsRoute && 'p-0')}
+			contentClassName={cn('p-0')}
 		>
 			<Outlet />
 		</WorkspaceLayout>

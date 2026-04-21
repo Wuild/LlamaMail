@@ -3,15 +3,20 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 const alias = {
-	'@': path.resolve(__dirname, './src'),
 	'@renderer': path.resolve(__dirname, './src/renderer'),
 	'@main': path.resolve(__dirname, './src/main'),
 	'@resource': path.resolve(__dirname, './src/resources'),
+	'@preload': path.resolve(__dirname, './src/preload'),
+
+	'@llamamail/app': path.resolve(__dirname, 'src/packages/app/src'),
+	'@llamamail/ui': path.resolve(__dirname, 'src/packages/ui/src'),
+	'@llamamail/plugin-sdk': path.resolve(__dirname, 'src/packages/plugin-sdk/src'),
 };
 
 function buildWorkspaces() {
 	return {
 		name: 'build-workspaces',
+		apply: 'build' as const,
 		async buildStart() {
 			const {execSync} = await import('node:child_process');
 			execSync('npm run build:packages', {stdio: 'inherit'});
@@ -40,7 +45,7 @@ export default defineConfig({
 				external: ['electron', 'better-sqlite3', 'keytar'],
 				output: {
 					entryFileNames: '[name].js',
-					chunkFileNames: 'chunks/[name]-[hash].js',
+					chunkFileNames: 'chunks/[name].js',
 				},
 			},
 		},

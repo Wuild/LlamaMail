@@ -12,7 +12,7 @@ import {
 	statusSyncStarted,
 	statusSyncingMailbox,
 } from '@renderer/lib/statusText';
-import type {FolderItem, PublicAccount, SyncStatusEvent} from '@/preload';
+import type {FolderItem, PublicAccount, SyncStatusEvent} from '@preload';
 import {readPersistedAccountOrder, sortAccountsByOrder} from '@renderer/app/main/email/mailAccountOrder';
 import {isAccountEmailModuleEnabled} from '@llamamail/app/accountModules';
 

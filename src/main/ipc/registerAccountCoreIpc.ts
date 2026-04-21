@@ -2,6 +2,7 @@ import {ipcMain} from 'electron';
 import {parseOptionalText, parsePositiveInt, parseRequiredObject, parseRequiredText} from './validation.js';
 import {tray} from '@main/windows/tray';
 import {getAppSettings} from '@main/settings/store';
+import {appEventHandler, AppEvent} from '@llamamail/app/appEventHandler';
 
 type AccountCoreIpcDeps = {
 	appLogger: {debug: (...args: any[]) => void; info: (...args: any[]) => void; warn: (...args: any[]) => void};
@@ -69,6 +70,10 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 		const created = await deps.addAccount(payload);
 		deps.blockedSyncAccounts.delete(created.id);
 		deps.broadcastAccountAdded(created);
+		appEventHandler.emit(AppEvent.AccountAdded, {
+			accountId: created.id,
+			email: created.email,
+		});
 		deps.notifyAccountCountChanged();
 		void deps.runSyncAndBroadcast(created.id, 'new-account').catch((error) => {
 			console.warn('Initial sync after account add failed:', (error as any)?.message || String(error));
@@ -95,6 +100,10 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 		const updated = await deps.updateAccount(safeAccountId, normalizedPayload);
 		deps.blockedSyncAccounts.delete(safeAccountId);
 		deps.broadcastAccountUpdated(updated);
+		appEventHandler.emit(AppEvent.AccountUpdated, {
+			accountId: updated.id,
+			email: updated.email,
+		});
 		deps.restartIdleWatcher(safeAccountId);
 		deps.notifyUnreadCountChanged();
 		const emailEnabledBefore = Number(before?.sync_emails ?? 1) > 0;
@@ -134,6 +143,10 @@ export function registerAccountCoreIpc(deps: AccountCoreIpcDeps): void {
 		const deleted = await deps.deleteAccount(safeAccountId);
 		deps.blockedSyncAccounts.delete(safeAccountId);
 		deps.broadcastAccountDeleted(deleted);
+		appEventHandler.emit(AppEvent.AccountDeleted, {
+			accountId: deleted.id,
+			email: deleted.email,
+		});
 		deps.stopIdleWatcher(safeAccountId);
 		deps.notifyAccountCountChanged();
 		deps.notifyUnreadCountChanged();

@@ -1,4 +1,4 @@
-import type {PublicAccount} from '@/preload';
+import type {PublicAccount} from '@preload';
 
 export type MainWindowRouteContext = {
 	accountId: number | null;

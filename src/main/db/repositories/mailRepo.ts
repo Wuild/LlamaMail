@@ -73,6 +73,7 @@ export interface MessageContextRow {
 export interface UpsertLocalDraftSnapshotInput {
 	accountId: number;
 	draftMessageId?: number | null;
+	draftUid?: number | null;
 	messageId?: string | null;
 	inReplyTo?: string | null;
 	referencesText?: string | null;
@@ -875,6 +876,10 @@ export function upsertLocalDraftSnapshot(input: UpsertLocalDraftSnapshotInput): 
 		typeof input.draftMessageId === 'number' && Number.isFinite(input.draftMessageId)
 			? getMessageContext(Math.floor(input.draftMessageId))
 			: null;
+	const targetDraftUid =
+		typeof input.draftUid === 'number' && Number.isFinite(input.draftUid) && input.draftUid > 0
+			? Math.floor(input.draftUid)
+			: null;
 	const targetFolder =
 		localDraftContext && localDraftContext.accountId === input.accountId
 			? {
@@ -899,6 +904,8 @@ export function upsertLocalDraftSnapshot(input: UpsertLocalDraftSnapshotInput): 
                     from_address = ?,
                     to_address = ?,
                     date = ?,
+                    uid = COALESCE(?, uid),
+                    seq = CASE WHEN ? IS NOT NULL THEN ? ELSE seq END,
                     is_read = 1
                 WHERE id = ?
             `,
@@ -910,6 +917,9 @@ export function upsertLocalDraftSnapshot(input: UpsertLocalDraftSnapshotInput): 
 			targetFromAddress,
 			targetToAddress,
 			targetDate,
+			targetDraftUid,
+			targetDraftUid,
+			targetDraftUid,
 			localDraftContext.messageId,
 		);
 		upsertMessageBody(localDraftContext.messageId, input.textContent ?? null, input.htmlContent ?? null);
@@ -932,12 +942,12 @@ export function upsertLocalDraftSnapshot(input: UpsertLocalDraftSnapshotInput): 
 		| {minUid?: number | null}
 		| undefined;
 	const minUid = Number(minUidRow?.minUid ?? 0);
-	const nextTempUid = Number.isFinite(minUid) && minUid <= 0 ? Math.floor(minUid) - 1 : -1;
+	const nextTempUid = targetDraftUid ?? (Number.isFinite(minUid) && minUid <= 0 ? Math.floor(minUid) - 1 : -1);
 	upsertMessage({
 		accountId: input.accountId,
 		folderId: targetFolder.id,
 		uid: nextTempUid,
-		seq: 0,
+		seq: targetDraftUid ?? 0,
 		messageId: targetMessageId,
 		inReplyTo: targetInReplyTo,
 		referencesText: targetReferencesText,

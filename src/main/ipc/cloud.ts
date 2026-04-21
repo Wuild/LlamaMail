@@ -28,10 +28,12 @@ import {
 	getCloudItemStatus,
 	getCloudStorageUsage,
 	listCloudItems,
+	moveCloudItem,
 	uploadCloudFile,
 } from '@main/cloud/providers.js';
 import {syncCloudDav} from '@main/cloud/davSync.js';
 import {APP_NAME, APP_PROTOCOL} from '@llamamail/app/appConfig';
+import {appEventHandler, AppEvent} from '@llamamail/app/appEventHandler';
 import {confirmFileOpen, isRiskyFileOpenTarget} from '@main/security/fileOpenRisk.js';
 
 const logger = createMailDebugLogger('cloud', 'ipc:cloud');
@@ -46,6 +48,7 @@ type LinkCloudOAuthPayload = {
 	clientId?: string | null;
 	tenantId?: string | null;
 };
+
 const pendingOAuthProtocolUrls: string[] = [];
 const oauthProtocolWaiters = new Set<(url: string) => void>();
 
@@ -72,6 +75,11 @@ export function registerCloudIpc(): void {
 		assertCloudProviderEnabled(String(payload?.provider || '').trim() as CloudProvider);
 		const created = await addCloudAccount(payload);
 		broadcastCloudAccountsChanged();
+		appEventHandler.emit(AppEvent.CloudAccountAdded, {
+			accountId: created.id,
+			provider: String(created.provider || ''),
+			name: created.name ?? null,
+		});
 		return created;
 	});
 
@@ -79,6 +87,11 @@ export function registerCloudIpc(): void {
 		logger.info('IPC update-cloud-account accountId=%d', accountId);
 		const updated = await updateCloudAccount(accountId, payload ?? {});
 		broadcastCloudAccountsChanged();
+		appEventHandler.emit(AppEvent.CloudAccountUpdated, {
+			accountId: updated.id,
+			provider: String(updated.provider || ''),
+			name: updated.name ?? null,
+		});
 		return updated;
 	});
 
@@ -111,6 +124,11 @@ export function registerCloudIpc(): void {
 			secret: secretPayload,
 		});
 		broadcastCloudAccountsChanged();
+		appEventHandler.emit(AppEvent.CloudAccountAdded, {
+			accountId: created.id,
+			provider: String(created.provider || provider),
+			name: created.name ?? null,
+		});
 		return created;
 	});
 
@@ -141,6 +159,11 @@ export function registerCloudIpc(): void {
 				secret: nextSecret,
 			});
 			broadcastCloudAccountsChanged();
+			appEventHandler.emit(AppEvent.CloudAccountUpdated, {
+				accountId: updated.id,
+				provider: String(updated.provider || provider),
+				name: updated.name ?? null,
+			});
 			return updated;
 		},
 	);
@@ -149,6 +172,7 @@ export function registerCloudIpc(): void {
 		logger.warn('IPC delete-cloud-account accountId=%d', accountId);
 		const result = await deleteCloudAccount(accountId);
 		broadcastCloudAccountsChanged();
+		appEventHandler.emit(AppEvent.CloudAccountDeleted, {accountId});
 		return result;
 	});
 
@@ -161,7 +185,12 @@ export function registerCloudIpc(): void {
 	ipcMain.handle('sync-cloud-dav', async (_event, accountId: number) => {
 		logger.info('IPC sync-cloud-dav accountId=%d', accountId);
 		const credentials = await getCloudAccountCredentials(accountId);
-		return await syncCloudDav(credentials);
+		const result = await syncCloudDav(credentials);
+		appEventHandler.emit(AppEvent.CloudDavSyncCompleted, {
+			accountId,
+			provider: String(credentials.provider || ''),
+		});
+		return result;
 	});
 
 	ipcMain.handle('get-cloud-storage-usage', async (_event, accountId: number) => {
@@ -175,15 +204,41 @@ export function registerCloudIpc(): void {
 		async (_event, accountId: number, parentPathOrToken: string | null, folderName: string) => {
 			logger.info('IPC create-cloud-folder accountId=%d parent=%s', accountId, String(parentPathOrToken || ''));
 			const credentials = await getCloudAccountCredentials(accountId);
-			return await createCloudFolder(credentials, parentPathOrToken ?? null, folderName);
+			const created = await createCloudFolder(credentials, parentPathOrToken ?? null, folderName);
+			appEventHandler.emit(AppEvent.CloudFolderCreated, {
+				accountId,
+				parentPathOrToken: parentPathOrToken ?? null,
+				path: String(created?.path || '').trim() || null,
+				name: String(created?.name || folderName).trim() || null,
+			});
+			return created;
 		},
 	);
 
 	ipcMain.handle('delete-cloud-item', async (_event, accountId: number, itemPathOrToken: string) => {
 		logger.warn('IPC delete-cloud-item accountId=%d item=%s', accountId, String(itemPathOrToken || ''));
 		const credentials = await getCloudAccountCredentials(accountId);
-		return await deleteCloudItem(credentials, itemPathOrToken);
+		const result = await deleteCloudItem(credentials, itemPathOrToken);
+		appEventHandler.emit(AppEvent.CloudItemDeleted, {
+			accountId,
+			itemPathOrToken,
+		});
+		return result;
 	});
+
+	ipcMain.handle(
+		'move-cloud-item',
+		async (_event, accountId: number, itemPathOrToken: string, targetParentPathOrToken: string | null) => {
+			logger.info(
+				'IPC move-cloud-item accountId=%d item=%s target=%s',
+				accountId,
+				String(itemPathOrToken || ''),
+				String(targetParentPathOrToken || ''),
+			);
+			const credentials = await getCloudAccountCredentials(accountId);
+			return await moveCloudItem(credentials, itemPathOrToken, targetParentPathOrToken ?? null);
+		},
+	);
 
 	ipcMain.handle('get-cloud-item-status', async (_event, accountId: number, itemPathOrToken: string) => {
 		logger.debug('IPC get-cloud-item-status accountId=%d item=%s', accountId, String(itemPathOrToken || ''));
@@ -218,6 +273,11 @@ export function registerCloudIpc(): void {
 			await uploadCloudFile(credentials, parentPathOrToken ?? null, fileName, content, null);
 			uploaded += 1;
 		}
+		appEventHandler.emit(AppEvent.CloudFilesUploaded, {
+			accountId,
+			parentPathOrToken: parentPathOrToken ?? null,
+			uploaded,
+		});
 		return {uploaded};
 	});
 
@@ -253,6 +313,11 @@ export function registerCloudIpc(): void {
 					return {ok: false as const, action: 'cancelled' as const, path: ''};
 				}
 				await fs.writeFile(saveResult.filePath, downloaded.content);
+				appEventHandler.emit(AppEvent.CloudItemSaved, {
+					accountId,
+					itemPathOrToken,
+					path: saveResult.filePath,
+				});
 				return {ok: true as const, action: 'saved' as const, path: saveResult.filePath};
 			}
 			const isRisky = isRiskyFileOpenTarget(safeName, downloaded.mimeType, downloaded.content);
@@ -264,6 +329,11 @@ export function registerCloudIpc(): void {
 			await fs.writeFile(targetPath, downloaded.content);
 			const openError = await shell.openPath(targetPath);
 			if (openError) throw new Error(openError);
+			appEventHandler.emit(AppEvent.CloudItemOpened, {
+				accountId,
+				itemPathOrToken,
+				path: targetPath,
+			});
 			return {ok: true as const, action: 'opened' as const, path: targetPath};
 		},
 	);

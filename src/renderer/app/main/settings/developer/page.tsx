@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import type {AppSettings} from '@/preload';
+import type {AppSettings} from '@preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {useAutoUpdateState} from '@renderer/hooks/ipc/useAutoUpdateState';
 import {ipcClient} from '@renderer/lib/ipcClient';
@@ -9,6 +9,7 @@ import {useOpenUpdaterToken} from '../settingsRouteHelpers';
 import {Button} from '@llamamail/ui/button';
 import {FormCheckbox} from '@llamamail/ui/form';
 import {Modal} from '@llamamail/ui/modal';
+import {Container} from '@llamamail/ui/container';
 
 export default function SettingsDeveloperPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);
@@ -24,7 +25,7 @@ export default function SettingsDeveloperPage() {
 	}, [openUpdaterToken]);
 
 	async function applySettingsPatch(patch: Partial<AppSettings>): Promise<boolean> {
-		setSettings((prev) => ({...prev, ...patch}));
+		setSettings((prev : AppSettings) => ({...prev, ...patch}));
 		setDeveloperStatus('Saving...');
 		try {
 			const saved = await ipcClient.updateAppSettings(patch);
@@ -108,7 +109,7 @@ export default function SettingsDeveloperPage() {
 	}
 
 	return (
-		<div className="mx-auto h-full min-h-0 w-full max-w-5xl space-y-4 pb-4 md:pb-6">
+		<Container>
 			<section className="panel rounded-xl p-4">
 				<h2 className="ui-text-primary text-base font-semibold">Developer Settings</h2>
 				<p className="mt-1 ui-text-muted text-sm">
@@ -342,6 +343,6 @@ export default function SettingsDeveloperPage() {
 			{developerStatus && (
 				<div className="app-footer rounded-md px-3 py-2 text-xs ui-text-muted">{developerStatus}</div>
 			)}
-		</div>
+		</Container>
 	);
 }

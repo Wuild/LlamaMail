@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import type {MessageItem} from '@/preload';
+import type {MessageItem} from '@preload';
 
 const DEFAULT_MESSAGE_FETCH_LIMIT = 100;
 

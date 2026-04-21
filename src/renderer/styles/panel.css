@@ -99,6 +99,10 @@
 		background-color: var(--color-primary);
 	}
 
+	.progress-fill-success {
+		background-color: var(--color-success);
+	}
+
 	.progress-fill-danger {
 		background-color: var(--color-danger);
 	}
@@ -205,6 +209,29 @@
 
 	.icon-info {
 		color: var(--color-primary);
+	}
+
+	.cloud-icon-folder {
+		color: color-mix(in srgb, var(--color-primary) 90%, var(--content-text));
+	}
+
+	.cloud-icon-image,
+	.cloud-icon-video,
+	.cloud-icon-audio,
+	.cloud-icon-archive,
+	.cloud-icon-spreadsheet,
+	.cloud-icon-text,
+	.cloud-icon-code,
+	.cloud-icon-script,
+	.cloud-icon-pdf,
+	.cloud-icon-slides,
+	.cloud-icon-data,
+	.cloud-icon-binary {
+		color: var(--content-muted);
+	}
+
+	.cloud-icon-generic {
+		color: var(--content-muted);
 	}
 
 	.link-primary {

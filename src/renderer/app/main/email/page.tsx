@@ -1,6 +1,6 @@
 import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 import React, {useCallback, useEffect, useMemo, useRef, useState, type SetStateAction} from 'react';
-import {ArrowLeft, FileText, Forward, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2} from '@llamamail/ui/icon';
+import {ArrowLeft, FileText, Forward, PenSquare, Reply, ReplyAll, ShieldAlert, ShieldCheck, Trash2} from '@llamamail/ui/icon';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import MainLayout from '@renderer/layouts/MainLayout';
 import {
@@ -46,6 +46,7 @@ import {useMessageBodyLoader} from '@renderer/hooks/mail/useMessageBodyLoader';
 import {useMailSyncStatus} from '@renderer/hooks/mail/useMailSyncStatus';
 import {useOptimisticReadState} from '@renderer/hooks/mail/useOptimisticReadState';
 import {useMailActionMutations} from '@renderer/hooks/mail/useMailActionMutations';
+import {useNotification} from '@renderer/hooks/useNotification';
 import {useAccountsRuntimeStore} from '@renderer/store/accountsRuntimeStore';
 import {useMailFoldersStore} from '@renderer/store/mailFoldersStore';
 import {useMailMessagesStore} from '@renderer/store/mailMessagesStore';
@@ -53,7 +54,7 @@ import {buildMessageIframeSrcDoc, formatMessageTagLabel, parseRouteNumber} from 
 import {normalizeAccountOrder, readPersistedAccountOrder, writePersistedAccountOrder} from './mailAccountOrder';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
-import type {FolderItem, MessageItem, OpenMessageTargetEvent, PublicAccount} from '@/preload';
+import type {FolderItem, MessageItem, OpenMessageTargetEvent, PublicAccount} from '@preload';
 import {isAccountEmailModuleEnabled} from '@llamamail/app/accountModules';
 
 const MESSAGE_PAGE_SIZE = 100;
@@ -229,7 +230,6 @@ function MailPage() {
 	const sourceRequestSeqRef = useRef(0);
 	const senderAvatarRequestSeqRef = useRef(0);
 	const accountOrderRef = useRef<number[]>(accountOrder);
-	const lastOpenedDraftInMailViewRef = useRef<number | null>(null);
 	const {systemLocale} = useSystemLocale();
 	const [windowViewport, setWindowViewport] = useState<{width: number; height: number}>({
 		width: window.innerWidth,
@@ -279,6 +279,7 @@ function MailPage() {
 		const idx = window.history.state?.idx;
 		return typeof idx === 'number' ? idx : 0;
 	});
+	const {create: createNotification, update: updateNotification} = useNotification();
 	const {getAccount} = useAccountDirectory();
 	const selectedAccount = useAccount(selectedAccountId);
 
@@ -755,42 +756,6 @@ function MailPage() {
 		selectedMessageIdRef.current = selectedMessageId;
 	}, [selectedMessageId]);
 
-	const isDraftMessageInMailView = useCallback(
-		(message: MessageItem | null | undefined): boolean => {
-			if (!message) return false;
-			const folder = folders.find((item) => item.id === message.folder_id) ?? null;
-			const folderType = String(folder?.type || '').toLowerCase();
-			const folderPath = String(folder?.path || '').toLowerCase();
-			if (folderType === 'drafts' || folderPath.includes('draft')) return true;
-			return /^<draft\./i.test(String(message.message_id || ''));
-		},
-		[folders],
-	);
-
-	const openDraftInComposerFromMailView = useCallback(
-		(message: MessageItem): void => {
-			if (lastOpenedDraftInMailViewRef.current === message.id) return;
-			lastOpenedDraftInMailViewRef.current = message.id;
-			setSelectedMessageId((prev) => (prev === message.id ? null : prev));
-			setSelectedMessageIds((prev) => prev.filter((id) => id !== message.id));
-			setPendingAutoReadMessageId((prev) => (prev === message.id ? null : prev));
-			selectionAnchorIndexRef.current = null;
-			void ipcClient.openMessageWindow(message.id);
-			const fallbackPath = `/email/${message.account_id}/${message.folder_id}`;
-			if (location.pathname !== fallbackPath) {
-				navigate(fallbackPath, {replace: true});
-			}
-		},
-		[
-			location.pathname,
-			navigate,
-			selectionAnchorIndexRef,
-			setPendingAutoReadMessageId,
-			setSelectedMessageId,
-			setSelectedMessageIds,
-		],
-	);
-
 	useEffect(() => {
 		if (accounts.length === 0) {
 			if (selectedAccountId !== null) setSelectedAccountId(null);
@@ -826,10 +791,6 @@ function MailPage() {
 
 		if (routeEmailId) {
 			const routedMessage = messages.find((message) => message.id === routeEmailId) ?? null;
-			if (routedMessage && isDraftMessageInMailView(routedMessage)) {
-				openDraftInComposerFromMailView(routedMessage);
-				return;
-			}
 			if (routedMessage && selectedMessageId !== routeEmailId) {
 				setSelectedMessageId(routeEmailId);
 				setSelectedMessageIds((prev) => (prev.includes(routeEmailId) ? prev : [routeEmailId]));
@@ -997,20 +958,11 @@ function MailPage() {
 		setMessages(msgRows);
 		if (preferredMessageId) {
 			const preferredMessage = msgRows.find((message) => message.id === preferredMessageId) ?? null;
-			if (preferredMessage && isDraftMessageInMailView(preferredMessage)) {
-				openDraftInComposerFromMailView(preferredMessage);
-				return;
-			}
 			setSelectedMessageId(preferredMessageId);
 			return;
 		}
 		const currentMessageId = selectedMessageIdRef.current;
 		if (currentMessageId && msgRows.some((m) => m.id === currentMessageId)) {
-			const currentMessage = msgRows.find((message) => message.id === currentMessageId) ?? null;
-			if (currentMessage && isDraftMessageInMailView(currentMessage)) {
-				openDraftInComposerFromMailView(currentMessage);
-				return;
-			}
 			setSelectedMessageId(currentMessageId);
 		}
 	}
@@ -1371,11 +1323,19 @@ function MailPage() {
 		selectionAnchorIndexRef.current = null;
 	}
 
-	useEffect(() => {
-		if (!selectedMessage) return;
-		if (!isDraftMessageInMailView(selectedMessage)) return;
-		openDraftInComposerFromMailView(selectedMessage);
-	}, [isDraftMessageInMailView, openDraftInComposerFromMailView, selectedMessage]);
+	function onEditDraft(): void {
+		if (!selectedMessage || !isDraftMessageSelected) return;
+		void ipcClient.openComposeWindow({
+			accountId: selectedMessage.account_id,
+			draftMessageId: selectedMessage.id,
+			to: selectedMessage.to_address || null,
+			subject: selectedMessage.subject || null,
+			bodyHtml: selectedMessageBody?.html || null,
+			bodyText: selectedMessageBody?.text || null,
+			inReplyTo: selectedMessage.in_reply_to || null,
+			references: selectedMessage.references_text || null,
+		});
+	}
 
 	function onViewSource(): void {
 		if (!selectedMessageId) return;
@@ -1402,9 +1362,62 @@ function MailPage() {
 
 	function runAttachmentAction(index: number, action: 'open' | 'save') {
 		if (!selectedMessage) return;
-		void ipcClient.openMessageAttachment(selectedMessage.id, index, action).catch((error: unknown) => {
-			setSyncStatusText(`Attachment failed: ${toErrorMessage(error)}`);
+		const attachment = messageAttachments[index];
+		const attachmentName =
+			typeof attachment?.filename === 'string' && attachment.filename.trim().length > 0
+				? attachment.filename.trim()
+				: `Attachment ${index + 1}`;
+		const actionLabel = action === 'open' ? 'Open' : 'Save';
+		const notificationId = createNotification({
+			title: `${actionLabel} attachment`,
+			message: `${actionLabel}ing ${attachmentName}...`,
+			progress: 15,
+			busy: true,
+			tone: 'info',
+			autoCloseMs: null,
 		});
+		const preparingTimer = window.setTimeout(() => {
+			updateNotification(notificationId, {
+				message: 'Preparing attachment...',
+				progress: 45,
+				busy: true,
+				tone: 'info',
+			});
+		}, 250);
+		const writingTimer = window.setTimeout(() => {
+			updateNotification(notificationId, {
+				message: action === 'open' ? 'Opening file...' : 'Saving file...',
+				progress: 82,
+				busy: true,
+				tone: 'info',
+			});
+		}, 900);
+		void ipcClient
+			.openMessageAttachment(selectedMessage.id, index, action)
+			.then(() => {
+				updateNotification(notificationId, {
+					message: action === 'open' ? `${attachmentName} opened.` : `${attachmentName} saved.`,
+					progress: 100,
+					busy: false,
+					tone: 'success',
+					autoCloseMs: 3500,
+				});
+			})
+			.catch((error: unknown) => {
+				const errorMessage = toErrorMessage(error);
+				setSyncStatusText(`Attachment failed: ${errorMessage}`);
+				updateNotification(notificationId, {
+					message: `Attachment failed: ${errorMessage}`,
+					progress: 100,
+					busy: false,
+					tone: 'danger',
+					autoCloseMs: 7000,
+				});
+			})
+			.finally(() => {
+				window.clearTimeout(preparingTimer);
+				window.clearTimeout(writingTimer);
+			});
 	}
 
 	function requestCloseMainOverlays(): void {
@@ -1601,11 +1614,6 @@ function MailPage() {
 			selectedMessageId={selectedMessageId}
 			selectedMessageIds={selectedMessageIds}
 			onSelectMessage={(id, index, modifiers) => {
-				const message = messages.find((entry) => entry.id === id) ?? null;
-				if (message && isDraftMessageInMailView(message)) {
-					openDraftInComposerFromMailView(message);
-					return true;
-				}
 				handleSelectMessage(id, index, modifiers);
 				return false;
 			}}
@@ -2023,18 +2031,24 @@ function MailPage() {
 									<span className="divider-default mx-1 h-6 w-px" />
 								</>
 							)}
-							<ToolboxButton label="View source" icon={<FileText size={14} />} onClick={onViewSource} />
-							<ToolboxButton
-								label={isSelectedMessageInJunk ? 'Not junk' : 'Junk'}
-								icon={isSelectedMessageInJunk ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
-								onClick={() => {
-									if (!selectedMessage) return;
-									void setMessageJunkPreference(
-										selectedMessage,
-										isSelectedMessageInJunk ? 'not-junk' : 'junk',
-									);
-								}}
-							/>
+							{isDraftMessageSelected ? (
+								<ToolboxButton label="Edit draft" icon={<PenSquare size={14} />} onClick={onEditDraft} primary />
+							) : (
+								<>
+									<ToolboxButton label="View source" icon={<FileText size={14} />} onClick={onViewSource} />
+									<ToolboxButton
+										label={isSelectedMessageInJunk ? 'Not junk' : 'Junk'}
+										icon={isSelectedMessageInJunk ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+										onClick={() => {
+											if (!selectedMessage) return;
+											void setMessageJunkPreference(
+												selectedMessage,
+												isSelectedMessageInJunk ? 'not-junk' : 'junk',
+											);
+										}}
+									/>
+								</>
+							)}
 							<ToolboxButton
 								label="Delete"
 								icon={<Trash2 size={14} />}

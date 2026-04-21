@@ -56,17 +56,27 @@ export function MessageHeaderCard({
 		const match = raw.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
 		return String(match?.[1] || raw).trim();
 	}, [message.from_address]);
+	const recipientRaw = String(message.to_address || '').trim();
+	const normalizedFolderLabel = String(folderLabel || '')
+		.trim()
+		.toLowerCase();
+	const isOutgoingMessageContext =
+		/^<draft\./i.test(String(message.message_id || '')) ||
+		normalizedFolderLabel.includes('draft') ||
+		normalizedFolderLabel.includes('sent');
+	const recipientPrimary = recipientRaw || 'No recipients yet';
 	const accountId = Number(message.account_id);
 	const hasAccountId = Number.isInteger(accountId) && accountId > 0;
-	const senderPrimary = senderName || senderEmail || 'Unknown sender';
-	const senderSecondary = senderName && senderEmail ? senderEmail : null;
+	const senderPrimary = isOutgoingMessageContext ? recipientPrimary : senderName || senderEmail || 'Unknown sender';
+	const senderSecondary =
+		isOutgoingMessageContext ? null : senderName && senderEmail ? senderEmail : null;
 	const [senderMenu, setSenderMenu] = useState<{x: number; y: number} | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [senderIsContact, setSenderIsContact] = useState<boolean>(false);
 	const [inlineStatus, setInlineStatus] = useState<{tone: 'success' | 'error'; text: string} | null>(null);
 	const senderButtonRef = useRef<HTMLButtonElement | null>(null);
 
-	const canRunSenderActions = hasAccountId && senderEmail.length > 0;
+	const canRunSenderActions = hasAccountId && senderEmail.length > 0 && !isOutgoingMessageContext;
 
 	function reportStatus(messageText: string, tone: 'success' | 'error' = 'success') {
 		if (onQuickActionStatus) {
@@ -250,13 +260,16 @@ export function MessageHeaderCard({
 			</div>
 			<div className="mt-3 flex flex-wrap items-center justify-between gap-4">
 				<div className="flex min-w-0 items-center gap-3">
-					<button
+					<Button
 						ref={senderButtonRef}
 						type="button"
+						variant="unstyled"
+						size="none"
 						className="hover-card-trigger group relative flex min-w-[17rem] max-w-[24rem] cursor-pointer items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-2 text-left focus-visible:outline-none"
 						aria-expanded={senderMenu ? 'true' : 'false'}
 						aria-haspopup="menu"
 						onClick={(event) => {
+							if (!canRunSenderActions) return;
 							event.stopPropagation();
 							if (senderMenu) {
 								setSenderMenu(null);
@@ -264,7 +277,7 @@ export function MessageHeaderCard({
 							}
 							openSenderMenu();
 						}}
-						title="Sender actions"
+						title={canRunSenderActions ? 'Sender actions' : undefined}
 					>
 						<div className="flex min-w-0 flex-1 items-center gap-3">
 							{avatarSrc && (
@@ -282,8 +295,8 @@ export function MessageHeaderCard({
 								)}
 							</div>
 						</div>
-						<ChevronDown size={14} className="ui-text-muted shrink-0" />
-					</button>
+						{canRunSenderActions && <ChevronDown size={14} className="ui-text-muted shrink-0" />}
+					</Button>
 				</div>
 				<p className="ui-text-secondary shrink-0 text-right text-sm">
 					{formatSystemDateTime(message.date, dateLocale)}

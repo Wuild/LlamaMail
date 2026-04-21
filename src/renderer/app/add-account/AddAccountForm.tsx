@@ -6,7 +6,7 @@ import type {
 	DiscoverResult,
 	OAuthSession,
 	ProviderDriverCatalogItem,
-} from '@/preload';
+} from '@preload';
 import ServiceSettingsCard, {type ServiceSecurityMode} from '@renderer/components/settings/ServiceSettingsCard';
 import {Button} from '@llamamail/ui/button';
 import {FormCheckbox, FormInput} from '@llamamail/ui/form';
@@ -14,6 +14,7 @@ import {useAppTheme} from '@renderer/hooks/useAppTheme';
 import {isEditableTarget} from '@renderer/lib/dom';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import llamaArt from '@resource/llama.png';
+import {Card} from '@llamamail/ui/card';
 
 type Service = {host: string; port: number; security: ServiceSecurityMode};
 type WizardStep = 1 | 2 | 3 | 4;
@@ -689,7 +690,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 
 	return (
 		<div className={`${embedded ? 'h-full w-full' : 'h-screen w-screen'} workspace-content overflow-hidden`}>
-			<div className="panel flex h-full w-full flex-col overflow-hidden border-0">
+			<div className="flex h-full w-full flex-col overflow-hidden border-0">
 				<div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[minmax(320px,440px)_minmax(0,1fr)]">
 					<aside
 						className="relative hidden min-h-0 overflow-hidden px-6 py-7 text-inverse lg:flex lg:flex-col"
@@ -1031,7 +1032,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 												)}
 											</div>
 
-											<div className="panel rounded-xl p-4">
+											<Card>
 												<p className="ui-text-primary text-sm font-semibold">Include modules</p>
 												<p className="ui-text-muted mt-1 text-xs">
 													Choose what this account should appear in and sync.
@@ -1073,7 +1074,7 @@ const SettingsAddAccount: React.FC<SettingsAddAccountProps> = ({
 														Select at least one module.
 													</p>
 												)}
-											</div>
+											</Card>
 										</section>
 									)}
 

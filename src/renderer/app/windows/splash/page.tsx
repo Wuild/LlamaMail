@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import type {AutoUpdateState} from '@/preload';
+import type {AutoUpdateState} from '@preload';
 import llamaLogo from '@resource/llamarun.png';
 import {useIpcEvent} from '@renderer/hooks/ipc/useIpcEvent';
 import {ipcClient} from '@renderer/lib/ipcClient';

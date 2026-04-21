@@ -1622,20 +1622,43 @@ function parseIcsEvents(rawIcs: string): Array<{
 		for (const line of lines) {
 			const [keyRaw, ...rest] = line.split(':');
 			if (!keyRaw || rest.length === 0) continue;
-			const key = keyRaw.split(';')[0].toUpperCase();
+			const {name: key, params} = parseIcsPropertyKey(keyRaw);
 			const value = rest.join(':').trim();
 			if (!value) continue;
 			if (key === 'UID') uid = value;
 			if (key === 'SUMMARY') summary = value;
 			if (key === 'DESCRIPTION') description = value.replace(/\\n/g, '\n');
 			if (key === 'LOCATION') location = value;
-			if (key === 'DTSTART') startsAt = parseIcsDate(value);
-			if (key === 'DTEND') endsAt = parseIcsDate(value);
+			if (key === 'DTSTART') startsAt = parseIcsDate(value, params.TZID);
+			if (key === 'DTEND') endsAt = parseIcsDate(value, params.TZID);
 		}
 		if (!uid) continue;
 		out.push({uid, summary, description, location, startsAt, endsAt});
 	}
 	return out;
+}
+
+function parseIcsPropertyKey(keyRaw: string): {name: string; params: Record<string, string>} {
+	const segments = String(keyRaw || '')
+		.split(';')
+		.map((segment) => segment.trim())
+		.filter(Boolean);
+	const name = String(segments[0] || '')
+		.trim()
+		.toUpperCase();
+	const params: Record<string, string> = {};
+	for (const segment of segments.slice(1)) {
+		const equalIndex = segment.indexOf('=');
+		if (equalIndex <= 0) continue;
+		const paramName = segment.slice(0, equalIndex).trim().toUpperCase();
+		const paramValue = segment
+			.slice(equalIndex + 1)
+			.trim()
+			.replace(/^"(.*)"$/, '$1');
+		if (!paramName || !paramValue) continue;
+		params[paramName] = paramValue;
+	}
+	return {name, params};
 }
 
 function unfoldIcs(input: string): string[] {
@@ -1651,7 +1674,7 @@ function unfoldIcs(input: string): string[] {
 	return lines.filter((line) => line.length > 0);
 }
 
-function parseIcsDate(value: string): string | null {
+function parseIcsDate(value: string, timeZone?: string | null): string | null {
 	const v = value.trim();
 	if (/^\d{8}T\d{6}Z$/.test(v)) {
 		const y = Number(v.slice(0, 4));
@@ -1662,14 +1685,87 @@ function parseIcsDate(value: string): string | null {
 		const ss = Number(v.slice(13, 15));
 		return new Date(Date.UTC(y, m, d, hh, mm, ss)).toISOString();
 	}
+	if (/^\d{8}T\d{4}Z$/.test(v)) {
+		const y = Number(v.slice(0, 4));
+		const m = Number(v.slice(4, 6)) - 1;
+		const d = Number(v.slice(6, 8));
+		const hh = Number(v.slice(9, 11));
+		const mm = Number(v.slice(11, 13));
+		return new Date(Date.UTC(y, m, d, hh, mm, 0)).toISOString();
+	}
 	if (/^\d{8}$/.test(v)) {
 		const y = Number(v.slice(0, 4));
 		const m = Number(v.slice(4, 6)) - 1;
 		const d = Number(v.slice(6, 8));
 		return new Date(Date.UTC(y, m, d, 0, 0, 0)).toISOString();
 	}
+	if (/^\d{8}T\d{6}$/.test(v) || /^\d{8}T\d{4}$/.test(v)) {
+		const y = Number(v.slice(0, 4));
+		const m = Number(v.slice(4, 6)) - 1;
+		const d = Number(v.slice(6, 8));
+		const hh = Number(v.slice(9, 11));
+		const mm = Number(v.slice(11, 13));
+		const ss = v.length >= 15 ? Number(v.slice(13, 15)) : 0;
+		const parsedFromTimeZone = parseFloatingIcsDateWithTimeZone(y, m, d, hh, mm, ss, timeZone);
+		if (parsedFromTimeZone) return parsedFromTimeZone;
+		const localDate = new Date(y, m, d, hh, mm, ss);
+		return Number.isNaN(localDate.getTime()) ? null : localDate.toISOString();
+	}
 	const parsed = Date.parse(v);
 	return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function parseFloatingIcsDateWithTimeZone(
+	year: number,
+	month: number,
+	day: number,
+	hour: number,
+	minute: number,
+	second: number,
+	timeZone?: string | null,
+): string | null {
+	const normalizedZone = String(timeZone || '').trim();
+	if (!normalizedZone) return null;
+	try {
+		// Validate that this runtime recognizes the IANA time zone.
+		new Intl.DateTimeFormat('en-US', {timeZone: normalizedZone}).format(new Date());
+	} catch {
+		return null;
+	}
+
+	const baseUtcMs = Date.UTC(year, month, day, hour, minute, second);
+	let utcMs = baseUtcMs;
+	for (let pass = 0; pass < 2; pass += 1) {
+		const offsetMinutes = getTimeZoneOffsetMinutes(utcMs, normalizedZone);
+		if (offsetMinutes === null) break;
+		utcMs = baseUtcMs - offsetMinutes * 60_000;
+	}
+	return new Date(utcMs).toISOString();
+}
+
+function getTimeZoneOffsetMinutes(timestampMs: number, timeZone: string): number | null {
+	try {
+		const formatter = new Intl.DateTimeFormat('en-US', {
+			timeZone,
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false,
+			timeZoneName: 'shortOffset',
+		});
+		const parts = formatter.formatToParts(new Date(timestampMs));
+		const offsetLabel = String(parts.find((part) => part.type === 'timeZoneName')?.value || '').trim();
+		if (!offsetLabel) return null;
+		if (/^GMT$/i.test(offsetLabel)) return 0;
+		const match = offsetLabel.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/i);
+		if (!match) return null;
+		const sign = match[1] === '-' ? -1 : 1;
+		const hours = Number(match[2] || '0');
+		const minutes = Number(match[3] || '0');
+		if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+		return sign * (hours * 60 + minutes);
+	} catch {
+		return null;
+	}
 }
 
 function toCalDavDate(d: Date): string {

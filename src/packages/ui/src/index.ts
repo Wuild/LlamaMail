@@ -1,8 +1,13 @@
 export * from './badge';
 export * from './button';
+export * from './container';
 export * from './contextmenu';
+export * as Icons from './icon';
 export * from './form';
 export * from './modal';
 export * from './scroll-area';
 export * from './utils';
 export * from './editor';
+export {default as HtmlLexicalEditor} from './editor';
+export * from './card';
+export * from './label';

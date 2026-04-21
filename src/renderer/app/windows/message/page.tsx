@@ -2,7 +2,7 @@ import {Button} from '@llamamail/ui/button';
 import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {FileText, Forward, Reply, ReplyAll, Trash2} from '@llamamail/ui/icon';
-import type {MessageBodyResult, MessageDetails} from '@/preload';
+import type {MessageBodyResult, MessageDetails} from '@preload';
 import {toErrorMessage} from '@renderer/lib/statusText';
 import {
 	buildForwardQuoteHtml,

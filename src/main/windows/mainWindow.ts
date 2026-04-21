@@ -1,8 +1,8 @@
 import {app, BrowserWindow} from 'electron';
 import path from 'path';
 import {fileURLToPath} from 'url';
-import windowStateKeeper from 'electron-window-state';
 import {loadWindowContent} from './loadWindowContent.js';
+import {loadWindowState} from './windowState.js';
 
 type MainWindowLogger = {
 	info: (...args: any[]) => void;
@@ -46,7 +46,7 @@ export function createMainWindowManager(deps: MainWindowManagerDeps): {
 	function createWindow(options: {initialRoute?: string | null} = {}): BrowserWindow {
 		deps.logger.info('Creating main window');
 		const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
-		const windowState = windowStateKeeper({
+		const windowState = loadWindowState({
 			defaultWidth: 1200,
 			defaultHeight: 800,
 			file: 'main-window-state.json',
@@ -70,7 +70,8 @@ export function createMainWindowManager(deps: MainWindowManagerDeps): {
 			? deps.createAppWindow(windowOptions)
 			: deps.createFramelessAppWindow(windowOptions);
 		deps.attachWindowShortcuts(win);
-		windowState.manage(win);
+		windowState.restoreDisplayState(win);
+		windowState.attach(win);
 		win.webContents.session.setSpellCheckerLanguages(getSpellCheckerLanguagesSafe(deps, currentSettings.language));
 		(
 			win.webContents.session as typeof win.webContents.session & {

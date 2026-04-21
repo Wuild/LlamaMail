@@ -7,7 +7,6 @@ import {
 	Cloud,
 	Download,
 	Eye,
-	FolderOpen,
 	FolderPlus,
 	Globe,
 	HardDrive,
@@ -19,6 +18,7 @@ import {
 	Share2,
 	Trash2,
 	Upload,
+	X,
 } from '@llamamail/ui/icon';
 import {Link, useSearchParams} from 'react-router-dom';
 import type {
@@ -28,10 +28,11 @@ import type {
 	CloudStorageUsage,
 	PublicCloudAccount,
 	UpdateCloudAccountPayload,
-} from '@/preload';
+} from '@preload';
 import {formatBytes} from '@renderer/lib/format';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
 import WorkspaceLayout from '@renderer/layouts/WorkspaceLayout';
+import {useNotification} from '@renderer/hooks/useNotification';
 import {useResizableSidebar} from '@renderer/hooks/useResizableSidebar';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {
@@ -57,12 +58,14 @@ import {
 	readCloudTableColumns,
 	readCollapsedCloudAccountIds,
 	readPersistedFolderCache,
-	renderCloudFileTypeIcon,
+	readPersistedStorageUsage,
+	renderCloudItemIcon,
 	resolveOneDriveScope,
 	serializeNavigationTrail,
 	writeCloudTableColumns,
 	writeCollapsedCloudAccountIds,
 	writePersistedFolderCache,
+	writePersistedStorageUsage,
 } from './cloudFilesHelpers';
 import CloudSortableHeaderCell from './CloudSortableHeaderCell';
 
@@ -78,7 +81,10 @@ function isCloudAuthErrorMessage(message: string): boolean {
 		normalized.includes('(401)') ||
 		normalized.includes('invalid_grant') ||
 		normalized.includes('access token is missing') ||
-		normalized.includes('sign in again')
+		normalized.includes('sign in again') ||
+		normalized.includes('session expired') ||
+		normalized.includes('token has been expired or revoked') ||
+		normalized.includes('please reconnect this account')
 	);
 }
 
@@ -93,6 +99,7 @@ function resolveCloudBaseUrlForSave(baseUrl: string): string | null {
 }
 
 export default function CloudFilesPage() {
+	const {create: createNotification, update: updateNotification} = useNotification();
 	const {sidebarWidth, onResizeStart} = useResizableSidebar({
 		defaultWidth: 300,
 		minWidth: 260,
@@ -122,13 +129,30 @@ export default function CloudFilesPage() {
 	const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 	const [refreshingAccountIds, setRefreshingAccountIds] = useState<Set<number>>(new Set());
 	const [collapsedAccountIds, setCollapsedAccountIds] = useState<Set<number>>(() => readCollapsedCloudAccountIds());
+	const [pausedOAuthAccountIds, setPausedOAuthAccountIds] = useState<Set<number>>(new Set());
+	const [oauthReconnectQueue, setOauthReconnectQueue] = useState<number[]>([]);
 	const [rowMenu, setRowMenu] = useState<{x: number; y: number; item: CloudItem} | null>(null);
 	const [accountMenu, setAccountMenu] = useState<{x: number; y: number; account: PublicCloudAccount} | null>(null);
 	const [storageUsage, setStorageUsage] = useState<CloudStorageUsage | null>(null);
 	const [storageLoading, setStorageLoading] = useState(false);
+	const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+	const [detailsItemId, setDetailsItemId] = useState<string | null>(null);
+	const [selectionBox, setSelectionBox] = useState<{
+		left: number;
+		top: number;
+		width: number;
+		height: number;
+	} | null>(null);
+	const [dragOverTargetToken, setDragOverTargetToken] = useState<string | null>(null);
+	const [movingItems, setMovingItems] = useState(false);
 	const rowMenuRef = useRef<HTMLDivElement | null>(null);
 	const accountMenuRef = useRef<HTMLDivElement | null>(null);
 	const tableHeadMenuRef = useRef<HTMLDivElement | null>(null);
+	const tableViewportRef = useRef<HTMLDivElement | null>(null);
+	const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+	const lastSelectedItemIdRef = useRef<string | null>(null);
+	const boxSelectionOriginRef = useRef<{x: number; y: number} | null>(null);
+	const draggedItemIdRef = useRef<string | null>(null);
 	const [rowMenuPosition, setRowMenuPosition] = useState<{left: number; top: number}>({
 		left: 0,
 		top: 0,
@@ -207,6 +231,11 @@ export default function CloudFilesPage() {
 		() => accounts.find((account) => account.id === selectedAccountId) ?? null,
 		[accounts, selectedAccountId],
 	);
+	const queuedReconnectAccount = useMemo(() => {
+		const nextAccountId = oauthReconnectQueue[0];
+		if (!nextAccountId) return null;
+		return accounts.find((account) => account.id === nextAccountId) ?? null;
+	}, [accounts, oauthReconnectQueue]);
 	const nav = useMemo(
 		() => parseNavigationTrail(searchParams.get('trail'), selectedAccount?.provider ?? 'webdav'),
 		[searchParams, selectedAccount?.provider],
@@ -260,6 +289,11 @@ export default function CloudFilesPage() {
 		});
 		return list;
 	}, [items, tableSort]);
+	const selectedItems = useMemo(
+		() => sortedItems.filter((item) => selectedItemIds.has(item.id)),
+		[selectedItemIds, sortedItems],
+	);
+	const detailsItem = useMemo(() => items.find((item) => item.id === detailsItemId) ?? null, [detailsItemId, items]);
 
 	useEffect(() => {
 		if (!accounts.length) {
@@ -288,6 +322,18 @@ export default function CloudFilesPage() {
 	useEffect(() => {
 		writeCollapsedCloudAccountIds(collapsedAccountIds);
 	}, [collapsedAccountIds]);
+
+	useEffect(() => {
+		const validIds = new Set(accounts.map((account) => account.id));
+		setPausedOAuthAccountIds((prev) => {
+			const next = new Set<number>();
+			for (const id of prev) {
+				if (validIds.has(id)) next.add(id);
+			}
+			return next.size === prev.size ? prev : next;
+		});
+		setOauthReconnectQueue((prev) => prev.filter((id) => validIds.has(id)));
+	}, [accounts]);
 
 	useEffect(() => {
 		if (!rowMenu) return;
@@ -407,8 +453,27 @@ export default function CloudFilesPage() {
 	}, [tableHeadMenu]);
 
 	useEffect(() => {
+		const resetDragState = () => {
+			setDragOverTargetToken(null);
+			draggedItemIdRef.current = null;
+		};
+		window.addEventListener('dragend', resetDragState);
+		window.addEventListener('drop', resetDragState);
+		return () => {
+			window.removeEventListener('dragend', resetDragState);
+			window.removeEventListener('drop', resetDragState);
+		};
+	}, []);
+
+	useEffect(() => {
 		writeCloudTableColumns(tableColumns);
 	}, [tableColumns]);
+
+	useEffect(() => {
+		setSelectedItemIds(new Set());
+		lastSelectedItemIdRef.current = null;
+		setDetailsItemId(null);
+	}, [selectedAccount?.id, currentNavEntry?.token]);
 
 	useLayoutEffect(() => {
 		if (!selectedAccount || !currentNavEntry) {
@@ -451,7 +516,15 @@ export default function CloudFilesPage() {
 			setStorageLoading(false);
 			return;
 		}
+		if (pausedOAuthAccountIds.has(selectedAccount.id)) {
+			setStorageUsage(null);
+			setStorageLoading(false);
+			return;
+		}
 		let active = true;
+		const cachedUsage = readPersistedStorageUsage(selectedAccount.id);
+		setStorageUsage(cachedUsage);
+		setStorageLoading(!cachedUsage);
 		const loadUsage = (markLoading: boolean) => {
 			if (!active) return;
 			if (markLoading) setStorageLoading(true);
@@ -460,9 +533,17 @@ export default function CloudFilesPage() {
 				.then((usage) => {
 					if (!active) return;
 					setStorageUsage(usage);
+					writePersistedStorageUsage(selectedAccount.id, usage);
 				})
-				.catch(() => {
+				.catch((error: any) => {
 					if (!active) return;
+					const message = String(error?.message || error || 'Unknown error');
+					if (isOAuthCloudProvider(selectedAccount.provider) && isCloudAuthErrorMessage(message)) {
+						queueOAuthReconnectPrompt(
+							selectedAccount,
+							`Storage check paused: ${message}. Reconnect this account to resume sync.`,
+						);
+					}
 					setStorageUsage(null);
 				})
 				.finally(() => {
@@ -470,13 +551,13 @@ export default function CloudFilesPage() {
 					if (markLoading) setStorageLoading(false);
 				});
 		};
-		loadUsage(true);
+		loadUsage(!cachedUsage);
 		const timer = window.setInterval(() => loadUsage(false), 30000);
 		return () => {
 			active = false;
 			window.clearInterval(timer);
 		};
-	}, [reloadKey, selectedAccount]);
+	}, [pausedOAuthAccountIds, reloadKey, selectedAccount]);
 
 	useEffect(() => {
 		if (!selectedAccount || !currentNavEntry) {
@@ -497,6 +578,11 @@ export default function CloudFilesPage() {
 			setItems([]);
 			setPendingFolderToken((prev) => (prev === currentNavEntry.token ? prev : currentNavEntry.token));
 		}
+		if (pausedOAuthAccountIds.has(selectedAccount.id)) {
+			setLoading(false);
+			setStatus(`Sync paused for ${selectedAccount.name}. Reconnect this account to resume sync.`);
+			return;
+		}
 		let active = true;
 		setLoading(true);
 		setStatus('Loading cloud files...');
@@ -514,15 +600,18 @@ export default function CloudFilesPage() {
 				if (!active) return;
 				if (!persistedCached) setItems([]);
 				const message = String(error?.message || error || 'Unknown error');
-				if (
-					selectedAccount &&
-					isOAuthCloudProvider(selectedAccount.provider) &&
-					isCloudAuthErrorMessage(message)
-				) {
-					setStatus(`Load failed: ${message}. Reconnect this account from the account menu.`);
-				} else {
-					setStatus(`Load failed: ${message}`);
-				}
+					if (
+						selectedAccount &&
+						isOAuthCloudProvider(selectedAccount.provider) &&
+						isCloudAuthErrorMessage(message)
+					) {
+						queueOAuthReconnectPrompt(
+							selectedAccount,
+							`Load failed: ${message}. Sync paused until this account is reconnected.`,
+						);
+					} else {
+						setStatus(`Load failed: ${message}`);
+					}
 				setPendingFolderToken(null);
 			})
 			.finally(() => {
@@ -532,7 +621,7 @@ export default function CloudFilesPage() {
 		return () => {
 			active = false;
 		};
-	}, [currentNavEntry, reloadKey, selectedAccount]);
+	}, [currentNavEntry, pausedOAuthAccountIds, reloadKey, selectedAccount]);
 
 	useEffect(() => {
 		if (loading || !selectedAccountId) return;
@@ -545,31 +634,69 @@ export default function CloudFilesPage() {
 	}, [loading, selectedAccountId]);
 
 	useEffect(() => {
-		if (!selectedAccount || !currentNavEntry || pendingFolderToken) return;
-		const accountId = selectedAccount.id;
-		const token = currentNavEntry.token;
-		const key = `${accountId}:${token}`;
-		const timer = window.setInterval(() => {
-			void ipcClient
-				.listCloudItems(accountId, token)
-				.then((result) => {
+		if (!accounts.length) return;
+		if (pendingFolderToken) return;
+		let active = true;
+		let inFlight = false;
+
+		const listAccountTokens = (account: PublicCloudAccount): string[] => {
+			const tokens = new Set<string>();
+			const root = buildRootTrail(account.provider);
+			if (root[0]?.token) tokens.add(root[0].token);
+			const prefix = `${account.id}:`;
+			for (const key of Object.keys(filesCacheRef.current)) {
+				if (!key.startsWith(prefix)) continue;
+				const token = key.slice(prefix.length);
+				if (!token) continue;
+				tokens.add(token);
+			}
+			if (selectedAccount?.id === account.id && currentNavEntry?.token) {
+				tokens.add(currentNavEntry.token);
+			}
+			return Array.from(tokens);
+		};
+
+		const syncAccountFiles = async (account: PublicCloudAccount): Promise<void> => {
+			if (!active) return;
+			if (pausedOAuthAccountIds.has(account.id)) return;
+			const tokens = listAccountTokens(account);
+			for (const token of tokens) {
+				if (!active) return;
+				try {
+					const result = await ipcClient.listCloudItems(account.id, token);
+					if (!active) return;
+					const cacheKey = `${account.id}:${token}`;
 					setFilesCache((prev) => {
-						const previous = prev[key] || [];
+						const previous = prev[cacheKey] || [];
 						if (areCloudItemsEqual(previous, result.items)) return prev;
-						return {...prev, [key]: result.items};
+						return {...prev, [cacheKey]: result.items};
 					});
-					writePersistedFolderCache(accountId, token, result.items);
-					const isStillCurrent = selectedAccount?.id === accountId && currentNavEntry?.token === token;
-					if (isStillCurrent) {
+					writePersistedFolderCache(account.id, token, result.items);
+					const isCurrentFolder = selectedAccount?.id === account.id && currentNavEntry?.token === token;
+					if (isCurrentFolder) {
 						setItems((prev) => (areCloudItemsEqual(prev, result.items) ? prev : result.items));
 					}
-				})
-				.catch(() => undefined);
-		}, 30000);
+				} catch {
+					// Background cloud sync is best-effort.
+				}
+			}
+		};
+
+		const runBackgroundSync = () => {
+			if (!active || inFlight) return;
+			inFlight = true;
+			void Promise.all(accounts.map((account) => syncAccountFiles(account))).finally(() => {
+				inFlight = false;
+			});
+		};
+
+		runBackgroundSync();
+		const timer = window.setInterval(runBackgroundSync, 45000);
 		return () => {
+			active = false;
 			window.clearInterval(timer);
 		};
-	}, [currentNavEntry, pendingFolderToken, selectedAccount]);
+	}, [accounts, currentNavEntry?.token, pausedOAuthAccountIds, pendingFolderToken, selectedAccount?.id]);
 
 	function buildCloudLink(accountId: number, trail: NavigationEntry[]): string {
 		return buildCloudRoute(accountId, trail);
@@ -679,6 +806,204 @@ export default function CloudFilesPage() {
 		document.body.style.userSelect = 'none';
 	}
 
+	function registerRowRef(itemId: string, node: HTMLTableRowElement | null): void {
+		if (node) {
+			rowRefs.current.set(itemId, node);
+			return;
+		}
+		rowRefs.current.delete(itemId);
+	}
+
+	function selectSingleItem(itemId: string): void {
+		setSelectedItemIds(new Set([itemId]));
+		lastSelectedItemIdRef.current = itemId;
+	}
+
+	function toggleItemSelection(itemId: string): void {
+		setSelectedItemIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(itemId)) {
+				next.delete(itemId);
+			} else {
+				next.add(itemId);
+			}
+			return next;
+		});
+		lastSelectedItemIdRef.current = itemId;
+	}
+
+	function selectItemRange(itemId: string): void {
+		const firstSelectedInViewOrder = sortedItems.find((entry) => selectedItemIds.has(entry.id))?.id ?? null;
+		const anchorId = firstSelectedInViewOrder ?? lastSelectedItemIdRef.current;
+		if (!anchorId) {
+			selectSingleItem(itemId);
+			return;
+		}
+		const from = sortedItems.findIndex((entry) => entry.id === anchorId);
+		const to = sortedItems.findIndex((entry) => entry.id === itemId);
+		if (from < 0 || to < 0) {
+			selectSingleItem(itemId);
+			return;
+		}
+		const [start, end] = from <= to ? [from, to] : [to, from];
+		const rangeIds = sortedItems.slice(start, end + 1).map((entry) => entry.id);
+		setSelectedItemIds(new Set(rangeIds));
+	}
+
+	function onRowClick(item: CloudItem, event: React.MouseEvent): void {
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('button,a,input,textarea,select,[role="button"]')) return;
+		if (event.shiftKey) {
+			selectItemRange(item.id);
+			setDetailsItemId(item.isFolder ? null : item.id);
+			return;
+		}
+		if (event.metaKey || event.ctrlKey) {
+			toggleItemSelection(item.id);
+			setDetailsItemId(item.isFolder ? null : item.id);
+			return;
+		}
+		selectSingleItem(item.id);
+		setDetailsItemId(item.isFolder ? null : item.id);
+	}
+
+	function onFileNameClick(item: CloudItem, event: React.MouseEvent): void {
+		event.stopPropagation();
+		if (event.shiftKey) {
+			selectItemRange(item.id);
+		} else if (event.metaKey || event.ctrlKey) {
+			toggleItemSelection(item.id);
+		} else {
+			selectSingleItem(item.id);
+		}
+		setDetailsItemId(item.id);
+	}
+
+	function onTablePointerDown(event: React.MouseEvent<HTMLDivElement>): void {
+		if (event.button !== 0) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('button,a,input,textarea,select,[role="button"]')) return;
+		if (target?.closest('tr,td,th')) return;
+		const viewport = tableViewportRef.current;
+		if (!viewport) return;
+		event.preventDefault();
+		const viewportRect = viewport.getBoundingClientRect();
+		const originX = event.clientX - viewportRect.left + viewport.scrollLeft;
+		const originY = event.clientY - viewportRect.top + viewport.scrollTop;
+		boxSelectionOriginRef.current = {x: originX, y: originY};
+		setSelectionBox({left: originX, top: originY, width: 0, height: 0});
+		setSelectedItemIds(new Set());
+		lastSelectedItemIdRef.current = null;
+		setDetailsItemId(null);
+
+		const onPointerMove = (moveEvent: MouseEvent) => {
+			const origin = boxSelectionOriginRef.current;
+			if (!origin) return;
+			const currentX = moveEvent.clientX - viewportRect.left + viewport.scrollLeft;
+			const currentY = moveEvent.clientY - viewportRect.top + viewport.scrollTop;
+			const left = Math.min(origin.x, currentX);
+			const top = Math.min(origin.y, currentY);
+			const width = Math.abs(currentX - origin.x);
+			const height = Math.abs(currentY - origin.y);
+			const right = left + width;
+			const bottom = top + height;
+			setSelectionBox({left, top, width, height});
+			const nextSelected = new Set<string>();
+			for (const [itemId, row] of rowRefs.current.entries()) {
+				const rowRect = row.getBoundingClientRect();
+				const rowLeft = rowRect.left - viewportRect.left + viewport.scrollLeft;
+				const rowTop = rowRect.top - viewportRect.top + viewport.scrollTop;
+				const rowRight = rowLeft + rowRect.width;
+				const rowBottom = rowTop + rowRect.height;
+				const intersects = !(rowRight < left || rowLeft > right || rowBottom < top || rowTop > bottom);
+				if (intersects) nextSelected.add(itemId);
+			}
+			setSelectedItemIds(nextSelected);
+		};
+
+		const onPointerUp = () => {
+			boxSelectionOriginRef.current = null;
+			setSelectionBox(null);
+			window.removeEventListener('mousemove', onPointerMove);
+			window.removeEventListener('mouseup', onPointerUp);
+		};
+
+		window.addEventListener('mousemove', onPointerMove);
+		window.addEventListener('mouseup', onPointerUp);
+	}
+
+	async function moveSelectedItemsTo(targetParentToken: string | null): Promise<void> {
+		if (!selectedAccount) return;
+		if (movingItems || mutating || loading) return;
+		const fallbackDraggedId = draggedItemIdRef.current;
+		const fallbackDraggedItem =
+			fallbackDraggedId ? sortedItems.find((item) => item.id === fallbackDraggedId) ?? null : null;
+		const sourceItems = selectedItems.length > 0 ? selectedItems : fallbackDraggedItem ? [fallbackDraggedItem] : [];
+		if (sourceItems.length === 0) return;
+		const movableItems = sourceItems.filter((item) => item.path !== targetParentToken);
+		if (movableItems.length === 0) return;
+		setMovingItems(true);
+		setMutating(true);
+		setDragOverTargetToken(null);
+		setStatus(`Moving ${movableItems.length} item${movableItems.length === 1 ? '' : 's'}...`);
+		try {
+			await Promise.all(
+				movableItems.map((item) => ipcClient.moveCloudItem(selectedAccount.id, item.path, targetParentToken)),
+			);
+			const movedIds = new Set(movableItems.map((item) => item.id));
+			setItems((prev) => prev.filter((item) => !movedIds.has(item.id)));
+			if (currentCacheKey) {
+				setFilesCache((prev) => {
+					const current = prev[currentCacheKey] || [];
+					const filtered = current.filter((item) => !movedIds.has(item.id));
+					return {...prev, [currentCacheKey]: filtered};
+				});
+			}
+			if (selectedAccount && currentNavEntry) {
+				const filtered = items.filter((item) => !movedIds.has(item.id));
+				writePersistedFolderCache(selectedAccount.id, currentNavEntry.token, filtered);
+			}
+			setSelectedItemIds(new Set());
+			lastSelectedItemIdRef.current = null;
+			setDetailsItemId((prev) => (prev && movedIds.has(prev) ? null : prev));
+			setStatus(`Moved ${movableItems.length} item${movableItems.length === 1 ? '' : 's'}.`);
+			setReloadKey((value) => value + 1);
+		} catch (error: any) {
+			setStatus(`Move failed: ${error?.message || String(error)}`);
+		} finally {
+			setMutating(false);
+			setMovingItems(false);
+		}
+	}
+
+	function onRowDragStart(item: CloudItem, event: React.DragEvent<HTMLTableRowElement>): void {
+		draggedItemIdRef.current = item.id;
+		if (!selectedItemIds.has(item.id)) {
+			setSelectedItemIds(new Set([item.id]));
+			lastSelectedItemIdRef.current = item.id;
+		}
+		event.dataTransfer.effectAllowed = 'move';
+		event.dataTransfer.setData('text/plain', item.path);
+	}
+
+	function onDragOverTarget(targetParentToken: string | null, event: React.DragEvent<HTMLElement>): void {
+		if (!selectedAccount) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		setDragOverTargetToken(targetParentToken ?? '__root__');
+	}
+
+	function onDragLeaveTarget(targetParentToken: string | null): void {
+		const token = targetParentToken ?? '__root__';
+		setDragOverTargetToken((prev) => (prev === token ? null : prev));
+	}
+
+	function onDropTarget(targetParentToken: string | null, event: React.DragEvent<HTMLElement>): void {
+		event.preventDefault();
+		setDragOverTargetToken(null);
+		void moveSelectedItemsTo(targetParentToken);
+	}
+
 	async function onCreateFolder(folderName: string): Promise<void> {
 		if (!selectedAccount || mutating) return;
 		const current = currentNavEntry;
@@ -718,12 +1043,20 @@ export default function CloudFilesPage() {
 	}
 
 	async function onDeleteItem(item: CloudItem): Promise<void> {
-		if (!selectedAccount || mutating) return;
+		if (!selectedAccount || mutating || deletingItemId !== null) return;
 		const label = item.isFolder ? 'folder' : 'file';
 		if (!window.confirm(`Delete ${label} "${item.name}"?`)) return;
-		setMutating(true);
+		const totalDeleteSteps = 4;
 		setDeletingItemId(item.id);
 		setRowMenu(null);
+		const notificationId = createNotification({
+			title: `Deleting ${item.name}`,
+			message: 'Removing item from list...',
+			progress: Math.round((1 / totalDeleteSteps) * 100),
+			busy: true,
+			tone: 'info',
+			autoCloseMs: null,
+		});
 		setStatus(`Deleting ${label}...`);
 		try {
 			const accountId = selectedAccount.id;
@@ -741,14 +1074,26 @@ export default function CloudFilesPage() {
 				writePersistedFolderCache(selectedAccount.id, currentNavEntry.token, nextVisibleItems);
 				clearPersistedDeletedFolderCaches(selectedAccount.id, item);
 			}
+			updateNotification(notificationId, {
+				message: 'Sending delete request...',
+				progress: Math.round((2 / totalDeleteSteps) * 100),
+			});
 			await ipcClient.deleteCloudItem(selectedAccount.id, item.path);
 			let stillExists;
+			updateNotification(notificationId, {
+				message: 'Checking remote status...',
+				progress: Math.round((3 / totalDeleteSteps) * 100),
+			});
 			try {
 				const statusResult = await ipcClient.getCloudItemStatus(accountId, item.path);
 				stillExists = statusResult.exists;
 			} catch {
 				stillExists = false;
 			}
+			updateNotification(notificationId, {
+				message: 'Refreshing folder...',
+				progress: Math.round((4 / totalDeleteSteps) * 100),
+			});
 			const refreshed = await ipcClient.listCloudItems(accountId, folderToken);
 			setItems(refreshed.items);
 			const refreshedCacheKey = `${accountId}:${folderToken}`;
@@ -757,13 +1102,27 @@ export default function CloudFilesPage() {
 			setStatus(
 				stillExists ? `Delete requested for ${item.name}; sync is still in progress.` : `${item.name} deleted.`,
 			);
+			setDetailsItemId((prev) => (prev === item.id ? null : prev));
+			updateNotification(notificationId, {
+				message: stillExists ? 'Delete requested; sync is still in progress.' : 'Delete complete.',
+				busy: false,
+				progress: 100,
+				tone: stillExists ? 'info' : 'success',
+				autoCloseMs: 3500,
+			});
 			setReloadKey((value) => value + 1);
 		} catch (error: any) {
 			setStatus(`Delete failed: ${error?.message || String(error)}`);
+			updateNotification(notificationId, {
+				message: `Delete failed: ${error?.message || String(error)}`,
+				busy: false,
+				progress: 100,
+				tone: 'danger',
+				autoCloseMs: 7000,
+			});
 			setReloadKey((value) => value + 1);
 		} finally {
 			setDeletingItemId(null);
-			setMutating(false);
 		}
 	}
 
@@ -915,8 +1274,20 @@ export default function CloudFilesPage() {
 		navigateToAccount(account, true);
 	}
 
-	async function onRelinkAccount(account: PublicCloudAccount): Promise<void> {
-		if (!isOAuthCloudProvider(account.provider) || relinkingAccountId !== null) return;
+	function queueOAuthReconnectPrompt(account: PublicCloudAccount, reason: string): void {
+		if (!isOAuthCloudProvider(account.provider)) return;
+		setPausedOAuthAccountIds((prev) => {
+			if (prev.has(account.id)) return prev;
+			const next = new Set(prev);
+			next.add(account.id);
+			return next;
+		});
+		setOauthReconnectQueue((prev) => (prev.includes(account.id) ? prev : [...prev, account.id]));
+		setStatus(reason);
+	}
+
+	async function onRelinkAccount(account: PublicCloudAccount): Promise<boolean> {
+		if (!isOAuthCloudProvider(account.provider) || relinkingAccountId !== null) return false;
 		setRelinkingAccountId(account.id);
 		setAccountMenu(null);
 		const providerLabel = providerLabels[account.provider];
@@ -924,14 +1295,35 @@ export default function CloudFilesPage() {
 		try {
 			await ipcClient.relinkCloudOAuth(account.id, {});
 			setStatus(`${providerLabel} account reconnected.`);
+			setPausedOAuthAccountIds((prev) => {
+				if (!prev.has(account.id)) return prev;
+				const next = new Set(prev);
+				next.delete(account.id);
+				return next;
+			});
+			setOauthReconnectQueue((prev) => prev.filter((id) => id !== account.id));
 			if (selectedAccount?.id === account.id) {
 				navigateToAccount(account, true);
 			}
+			return true;
 		} catch (error: any) {
 			setStatus(`Reconnect failed: ${error?.message || String(error)}`);
+			return false;
 		} finally {
 			setRelinkingAccountId(null);
 		}
+	}
+
+	async function onReconnectQueuedAccount(): Promise<void> {
+		if (!queuedReconnectAccount) return;
+		const success = await onRelinkAccount(queuedReconnectAccount);
+		if (!success) return;
+		setOauthReconnectQueue((prev) => prev.filter((id) => id !== queuedReconnectAccount.id));
+	}
+
+	function dismissReconnectPrompt(): void {
+		if (!queuedReconnectAccount) return;
+		setOauthReconnectQueue((prev) => prev.filter((id) => id !== queuedReconnectAccount.id));
 	}
 
 	function onOpenAccountSettings(account: PublicCloudAccount): void {
@@ -1037,6 +1429,22 @@ export default function CloudFilesPage() {
 				)}
 			</div>
 			<div className="flex items-center gap-2">
+				{selectedItemIds.size > 0 && (
+					<>
+						<span className="ui-text-muted text-xs">{selectedItemIds.size} selected</span>
+						<Button
+							type="button"
+							variant="ghost"
+							className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm"
+							onClick={() => {
+								setSelectedItemIds(new Set());
+								lastSelectedItemIdRef.current = null;
+							}}
+						>
+							Clear
+						</Button>
+					</>
+				)}
 				<Button
 					type="button"
 					variant="outline"
@@ -1222,17 +1630,17 @@ export default function CloudFilesPage() {
 	return (
 		<div className="relative h-full w-full overflow-hidden">
 			<WorkspaceLayout
-				menubar={menubar}
-				showMenuBar
+				showMenuBar={false}
 				sidebar={sidebar}
 				sidebarWidth={sidebarWidth}
 				onSidebarResizeStart={onResizeStart}
 				statusText={status || (loading ? 'Loading...' : 'Ready')}
-				statusBusy={loading || mutating || activeFileActionId !== null || deletingItemId !== null}
+				statusBusy={loading || mutating || movingItems || activeFileActionId !== null || deletingItemId !== null}
 				showStatusBar
 				showFooter={false}
 				contentClassName="ui-surface-content min-h-0 flex flex-1 flex-col overflow-hidden p-0"
 			>
+				<div className="surface-muted ui-text-muted border-b ui-border-default px-4 py-3">{menubar}</div>
 				<div className="surface-muted ui-text-muted border-b ui-border-default px-4 py-2 text-xs">
 					{nav.map((entry, index) => (
 						<Link
@@ -1240,14 +1648,20 @@ export default function CloudFilesPage() {
 							to={
 								selectedAccount ? buildCloudLink(selectedAccount.id, nav.slice(0, index + 1)) : '/cloud'
 							}
-							className="ui-surface-hover mr-1 rounded px-1.5 py-0.5"
+							className={`mr-1 rounded px-1.5 py-0.5 ${
+								dragOverTargetToken === entry.token ? 'chip-info' : 'ui-surface-hover'
+							}`}
+							onDragOver={(event) => onDragOverTarget(entry.token, event)}
+							onDragLeave={() => onDragLeaveTarget(entry.token)}
+							onDrop={(event) => onDropTarget(entry.token, event)}
 						>
 							{entry.label}
 							{index < nav.length - 1 ? ' /' : ''}
 						</Link>
-					))}
+						))}
 				</div>
-				<div className="min-h-0 flex-1 overflow-hidden">
+				<div className="min-h-0 flex flex-1 overflow-hidden">
+					<div className="min-h-0 flex-1 overflow-hidden">
 					{!selectedAccount && (
 						<div className="ui-text-muted flex h-full min-h-60 items-center justify-center text-sm">
 							Add a cloud account to start browsing files.
@@ -1279,9 +1693,24 @@ export default function CloudFilesPage() {
 							</Link>
 						</div>
 					)}
-					{selectedAccount && !pendingFolderToken && items.length > 0 && (
+						{selectedAccount && !pendingFolderToken && items.length > 0 && (
 						<div className="h-full min-h-0 border-t ui-border-default ui-surface-card">
-							<div className="h-full min-h-0 overflow-auto">
+							<div
+								ref={tableViewportRef}
+								className="relative h-full min-h-0 overflow-auto"
+								onMouseDown={onTablePointerDown}
+							>
+								{selectionBox && (
+									<div
+										className="pointer-events-none absolute z-20 border border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
+										style={{
+											left: selectionBox.left,
+											top: selectionBox.top,
+											width: selectionBox.width,
+											height: selectionBox.height,
+										}}
+									/>
+								)}
 								<table
 									key={`cloud-table-${visibleTableColumns.map((column) => column.key).join('|')}`}
 									className="table-fixed border-collapse text-sm"
@@ -1352,7 +1781,16 @@ export default function CloudFilesPage() {
 									</thead>
 									<tbody>
 										{nav.length > 1 && (
-											<tr className="border-b ui-border-default ui-surface-hover">
+											<tr
+												className={`border-b ui-border-default ${
+													dragOverTargetToken === nav[nav.length - 2]?.token
+														? 'chip-info'
+														: 'ui-surface-hover'
+												}`}
+												onDragOver={(event) => onDragOverTarget(nav[nav.length - 2]?.token ?? null, event)}
+												onDragLeave={() => onDragLeaveTarget(nav[nav.length - 2]?.token ?? null)}
+												onDrop={(event) => onDropTarget(nav[nav.length - 2]?.token ?? null, event)}
+											>
 												{visibleTableColumns.map((column) => {
 													if (column.key === 'name') {
 														return (
@@ -1374,10 +1812,21 @@ export default function CloudFilesPage() {
 																	}}
 																	className="flex min-w-0 items-center gap-2 ui-text-primary hover:underline"
 																>
-																	<FolderOpen
-																		size={15}
-																		className="icon-info shrink-0"
-																	/>
+																	<span className="shrink-0">
+																		{renderCloudItemIcon(
+																			{
+																				id: '__parent__',
+																				name: '..',
+																				path: '..',
+																				isFolder: true,
+																				size: null,
+																				createdAt: null,
+																				modifiedAt: null,
+																				mimeType: null,
+																			},
+																			15,
+																		)}
+																	</span>
 																	<span className="truncate font-medium">..</span>
 																</Link>
 															</td>
@@ -1432,10 +1881,32 @@ export default function CloudFilesPage() {
 										{sortedItems.map((item) => (
 											<tr
 												key={item.id}
-												className="ui-surface-hover relative border-b ui-border-default"
+												ref={(node) => registerRowRef(item.id, node)}
+												draggable
+												className={`relative border-b ui-border-default ${
+													dragOverTargetToken === item.path && item.isFolder
+														? 'chip-info'
+														: selectedItemIds.has(item.id)
+															? 'event-selection'
+															: 'ui-surface-hover'
+												}`}
+												onClick={(event) => onRowClick(item, event)}
+												onDragStart={(event) => onRowDragStart(item, event)}
 												onContextMenu={(event) => {
 													event.preventDefault();
 													setRowMenu({x: event.clientX, y: event.clientY, item});
+												}}
+												onDragOver={(event) => {
+													if (!item.isFolder) return;
+													onDragOverTarget(item.path, event);
+												}}
+												onDragLeave={() => {
+													if (!item.isFolder) return;
+													onDragLeaveTarget(item.path);
+												}}
+												onDrop={(event) => {
+													if (!item.isFolder) return;
+													onDropTarget(item.path, event);
 												}}
 											>
 												{visibleTableColumns.map((column) => {
@@ -1457,10 +1928,7 @@ export default function CloudFilesPage() {
 																		}}
 																		className="flex w-full min-w-0 items-center gap-2 ui-text-primary hover:underline"
 																	>
-																		<FolderOpen
-																			size={15}
-																			className="icon-info shrink-0"
-																		/>
+																		{renderCloudItemIcon(item, 15)}
 																		<span className="min-w-0 flex-1 truncate">
 																			{item.name}
 																		</span>
@@ -1468,17 +1936,14 @@ export default function CloudFilesPage() {
 																) : (
 																	<Button
 																		type="button"
-																		className="flex w-full min-w-0 items-center gap-2 text-left ui-text-primary hover:underline"
-																		onClick={() => void onViewItem(item)}
+																		className="flex w-full min-w-0 items-center gap-2 text-left ui-text-primary"
+																		onClick={(event) => onFileNameClick(item, event)}
+																		onDoubleClick={(event) => {
+																			event.stopPropagation();
+																			void onViewItem(item);
+																		}}
 																	>
-																		{activeFileActionId === item.id ? (
-																			<Loader2
-																				size={15}
-																				className="icon-muted shrink-0 animate-spin"
-																			/>
-																		) : (
-																			renderCloudFileTypeIcon(item)
-																		)}
+																		{renderCloudItemIcon(item, 15)}
 																		<span className="min-w-0 flex-1 truncate">
 																			{item.name}
 																		</span>
@@ -1561,9 +2026,110 @@ export default function CloudFilesPage() {
 							</div>
 						</div>
 					)}
+					</div>
+					{selectedAccount && detailsItem && !detailsItem.isFolder && (
+						<aside className="w-[320px] shrink-0 border-l ui-border-default ui-surface-card">
+							<div className="flex h-full min-h-0 flex-col">
+								<div className="flex items-center justify-between gap-2 border-b ui-border-default px-4 py-3">
+									<div className="flex min-w-0 items-center gap-2">
+										{renderCloudItemIcon(detailsItem, 16)}
+										<h3 className="ui-text-primary truncate text-sm font-semibold">{detailsItem.name}</h3>
+									</div>
+									<Button
+										type="button"
+										variant="ghost"
+										className="h-7 w-7 rounded-md"
+										title="Close details"
+										onClick={() => setDetailsItemId(null)}
+									>
+										<X size={14} />
+									</Button>
+								</div>
+								<div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-3 text-xs">
+									<div className="space-y-2">
+										<div className="flex justify-between gap-2">
+											<span className="ui-text-muted">Type</span>
+											<span className="ui-text-primary">File</span>
+										</div>
+										<div className="flex justify-between gap-2">
+											<span className="ui-text-muted">Size</span>
+											<span className="ui-text-primary">{formatBytes(detailsItem.size ?? 0)}</span>
+										</div>
+										<div className="flex justify-between gap-2">
+											<span className="ui-text-muted">Modified</span>
+											<span className="ui-text-primary">
+												{formatSystemDateTime(detailsItem.modifiedAt) || '-'}
+											</span>
+										</div>
+										<div className="flex justify-between gap-2">
+											<span className="ui-text-muted">Created</span>
+											<span className="ui-text-primary">
+												{formatSystemDateTime(detailsItem.createdAt) || '-'}
+											</span>
+										</div>
+									</div>
+									<div className="rounded-md border ui-border-default p-2">
+										<div className="ui-text-muted mb-1">Path</div>
+										<div className="ui-text-secondary break-all">{detailsItem.path}</div>
+									</div>
+								</div>
+								<div className="border-t ui-border-default p-3">
+									<div className="grid grid-cols-2 gap-2">
+										<Button
+											type="button"
+											variant="secondary"
+											className="h-8 rounded-md text-xs font-medium"
+											disabled={mutating || activeFileActionId !== null || deletingItemId !== null}
+											onClick={() => void onViewItem(detailsItem)}
+											leftIcon={<Eye size={14} />}
+										>
+											<span className="ml-0.5">Open</span>
+										</Button>
+										<Button
+											type="button"
+											variant="secondary"
+											className="h-8 rounded-md text-xs font-medium"
+											disabled={mutating || activeFileActionId !== null || deletingItemId !== null}
+											onClick={() => void onDownloadItem(detailsItem)}
+											leftIcon={<Download size={14} />}
+										>
+											<span className="ml-0.5">Download</span>
+										</Button>
+										<Button
+											type="button"
+											variant="secondary"
+											className="h-8 rounded-md text-xs font-medium"
+											disabled={mutating || deletingItemId !== null}
+											onClick={() => void onShareItem(detailsItem)}
+											leftIcon={<Share2 size={14} />}
+										>
+											<span className="ml-0.5">Share</span>
+										</Button>
+										<Button
+											type="button"
+											variant="danger"
+											className="h-8 rounded-md text-xs disabled:opacity-60"
+											disabled={deletingItemId !== null}
+											onClick={() => void onDeleteItem(detailsItem)}
+											leftIcon={
+												deletingItemId === detailsItem.id ? (
+													<Loader2 size={14} className="animate-spin" />
+												) : (
+													<Trash2 size={14} />
+												)
+											}
+										>
+											<span className="ml-0.5">
+												{deletingItemId === detailsItem.id ? 'Deleting...' : 'Delete'}
+											</span>
+										</Button>
+									</div>
+								</div>
+							</div>
+						</aside>
+					)}
 				</div>
 			</WorkspaceLayout>
-
 			{rowMenu && (
 				<ContextMenu
 					ref={rowMenuRef}
@@ -1595,14 +2161,14 @@ export default function CloudFilesPage() {
 						danger
 						className="disabled:opacity-60"
 						onClick={() => void onDeleteItem(rowMenu.item)}
-						disabled={deletingItemId === rowMenu.item.id}
+						disabled={deletingItemId !== null}
 					>
 						{deletingItemId === rowMenu.item.id ? (
 							<Loader2 size={14} className="animate-spin" />
 						) : (
 							<Trash2 size={14} />
 						)}
-						{deletingItemId === rowMenu.item.id ? 'Deleting...' : 'Delete'}
+						{deletingItemId !== null ? 'Deleting...' : 'Delete'}
 					</ContextMenuItem>
 				</ContextMenu>
 			)}
@@ -1689,7 +2255,43 @@ export default function CloudFilesPage() {
 					<ContextMenuItem type="button" danger onClick={() => void onDeleteAccount(accountMenu.account)}>
 						Delete account
 					</ContextMenuItem>
-				</ContextMenu>
+					</ContextMenu>
+				)}
+
+			{queuedReconnectAccount && (
+				<Modal
+					open
+					onClose={dismissReconnectPrompt}
+					backdropClassName="z-[1000] backdrop-blur-[1px]"
+					contentClassName="max-w-md p-4"
+				>
+					<div className="mb-3">
+						<h3 className="ui-text-primary text-base font-semibold">Reconnect Account</h3>
+						<p className="ui-text-muted mt-1 text-xs">
+							{queuedReconnectAccount.name} needs a new sign-in before sync can continue.
+						</p>
+					</div>
+					<div className="flex items-center justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							className="rounded-md px-3 py-2 text-sm"
+							onClick={dismissReconnectPrompt}
+							disabled={relinkingAccountId === queuedReconnectAccount.id}
+						>
+							Later
+						</Button>
+						<Button
+							type="button"
+							variant="default"
+							className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+							onClick={() => void onReconnectQueuedAccount()}
+							disabled={relinkingAccountId === queuedReconnectAccount.id}
+						>
+							{relinkingAccountId === queuedReconnectAccount.id ? 'Connecting...' : 'Reconnect'}
+						</Button>
+					</div>
+				</Modal>
 			)}
 
 			{showAddModal && (

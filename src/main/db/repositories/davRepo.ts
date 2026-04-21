@@ -306,6 +306,38 @@ export function upsertCalendarEvents(
 	return tx();
 }
 
+export function deleteCalendarEventsByUids(
+	accountId: number,
+	source: string,
+	calendarUrl: string,
+	uids: string[],
+): {removed: number} {
+	const normalizedUids = Array.from(
+		new Set(
+			uids
+				.map((uid) => String(uid || '').trim())
+				.filter(Boolean),
+		),
+	);
+	if (normalizedUids.length === 0) return {removed: 0};
+
+	const db = getDb();
+	const placeholders = normalizedUids.map(() => '?').join(', ');
+	const result = db
+		.prepare(
+			`
+                DELETE
+                FROM calendar_events
+                WHERE account_id = ?
+                  AND source = ?
+                  AND calendar_url = ?
+                  AND uid IN (${placeholders})
+            `,
+		)
+		.run(accountId, source, calendarUrl, ...normalizedUids);
+	return {removed: result.changes};
+}
+
 export function listContacts(
 	accountId: number,
 	query?: string | null,

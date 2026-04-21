@@ -8,3 +8,4 @@ export * from './authServerTypes';
 export * from './authServerConfig';
 export * from './runtimeEnv';
 export * from './accountModules';
+export * from './appEventHandler';

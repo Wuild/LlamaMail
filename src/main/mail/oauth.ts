@@ -17,6 +17,7 @@ const GOOGLE_DEFAULT_REQUIRED_SCOPES = [
 	'email',
 	'https://mail.google.com/',
 	'https://www.googleapis.com/auth/contacts.readonly',
+	'https://www.googleapis.com/auth/contacts.other.readonly',
 	'https://www.googleapis.com/auth/calendar.readonly',
 ];
 const MICROSOFT_EMAIL_REQUIRED_SCOPES = [

@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import type {AutoUpdateState} from '@/preload';
+import type {AutoUpdateState} from '@preload';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {DEFAULT_AUTO_UPDATE_STATE} from '@renderer/lib/autoUpdateState';
 import {useIpcEvent} from './useIpcEvent';

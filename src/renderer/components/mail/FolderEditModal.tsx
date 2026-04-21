@@ -1,5 +1,5 @@
 import React from 'react';
-import type {FolderItem} from '@/preload';
+import type {FolderItem} from '@preload';
 import {Button} from '@llamamail/ui/button';
 import {FormInput, FormSelect} from '@llamamail/ui/form';
 import {Modal, ModalBody, ModalDescription, ModalFooter, ModalHeader, ModalTitle} from '@llamamail/ui/modal';

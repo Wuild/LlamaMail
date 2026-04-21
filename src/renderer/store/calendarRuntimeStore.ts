@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import type {CalendarEventItem} from '@/preload';
+import type {CalendarEventItem} from '@preload';
 
 type CalendarRuntimeStoreState = {
 	eventsByAccountId: Record<number, CalendarEventItem[]>;

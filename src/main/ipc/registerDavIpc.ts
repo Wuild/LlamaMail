@@ -13,6 +13,7 @@ import {
 	parseRequiredText,
 } from './validation.js';
 import type {DavSyncOptions} from '@llamamail/app/ipcTypes';
+import {appEventHandler, AppEvent} from '@llamamail/app/appEventHandler';
 
 type ExportContactsPayload = {
 	format: 'csv' | 'vcf';
@@ -75,7 +76,7 @@ export function registerDavIpc(deps: DavIpcDeps): void {
 		const safeEndIso = parseOptionalText(safeCalendarRange?.endIso, 'options.calendarRange.endIso', 64);
 		const safeSyncContacts = parseOptionalBoolean(safeModules?.contacts, 'options.modules.contacts');
 		const safeSyncCalendar = parseOptionalBoolean(safeModules?.calendar, 'options.modules.calendar');
-		return deps.syncDav(safeAccountId, {
+		const result = await deps.syncDav(safeAccountId, {
 			calendarRange: safeCalendarRange
 				? {
 						startIso: safeStartIso,
@@ -89,6 +90,12 @@ export function registerDavIpc(deps: DavIpcDeps): void {
 					}
 				: null,
 		});
+		appEventHandler.emit(AppEvent.DavSyncCompleted, {
+			accountId: safeAccountId,
+			contactsState: result?.moduleStatus?.contacts?.state ?? null,
+			calendarState: result?.moduleStatus?.calendar?.state ?? null,
+		});
+		return result;
 	});
 
 	ipcMain.handle(
@@ -120,30 +127,56 @@ export function registerDavIpc(deps: DavIpcDeps): void {
 	ipcMain.handle('add-address-book', async (_event, accountId: number, name: string) => {
 		const safeAccountId = parsePositiveInt(accountId, 'accountId');
 		const safeName = parseRequiredText(name, 'name', 200);
-		return deps.addAddressBook(safeAccountId, safeName);
+		const created = await deps.addAddressBook(safeAccountId, safeName);
+		appEventHandler.emit(AppEvent.AddressBookAdded, {
+			accountId: safeAccountId,
+			addressBookId: Number(created?.id ?? created?.addressBookId ?? 0),
+			name: String(created?.name || safeName),
+		});
+		return created;
 	});
 
 	ipcMain.handle('add-contact', async (_event, accountId: number, payload: any) => {
 		const safeAccountId = parsePositiveInt(accountId, 'accountId');
 		const safePayload = parseRequiredObject(payload, 'payload');
-		return deps.addContact(safeAccountId, safePayload);
+		const created = await deps.addContact(safeAccountId, safePayload);
+		appEventHandler.emit(AppEvent.ContactAdded, {
+			accountId: safeAccountId,
+			contactId: Number(created?.id ?? created?.contactId ?? 0),
+			email: String(created?.email || safePayload?.email || '').trim() || null,
+		});
+		return created;
 	});
 
 	ipcMain.handle('update-contact', async (_event, contactId: number, payload: any) => {
 		const safeContactId = parsePositiveInt(contactId, 'contactId');
 		const safePayload = parseRequiredObject(payload, 'payload');
-		return deps.editContact(safeContactId, safePayload);
+		const updated = await deps.editContact(safeContactId, safePayload);
+		appEventHandler.emit(AppEvent.ContactUpdated, {
+			contactId: safeContactId,
+			email: String(updated?.email || safePayload?.email || '').trim() || null,
+		});
+		return updated;
 	});
 
 	ipcMain.handle('delete-address-book', async (_event, accountId: number, addressBookId: number) => {
 		const safeAccountId = parsePositiveInt(accountId, 'accountId');
 		const safeAddressBookId = parsePositiveInt(addressBookId, 'addressBookId');
-		return deps.removeAddressBook(safeAccountId, safeAddressBookId);
+		const result = await deps.removeAddressBook(safeAccountId, safeAddressBookId);
+		appEventHandler.emit(AppEvent.AddressBookDeleted, {
+			accountId: safeAccountId,
+			addressBookId: safeAddressBookId,
+		});
+		return result;
 	});
 
 	ipcMain.handle('delete-contact', async (_event, contactId: number) => {
 		const safeContactId = parsePositiveInt(contactId, 'contactId');
-		return deps.removeContact(safeContactId);
+		const result = await deps.removeContact(safeContactId);
+		appEventHandler.emit(AppEvent.ContactDeleted, {
+			contactId: safeContactId,
+		});
+		return result;
 	});
 
 	ipcMain.handle('export-contacts', async (event, accountId: number, payload: ExportContactsPayload) => {
@@ -193,17 +226,32 @@ export function registerDavIpc(deps: DavIpcDeps): void {
 	ipcMain.handle('add-calendar-event', async (_event, accountId: number, payload: any) => {
 		const safeAccountId = parsePositiveInt(accountId, 'accountId');
 		const safePayload = parseRequiredObject(payload, 'payload');
-		return deps.addCalendarEvent(safeAccountId, safePayload);
+		const created = await deps.addCalendarEvent(safeAccountId, safePayload);
+		appEventHandler.emit(AppEvent.CalendarEventAdded, {
+			accountId: safeAccountId,
+			eventId: Number(created?.id ?? created?.eventId ?? 0),
+			startIso: String(created?.startIso || safePayload?.startIso || '').trim() || null,
+		});
+		return created;
 	});
 
 	ipcMain.handle('update-calendar-event', async (_event, eventId: number, payload: any) => {
 		const safeEventId = parsePositiveInt(eventId, 'eventId');
 		const safePayload = parseRequiredObject(payload, 'payload');
-		return deps.editCalendarEvent(safeEventId, safePayload);
+		const updated = await deps.editCalendarEvent(safeEventId, safePayload);
+		appEventHandler.emit(AppEvent.CalendarEventUpdated, {
+			eventId: safeEventId,
+			startIso: String(updated?.startIso || safePayload?.startIso || '').trim() || null,
+		});
+		return updated;
 	});
 
 	ipcMain.handle('delete-calendar-event', async (_event, eventId: number) => {
 		const safeEventId = parsePositiveInt(eventId, 'eventId');
-		return deps.removeCalendarEvent(safeEventId);
+		const result = await deps.removeCalendarEvent(safeEventId);
+		appEventHandler.emit(AppEvent.CalendarEventDeleted, {
+			eventId: safeEventId,
+		});
+		return result;
 	});
 }

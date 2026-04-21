@@ -223,6 +223,10 @@ export interface CloudUploadResult {
 	uploaded: number;
 }
 
+export interface CloudMoveResult {
+	moved: boolean;
+}
+
 export interface CloudOpenItemResult {
 	ok: boolean;
 	action: 'opened' | 'saved' | 'cancelled';
@@ -646,6 +650,11 @@ const api = {
 		ipcRenderer.invoke('create-cloud-folder', accountId, parentPathOrToken ?? null, folderName),
 	deleteCloudItem: (accountId: number, itemPathOrToken: string): Promise<{removed: true}> =>
 		ipcRenderer.invoke('delete-cloud-item', accountId, itemPathOrToken),
+	moveCloudItem: (
+		accountId: number,
+		itemPathOrToken: string,
+		targetParentPathOrToken: string | null,
+	): Promise<CloudMoveResult> => ipcRenderer.invoke('move-cloud-item', accountId, itemPathOrToken, targetParentPathOrToken ?? null),
 	getCloudItemStatus: (accountId: number, itemPathOrToken: string): Promise<CloudItemStatus> =>
 		ipcRenderer.invoke('get-cloud-item-status', accountId, itemPathOrToken),
 	createCloudShareLink: (accountId: number, itemPathOrToken: string): Promise<CloudShareLinkResult> =>

@@ -11,7 +11,20 @@ import {
 	X,
 } from '@llamamail/ui/icon';
 import {useNavigate} from 'react-router-dom';
-import type {CalendarEventItem, PublicAccount, SyncStatusEvent} from '@/preload';
+import {
+	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	DragOverlay,
+	type DragStartEvent,
+	PointerSensor,
+	useDroppable,
+	useSensor,
+	useSensors,
+} from '@dnd-kit/core';
+import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
+import {CSS} from '@dnd-kit/utilities';
+import type {CalendarEventItem, PublicAccount, SyncStatusEvent} from '@preload';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
 import {clampToViewport} from '@renderer/lib/format';
@@ -24,6 +37,7 @@ import {Button} from '@llamamail/ui/button';
 import {FormDateTimeInput, FormInput, FormTextarea} from '@llamamail/ui/form';
 import {Modal, ModalHeader, ModalTitle} from '@llamamail/ui/modal';
 import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
+import {ScrollArea} from '@llamamail/ui/scroll-area';
 import {
 	statusAutoSyncFailed,
 	statusNoAccountSelected,
@@ -47,12 +61,19 @@ import {
 	toTimeInputValue,
 } from '@renderer/lib/date/calendar';
 import {composeLocalDateTimeValue, splitLocalDateTimeValue} from '@llamamail/ui/libs/localeInput';
+import {
+	hasAccountOrderChanged,
+	normalizeAccountOrder,
+	sortAccountsByOrder,
+} from '../email/mailAccountOrder';
 
 type CalendarPageProps = {
 	accountId: number | null;
 	accounts: PublicAccount[];
 	onSelectAccount: (accountId: number | null) => void;
 };
+
+const CALENDAR_ACCOUNT_ORDER_STORAGE_KEY = 'llamamail.calendar.accountOrder.v1';
 
 type GoogleEventMetadata = {
 	provider: 'google-api';
@@ -105,6 +126,54 @@ function hashOwnerKey(value: string): number {
 	return Math.abs(hash);
 }
 
+function parseAccountSortableId(value: unknown): number | null {
+	if (typeof value !== 'string') return null;
+	if (!value.startsWith('account-')) return null;
+	const parsed = Number(value.slice('account-'.length));
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function SortableAccountRow({
+	accountId,
+	children,
+}: {
+	accountId: number;
+	children: (dragProps: {
+		attributes: Record<string, unknown>;
+		listeners: Record<string, unknown>;
+		setActivatorRef: (node: HTMLElement | null) => void;
+	}) => React.ReactNode;
+}) {
+	const {attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging} = useSortable({
+		id: `account-${accountId}`,
+		data: {accountId},
+	});
+	return (
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition: transition ?? 'transform 180ms cubic-bezier(0.2, 0.65, 0.3, 1)',
+				opacity: isDragging ? 0.2 : 1,
+			}}
+		>
+			{children({
+				attributes: attributes as unknown as Record<string, unknown>,
+				listeners: (listeners ?? {}) as Record<string, unknown>,
+				setActivatorRef: setActivatorNodeRef,
+			})}
+		</div>
+	);
+}
+
+function SortableAccountEndDrop() {
+	const {setNodeRef} = useDroppable({
+		id: 'account-end',
+		data: {kind: 'account-end'},
+	});
+	return <div ref={setNodeRef} className="h-24 w-full" />;
+}
+
 export default function CalendarPage({accountId, accounts, onSelectAccount}: CalendarPageProps) {
 	const CALENDAR_VIEW_STORAGE_KEY = 'llamamail.calendar.view.mode';
 	const CALENDAR_EVENT_FETCH_LIMIT_WEEK = 1200;
@@ -123,6 +192,11 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 	const [syncingAccountId, setSyncingAccountId] = useState<number | null>(null);
 	const [syncStatusText, setSyncStatusText] = useState('Calendar ready');
 	const [events, setEvents] = useState<CalendarEventItem[]>([]);
+	const [accountOrder, setAccountOrder] = useState<number[]>(() =>
+		readPersistedAccountOrder(CALENDAR_ACCOUNT_ORDER_STORAGE_KEY),
+	);
+	const [draggingAccountId, setDraggingAccountId] = useState<number | null>(null);
+	const [dragOverlaySize, setDragOverlaySize] = useState<{width: number; height: number} | null>(null);
 	const visibleEvents = useMemo(() => events.filter((event) => !isGoogleWeekNumbersEvent(event)), [events]);
 	const deferredEvents = useDeferredValue(visibleEvents);
 	const [now, setNow] = useState<Date>(() => new Date());
@@ -154,6 +228,10 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 	const calendarBodyScrollRef = useRef<HTMLDivElement | null>(null);
 	const lastWeekAutoScrollKeyRef = useRef<string | null>(null);
 	const inFlightSyncAccountsRef = useRef<Set<number>>(new Set());
+	const queuedSyncSourceByAccountRef = useRef<Map<number, 'auto' | 'manual'>>(new Map());
+	const activeAccountIdRef = useRef<number | null>(accountId);
+	const loadSequenceRef = useRef(0);
+	const syncSequenceRef = useRef(0);
 	const [showAddEventModal, setShowAddEventModal] = useState(false);
 	const [calendarError, setCalendarError] = useState<string | null>(null);
 	const [eventTitle, setEventTitle] = useState('');
@@ -177,8 +255,28 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 		endHour: number;
 	} | null>(null);
 	const {sidebarWidth, onResizeStart} = useResizableSidebar();
+	const accountSensors = useSensors(useSensor(PointerSensor, {activationConstraint: {distance: 6}}));
 	const selectedAccount = useAccount(accountId);
 	const accountDirectory = useAccountDirectory();
+	const orderedAccounts = useMemo(() => sortAccountsByOrder(accounts, accountOrder), [accountOrder, accounts]);
+	const appliedInitialSelectionRef = useRef(false);
+	const accountSortableIds = useMemo(
+		() => orderedAccounts.map((account) => `account-${account.id}`),
+		[orderedAccounts],
+	);
+	const draggingAccount = useMemo(
+		() =>
+			draggingAccountId === null ? null : (orderedAccounts.find((account) => account.id === draggingAccountId) ?? null),
+		[draggingAccountId, orderedAccounts],
+	);
+
+	useEffect(() => {
+		if (appliedInitialSelectionRef.current) return;
+		const firstAccountId = orderedAccounts[0]?.id ?? null;
+		if (firstAccountId === null) return;
+		appliedInitialSelectionRef.current = true;
+		if (accountId !== firstAccountId) onSelectAccount(firstAccountId);
+	}, [accountId, onSelectAccount, orderedAccounts]);
 
 	const calendarBounds = useMemo(() => {
 		const monthStart = startOfMonth(visibleMonth);
@@ -247,6 +345,24 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 	}, [calendarBounds]);
 
 	useEffect(() => {
+		activeAccountIdRef.current = accountId;
+		loadSequenceRef.current += 1;
+		syncSequenceRef.current += 1;
+	}, [accountId]);
+
+	useEffect(() => {
+		setAccountOrder((prev) => {
+			const normalized = normalizeAccountOrder(prev, accounts);
+			if (!hasAccountOrderChanged(prev, normalized)) return prev;
+			return normalized;
+		});
+	}, [accounts]);
+
+	useEffect(() => {
+		writePersistedAccountOrder(CALENDAR_ACCOUNT_ORDER_STORAGE_KEY, accountOrder);
+	}, [accountOrder]);
+
+	useEffect(() => {
 		try {
 			window.localStorage.setItem(CALENDAR_VIEW_STORAGE_KEY, calendarViewMode);
 		} catch {
@@ -271,12 +387,14 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 
 	const refreshVisibleEvents = useCallback(
 		async (targetAccount = selectedAccount): Promise<void> => {
+			const targetAccountId = targetAccount.id ?? null;
 			const range = getVisibleCalendarRange();
 			const rows = await targetAccount.calendar.refresh(
 				range.startIso,
 				range.endIso,
 				calendarViewMode === 'week' ? CALENDAR_EVENT_FETCH_LIMIT_WEEK : CALENDAR_EVENT_FETCH_LIMIT_MONTH,
 			);
+			if (targetAccountId && activeAccountIdRef.current !== targetAccountId) return;
 			startTransition(() => {
 				setEvents(rows);
 			});
@@ -291,8 +409,16 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 	);
 
 	function queueBackgroundSync(targetAccountId: number, source: 'auto' | 'manual'): void {
-		if (inFlightSyncAccountsRef.current.has(targetAccountId)) return;
+		if (inFlightSyncAccountsRef.current.has(targetAccountId)) {
+			const existing = queuedSyncSourceByAccountRef.current.get(targetAccountId);
+			queuedSyncSourceByAccountRef.current.set(
+				targetAccountId,
+				existing === 'manual' || source === 'manual' ? 'manual' : 'auto',
+			);
+			return;
+		}
 		inFlightSyncAccountsRef.current.add(targetAccountId);
+		const syncSequence = syncSequenceRef.current;
 		setSyncing(true);
 		setSyncingAccountId(targetAccountId);
 		setSyncStatusText(statusSyncing());
@@ -304,19 +430,28 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 				calendarRange: getVisibleCalendarRange(),
 			})
 			.then(async () => {
+				if (syncSequence !== syncSequenceRef.current || activeAccountIdRef.current !== targetAccountId) return;
 				if (targetAccountId === accountId) {
 					await refreshVisibleEvents(targetAccount);
 				}
 				setSyncStatusText('Calendar synced');
 			})
 			.catch((error: any) => {
+				if (syncSequence !== syncSequenceRef.current || activeAccountIdRef.current !== targetAccountId) return;
 				setCalendarError(toErrorMessage(error));
 				setSyncStatusText(source === 'auto' ? statusAutoSyncFailed(error) : statusSyncFailed(error));
 			})
 			.finally(() => {
 				inFlightSyncAccountsRef.current.delete(targetAccountId);
-				setSyncing(false);
-				setSyncingAccountId((current) => (current === targetAccountId ? null : current));
+				if (syncSequence === syncSequenceRef.current) {
+					setSyncing(false);
+					setSyncingAccountId((current) => (current === targetAccountId ? null : current));
+				}
+				const queuedSource = queuedSyncSourceByAccountRef.current.get(targetAccountId);
+				if (queuedSource) {
+					queuedSyncSourceByAccountRef.current.delete(targetAccountId);
+					queueBackgroundSync(targetAccountId, queuedSource);
+				}
 			});
 	}
 
@@ -342,6 +477,7 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 			return;
 		}
 		let active = true;
+		const loadSequence = ++loadSequenceRef.current;
 		const load = async () => {
 			setLoading(true);
 			setCalendarError(null);
@@ -353,15 +489,15 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 					range.endIso,
 					calendarViewMode === 'week' ? CALENDAR_EVENT_FETCH_LIMIT_WEEK : CALENDAR_EVENT_FETCH_LIMIT_MONTH,
 				);
-				if (!active) return;
+				if (!active || loadSequence !== loadSequenceRef.current || activeAccountIdRef.current !== accountId) return;
 				startTransition(() => {
 					setEvents(rows);
 				});
 			} catch (error: any) {
-				if (!active) return;
+				if (!active || loadSequence !== loadSequenceRef.current || activeAccountIdRef.current !== accountId) return;
 				setCalendarError(toErrorMessage(error));
 			} finally {
-				if (active) setLoading(false);
+				if (active && loadSequence === loadSequenceRef.current) setLoading(false);
 			}
 		};
 		void load();
@@ -376,6 +512,11 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 		calendarViewMode,
 		getVisibleCalendarRange,
 	]);
+
+	useEffect(() => {
+		if (!accountId) return;
+		queueBackgroundSync(accountId, 'auto');
+	}, [accountId, calendarViewMode, calendarBounds.gridStart, calendarBounds.gridEnd]);
 
 	useIpcEvent(ipcClient.onAccountSyncStatus, (evt: SyncStatusEvent) => {
 		if (!accountId || evt.accountId !== accountId) return;
@@ -637,6 +778,47 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 		queueBackgroundSync(effectiveAccountId, 'manual');
 	}
 
+	function onAccountDragStart(event: DragStartEvent): void {
+		const activeId = parseAccountSortableId(event.active.id);
+		if (!activeId) return;
+		setDraggingAccountId(activeId);
+		const rect = event.active.rect.current.initial;
+		if (rect) {
+			setDragOverlaySize({width: rect.width, height: rect.height});
+		}
+	}
+
+	function onAccountDragEnd(event: DragEndEvent): void {
+		const activeId = parseAccountSortableId(event.active.id);
+		if (!activeId) {
+			setDraggingAccountId(null);
+			setDragOverlaySize(null);
+			return;
+		}
+		const currentIds = orderedAccounts.map((account) => account.id);
+		const from = currentIds.indexOf(activeId);
+		if (from < 0) {
+			setDraggingAccountId(null);
+			setDragOverlaySize(null);
+			return;
+		}
+		let to = from;
+		if (event.over?.id === 'account-end') {
+			to = currentIds.length - 1;
+		} else {
+			const overId = parseAccountSortableId(event.over?.id);
+			if (overId) {
+				const overIndex = currentIds.indexOf(overId);
+				if (overIndex >= 0) to = overIndex;
+			}
+		}
+		if (to !== from) {
+			setAccountOrder(arrayMove(currentIds, from, to));
+		}
+		setDraggingAccountId(null);
+		setDragOverlaySize(null);
+	}
+
 	function openNewEventForDay(dayKey: string) {
 		const day = new Date(`${dayKey}T00:00:00`);
 		if (Number.isNaN(day.getTime())) return;
@@ -693,74 +875,92 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 
 	const accountSidebar = (
 		<aside className="sidebar flex h-full min-h-0 shrink-0 flex-col">
-			<div className="min-h-0 flex-1 overflow-y-auto p-3">
+			<ScrollArea className="min-h-0 flex-1 px-3 py-3">
 				<p className="ui-text-muted px-2 pb-2 text-xs font-semibold uppercase tracking-wide">Accounts</p>
-				<div className="space-y-1">
-					{accounts.map((account) => {
+				<DndContext
+					sensors={accountSensors}
+					collisionDetection={closestCenter}
+					autoScroll={false}
+					onDragStart={onAccountDragStart}
+					onDragEnd={onAccountDragEnd}
+					onDragCancel={() => {
+						setDraggingAccountId(null);
+						setDragOverlaySize(null);
+					}}
+				>
+					<SortableContext items={accountSortableIds} strategy={verticalListSortingStrategy}>
+						<div className="space-y-1">
+							{orderedAccounts.map((account) => {
 						const isSyncingAccount = syncing && syncingAccountId === account.id;
 						const avatarColors = getAccountAvatarColorsForAccount(account);
 						return (
-							<div
-								key={account.id}
-								className={cn(
-									'group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-									accountId === account.id ? 'ui-surface-active ui-text-primary' : 'account-item',
-								)}
-							>
-								<Button
-									type="button"
-									onClick={() => onSelectAccount(account.id)}
-									className="flex min-w-0 flex-1 items-center gap-2 text-left"
-								>
-									<span
-										className="avatar-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold"
-										style={{
-											backgroundColor: avatarColors.background,
-											color: avatarColors.foreground,
-										}}
-									>
-										{getAccountMonogram(account)}
-									</span>
-									<span className="min-w-0 flex-1">
-										<span className="block truncate">
-											{account.display_name?.trim() || account.email}
-										</span>
-										{account.display_name?.trim() && (
-											<span className="ui-text-muted block truncate text-[11px] font-normal">
-												{account.email}
-											</span>
+							<SortableAccountRow key={account.id} accountId={account.id}>
+								{(dragProps) => (
+									<div
+										ref={dragProps.setActivatorRef}
+										className={cn(
+											'group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+											accountId === account.id ? 'ui-surface-active ui-text-primary' : 'account-item',
 										)}
-									</span>
-								</Button>
-								<div
-									className={cn(
-										'flex items-center gap-1 transition-opacity',
-										isSyncingAccount ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-									)}
-								>
-									<Button
-										type="button"
-										variant="ghost"
-										className="ui-surface-hover ui-hover-text-primary rounded p-1 ui-text-muted transition-colors"
-										onClick={() => void onManualSync(account.id)}
-										title="Sync account"
-										aria-label="Sync account"
-										disabled={isSyncingAccount}
+										{...dragProps.attributes}
+										{...dragProps.listeners}
 									>
-										<RefreshCw size={13} className={cn(isSyncingAccount && 'animate-spin')} />
-									</Button>
-									<Button
-										type="button"
-										variant="ghost"
-										className="ui-surface-hover ui-hover-text-primary rounded p-1 ui-text-muted transition-colors"
-										onClick={() => navigate(`/settings/account?accountId=${account.id}`)}
-										title="Edit account"
-										aria-label="Edit account"
-									>
-										<Settings size={13} />
-									</Button>
-								</div>
-							</div>
+										<Button
+											type="button"
+											onClick={() => onSelectAccount(account.id)}
+											className="flex min-w-0 flex-1 items-center gap-2 text-left"
+										>
+											<span
+												className="avatar-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold"
+												style={{
+													backgroundColor: avatarColors.background,
+													color: avatarColors.foreground,
+												}}
+											>
+												{getAccountMonogram(account)}
+											</span>
+											<span className="min-w-0 flex-1">
+												<span className="block truncate">
+													{account.display_name?.trim() || account.email}
+												</span>
+												{account.display_name?.trim() && (
+													<span className="ui-text-muted block truncate text-[11px] font-normal">
+														{account.email}
+													</span>
+												)}
+											</span>
+										</Button>
+										<div
+											className={cn(
+												'flex items-center gap-1 transition-opacity',
+												isSyncingAccount ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+											)}
+										>
+											<Button
+												type="button"
+												variant="ghost"
+												className="ui-surface-hover ui-hover-text-primary rounded p-1 ui-text-muted transition-colors"
+												onClick={() => void onManualSync(account.id)}
+												title="Sync account"
+												aria-label="Sync account"
+												disabled={isSyncingAccount}
+											>
+												<RefreshCw size={13} className={cn(isSyncingAccount && 'animate-spin')} />
+											</Button>
+											<Button
+												type="button"
+												variant="ghost"
+												className="ui-surface-hover ui-hover-text-primary rounded p-1 ui-text-muted transition-colors"
+												onClick={() => navigate(`/settings/account?accountId=${account.id}`)}
+												title="Edit account"
+												aria-label="Edit account"
+											>
+												<Settings size={13} />
+											</Button>
+										</div>
+									</div>
+								)}
+							</SortableAccountRow>
 						);
 					})}
 					{accounts.length === 0 && (
@@ -773,8 +973,39 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 							Add account
 						</Button>
 					)}
-				</div>
-			</div>
+							{draggingAccountId !== null && <SortableAccountEndDrop />}
+						</div>
+					</SortableContext>
+					<DragOverlay dropAnimation={null}>
+						{draggingAccount ? (
+							<div
+								className="panel rounded-lg opacity-85 shadow-xl"
+								style={{
+									width: dragOverlaySize?.width,
+									minHeight: dragOverlaySize?.height,
+									boxSizing: 'border-box',
+								}}
+							>
+								<div className="flex items-center gap-2 px-3 py-2">
+									<span className="avatar-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold">
+										{getAccountMonogram(draggingAccount)}
+									</span>
+									<span className="min-w-0 flex-1">
+										<span className="ui-text-primary block truncate text-sm font-semibold">
+											{draggingAccount.display_name?.trim() || draggingAccount.email}
+										</span>
+										{draggingAccount.display_name?.trim() && (
+											<span className="ui-text-muted block truncate text-[11px]">
+												{draggingAccount.email}
+											</span>
+										)}
+									</span>
+								</div>
+							</div>
+						) : null}
+					</DragOverlay>
+				</DndContext>
+			</ScrollArea>
 		</aside>
 	);
 	const selectedDayEvents = selectedDayForModal ? (eventsByDay.get(selectedDayForModal) ?? []) : [];
@@ -1041,11 +1272,6 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 												</div>
 											))}
 										</div>
-										{loading && (
-											<div className="border-t ui-border-default px-3 py-2 text-sm ui-text-muted">
-												Loading events...
-											</div>
-										)}
 									</div>
 								)}
 								{calendarViewMode === 'week' && (
@@ -1623,6 +1849,27 @@ export default function CalendarPage({accountId, accounts, onSelectAccount}: Cal
 			)}
 		</>
 	);
+}
+
+function readPersistedAccountOrder(storageKey: string): number[] {
+	try {
+		const raw = window.localStorage.getItem(storageKey);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		const next = parsed.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+		return Array.from(new Set(next));
+	} catch {
+		return [];
+	}
+}
+
+function writePersistedAccountOrder(storageKey: string, order: number[]): void {
+	try {
+		window.localStorage.setItem(storageKey, JSON.stringify(order));
+	} catch {
+		// Ignore storage write errors.
+	}
 }
 
 function getIsoWeekNumber(date: Date): number {

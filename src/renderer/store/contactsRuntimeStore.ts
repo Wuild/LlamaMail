@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import type {AddressBookItem, ContactItem} from '@/preload';
+import type {AddressBookItem, ContactItem} from '@preload';
 
 type ContactsRuntimeStoreState = {
 	contactsByAccountId: Record<number, ContactItem[]>;

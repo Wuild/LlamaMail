@@ -1,5 +1,7 @@
 import {ExternalLink, FileText, Shield} from '@llamamail/ui/icon';
 import {Button} from '@llamamail/ui/button';
+import {Container} from '@llamamail/ui/container';
+import {Card} from '@llamamail/ui';
 
 const LEGAL_BASE_URL = 'https://llama.voracious.se/';
 const PRIVACY_URL = 'https://llama.voracious.se/privacy';
@@ -7,8 +9,8 @@ const TOS_URL = 'https://llama.voracious.se/tos';
 
 export default function SettingsLegalPage() {
 	return (
-		<div className="mx-auto h-full min-h-0 w-full max-w-5xl space-y-4 pb-4 md:pb-6">
-			<section className="panel rounded-xl p-4">
+		<Container>
+			<Card>
 				<h2 className="ui-text-primary text-base font-semibold">Legal</h2>
 				<p className="ui-text-muted mt-1 text-sm">Privacy and terms for LlamaMail.</p>
 				<div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -52,7 +54,7 @@ export default function SettingsLegalPage() {
 				<p className="ui-text-muted mt-4 text-xs">
 					Official legal pages: <span className="font-medium">{LEGAL_BASE_URL}</span>
 				</p>
-			</section>
-		</div>
+			</Card>
+		</Container>
 	);
 }

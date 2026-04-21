@@ -5,10 +5,19 @@ import {
 	File,
 	FileArchive,
 	FileAudio2,
+	FileBarChart2,
 	FileCode,
+	FileCode2,
+	FileDigit,
+	FileJson,
+	FileLock2,
+	FileMusic,
 	FileImage,
 	FileSpreadsheet,
 	FileText,
+	FileTerminal,
+	FileType2,
+	FileVideo2,
 	FileVideo,
 	Folder,
 	Home,
@@ -27,7 +36,7 @@ import type {
 	PublicCloudAccount,
 	RecentRecipientItem,
 	SaveDraftPayload,
-} from '@/preload';
+} from '@preload';
 import HtmlLexicalEditor from '@llamamail/ui/editor';
 import AutoComplete, {type AutoCompleteRow} from '@llamamail/ui/form';
 import {FormControlGroup, FormInput, FormSelect, type FormSelectOption} from '@llamamail/ui/form';
@@ -39,7 +48,7 @@ import {useAppTheme} from '@renderer/hooks/useAppTheme';
 import {useIpcEvent} from '@renderer/hooks/ipc/useIpcEvent';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {useApp} from '@renderer/app/AppContext';
-import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
+import {getAccountAvatarColors, getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
 import {buildSourceDocCsp, enrichAnchorTitles} from '@renderer/features/mail/remoteContent';
 import {buildMessageIframeSrcDoc} from '@renderer/app/main/email/mailPageHelpers';
 import {createDefaultAppSettings} from '@llamamail/app/defaults';
@@ -52,6 +61,8 @@ const EMAIL_ADDRESS_REGEX = /^[^\s@<>(),;:]+@[^\s@<>(),;:]+\.[^\s@<>(),;:]+$/;
 const CONTACT_META_PREFIX = '[LUNAMAIL_CONTACT_META_V1]';
 const CLOUD_FOLDER_CACHE_PREFIX = 'llamamail.cloud.folder.cache.v1';
 const DRAFT_AUTOSAVE_INTERVAL_MS = 15000;
+const AUTO_SIGNATURE_MARKER_ATTRIBUTE = 'data-llamamail-signature';
+const AUTO_SIGNATURE_MARKER_VALUE = 'auto';
 
 function createDraftSessionId(): string {
 	if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -150,6 +161,7 @@ function ComposeEmailPage() {
 	const draftMessageIdRef = useRef<number | null>(null);
 	const [draftSessionId, setDraftSessionId] = useState<string>('');
 	const [draftMessageId, setDraftMessageId] = useState<number | null>(null);
+	const [draftHydrated, setDraftHydrated] = useState(false);
 	const autoSignatureRef = useRef<{accountId: number; html: string; text: string} | null>(null);
 	const recipientSearchSeqRef = useRef(0);
 
@@ -171,7 +183,8 @@ function ComposeEmailPage() {
 			.then((rows) => {
 				if (!active) return;
 				setAccounts(rows);
-				setFromAccountId((prev) => prev || rows[0]?.id || '');
+				const firstEmailEnabled = rows.find((account) => Number(account.sync_emails) !== 0) ?? null;
+				setFromAccountId((prev) => prev || firstEmailEnabled?.id || '');
 			})
 			.catch(() => {
 				if (!active) return;
@@ -184,14 +197,18 @@ function ComposeEmailPage() {
 		};
 	}, []);
 
+	const emailEnabledAccounts = useMemo(
+		() => accounts.filter((account) => Number(account.sync_emails) !== 0),
+		[accounts],
+	);
 	const selectedFromAccount = useMemo(
 		() =>
 			typeof fromAccountId === 'number'
-				? (accounts.find((account) => account.id === fromAccountId) ?? null)
+				? (emailEnabledAccounts.find((account) => account.id === fromAccountId) ?? null)
 				: null,
-		[accounts, fromAccountId],
+		[emailEnabledAccounts, fromAccountId],
 	);
-	const showFromSelector = accounts.length !== 1;
+	const showFromSelector = emailEnabledAccounts.length !== 1;
 	const selectedAutoSignatureText = useMemo(() => {
 		if (!selectedFromAccount) return null;
 		const signatureRaw = (selectedFromAccount.signature_text || '').trim();
@@ -199,10 +216,10 @@ function ComposeEmailPage() {
 		return selectedFromAccount.signature_is_html ? htmlToPlainText(signatureRaw) : signatureRaw;
 	}, [selectedFromAccount]);
 	const fromAccountOptions = useMemo<FormSelectOption[]>(() => {
-		if (accounts.length === 0) {
+		if (emailEnabledAccounts.length === 0) {
 			return [{value: '', label: 'No accounts', description: null, disabled: true}];
 		}
-		return accounts.map((account) => {
+		return emailEnabledAccounts.map((account) => {
 			const label = account.display_name?.trim() || account.email;
 			const description = account.display_name?.trim() ? account.email : null;
 			const monogram = getAccountMonogram(account);
@@ -219,14 +236,49 @@ function ComposeEmailPage() {
 						{monogram}
 					</span>
 				),
-			};
-		});
-	}, [accounts]);
+				};
+			});
+	}, [emailEnabledAccounts]);
+
+	useEffect(() => {
+		if (emailEnabledAccounts.length === 0) {
+			if (fromAccountId !== '') setFromAccountId('');
+			return;
+		}
+		if (typeof fromAccountId === 'number' && emailEnabledAccounts.some((account) => account.id === fromAccountId)) {
+			return;
+		}
+		setFromAccountId(emailEnabledAccounts[0]?.id ?? '');
+	}, [emailEnabledAccounts, fromAccountId]);
 
 	useEffect(() => {
 		if (!selectedFromAccount) return;
+		if (autoSignatureRef.current?.accountId === selectedFromAccount.id) return;
+		const previousAuto = autoSignatureRef.current;
+		const openingExistingDraft =
+			typeof draftMessageId === 'number' && Number.isFinite(draftMessageId) && Math.floor(draftMessageId) > 0;
+		if (openingExistingDraft && !previousAuto) {
+			// Preserve stored draft body exactly as loaded; do not auto-rewrite signature/layout on open.
+			autoSignatureRef.current = {
+				accountId: selectedFromAccount.id,
+				html: '',
+				text: '',
+			};
+			return;
+		}
+		const currentBodyTrimmed = body.trim();
+		const currentPlainTrimmed = plainBody.trim();
+		let nextBody = stripAutoSignatureHtml(currentBodyTrimmed);
+		let nextPlain = currentPlainTrimmed;
+
+		if (previousAuto) {
+			nextPlain = stripTrailingSignatureText(nextPlain, previousAuto.text);
+		}
+
 		const signatureRaw = (selectedFromAccount.signature_text || '').trim();
 		if (!signatureRaw) {
+			if (nextBody !== currentBodyTrimmed) setBody(nextBody);
+			if (nextPlain !== currentPlainTrimmed) setPlainBody(nextPlain);
 			autoSignatureRef.current = null;
 			return;
 		}
@@ -239,40 +291,40 @@ function ComposeEmailPage() {
 					.join('<br/>');
 		const signatureHtmlWithDivider = withSignatureDivider(signatureHtml);
 		const signatureText = selectedFromAccount.signature_is_html ? htmlToPlainText(signatureRaw) : signatureRaw;
-		const previousAuto = autoSignatureRef.current;
-		const currentBodyTrimmed = body.trim();
-		const currentPlainTrimmed = plainBody.trim();
-
-		const isBodyEmpty = !currentBodyTrimmed && !currentPlainTrimmed;
-		if (isBodyEmpty) {
-			setBody(`<p><br/></p>${signatureHtmlWithDivider}`);
-			setPlainBody(signatureText);
+		const signatureBlock = buildAutoSignatureHtmlBlock(signatureHtmlWithDivider);
+		const hasAutoMarker = hasAutoSignatureMarker(currentBodyTrimmed);
+		const alreadySignedForSelectedAccount =
+			!previousAuto &&
+			(hasAutoMarker ||
+				hasTrailingSignatureText(currentPlainTrimmed, signatureText) ||
+				hasTrailingSignatureHtml(currentBodyTrimmed, signatureHtmlWithDivider));
+		if (alreadySignedForSelectedAccount) {
 			autoSignatureRef.current = {
 				accountId: selectedFromAccount.id,
-				html: signatureHtmlWithDivider,
+				html: signatureBlock,
 				text: signatureText,
 			};
 			return;
 		}
 
-		if (
-			previousAuto &&
-			previousAuto.accountId !== selectedFromAccount.id &&
-			normalizeSignatureCompare(currentBodyTrimmed).includes(normalizeSignatureCompare(previousAuto.html)) &&
-			normalizeSignatureCompare(currentPlainTrimmed).includes(normalizeSignatureCompare(previousAuto.text))
-		) {
-			const nextBody = currentBodyTrimmed.replace(previousAuto.html, signatureHtmlWithDivider);
-			const nextPlain = currentPlainTrimmed.replace(previousAuto.text, signatureText);
-			if (nextBody === currentBodyTrimmed && nextPlain === currentPlainTrimmed) return;
-			setBody(nextBody);
-			setPlainBody(nextPlain);
-			autoSignatureRef.current = {
-				accountId: selectedFromAccount.id,
-				html: signatureHtmlWithDivider,
-				text: signatureText,
-			};
-		}
-	}, [selectedFromAccount, body, plainBody]);
+		const hasTrailingHtmlSignature = hasTrailingSignatureHtml(nextBody, signatureHtmlWithDivider);
+		const hasTrailingPlainSignature = hasTrailingSignatureText(nextPlain, signatureText);
+		const baseBody = hasTrailingHtmlSignature
+			? stripTrailingSignatureHtmlByContent(nextBody, signatureHtmlWithDivider).trim()
+			: nextBody.trim();
+		const basePlain = hasTrailingPlainSignature ? stripTrailingSignatureText(nextPlain, signatureText).trim() : nextPlain.trim();
+		const hasBodyContent = Boolean(baseBody || basePlain);
+		const nextBodyWithSignature = hasBodyContent ? `${baseBody}${signatureBlock}` : `<p><br/></p>${signatureBlock}`;
+		const nextPlainWithSignature = basePlain ? `${basePlain}\n\n${signatureText}` : signatureText;
+
+		if (nextBodyWithSignature !== currentBodyTrimmed) setBody(nextBodyWithSignature);
+		if (nextPlainWithSignature !== currentPlainTrimmed) setPlainBody(nextPlainWithSignature);
+		autoSignatureRef.current = {
+			accountId: selectedFromAccount.id,
+			html: signatureBlock,
+			text: signatureText,
+		};
+	}, [draftMessageId, selectedFromAccount, body, plainBody]);
 
 	const applyDraft = useCallback(
 		(draft: ComposeDraftPayload | null | undefined) => {
@@ -281,12 +333,16 @@ function ComposeEmailPage() {
 				setDraftMessageId(null);
 				return;
 			}
-			if (typeof draft.draftSessionId === 'string' && draft.draftSessionId.trim()) {
-				const nextDraftSessionId = draft.draftSessionId.trim();
-				draftSessionIdRef.current = nextDraftSessionId;
-				setDraftSessionId(nextDraftSessionId);
-			}
 			const nextDraftMessageId = typeof draft.draftMessageId === 'number' ? draft.draftMessageId : null;
+			const providedDraftSessionId =
+				typeof draft.draftSessionId === 'string' && draft.draftSessionId.trim().length > 0
+					? draft.draftSessionId.trim()
+					: null;
+			const nextDraftSessionId =
+				providedDraftSessionId ??
+				(nextDraftMessageId ? `draft-message-${nextDraftMessageId}` : createDraftSessionId());
+			draftSessionIdRef.current = nextDraftSessionId;
+			setDraftSessionId(nextDraftSessionId);
 			draftMessageIdRef.current = nextDraftMessageId;
 			setDraftMessageId(nextDraftMessageId);
 			if (typeof draft.accountId === 'number') setFromAccountId(draft.accountId);
@@ -337,14 +393,26 @@ function ComposeEmailPage() {
 	);
 
 	useEffect(() => {
-		ipcClient
+		let active = true;
+		void ipcClient
 			.getComposeDraft()
-			.then((draft) => applyDraft(draft))
-			.catch(() => undefined);
+			.then((draft) => {
+				if (!active) return;
+				applyDraft(draft);
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (!active) return;
+				setDraftHydrated(true);
+			});
+		return () => {
+			active = false;
+		};
 	}, [applyDraft]);
 
 	useIpcEvent(ipcClient.onComposeDraft, (draft) => {
 		applyDraft(draft);
+		setDraftHydrated(true);
 	});
 
 	useEffect(() => {
@@ -579,6 +647,13 @@ function ComposeEmailPage() {
 		attachments,
 	]);
 
+	useEffect(() => {
+		if (!draftHydrated || !draftPayload) return;
+		if (!lastSavedSignatureRef.current) {
+			lastSavedSignatureRef.current = JSON.stringify(draftPayload);
+		}
+	}, [draftHydrated, draftPayload]);
+
 	const flushQueuedDraftSave = useCallback(() => {
 		const flush = () => {
 			if (isSavingDraftRef.current) return;
@@ -586,8 +661,16 @@ function ComposeEmailPage() {
 			if (!queued) return;
 			queuedDraftSaveRef.current = null;
 			isSavingDraftRef.current = true;
+			const requestPayload: SaveDraftPayload = {
+				...queued.payload,
+				draftSessionId: draftSessionIdRef.current || queued.payload.draftSessionId || undefined,
+				draftMessageId:
+					typeof draftMessageIdRef.current === 'number' && Number.isFinite(draftMessageIdRef.current)
+						? Math.floor(draftMessageIdRef.current)
+						: queued.payload.draftMessageId ?? null,
+			};
 			void ipcClient
-				.saveDraft(queued.payload)
+				.saveDraft(requestPayload)
 				.then((result) => {
 					if (result?.draftId) {
 						draftSessionIdRef.current = result.draftId;
@@ -648,18 +731,21 @@ function ComposeEmailPage() {
 
 	const trySaveDraft = useCallback(
 		(payload: NonNullable<typeof draftPayload>) => {
+			if (!draftHydrated) return;
+			if (!isComposeDirty) return;
 			void saveDraftPayload(payload, {skipIfUnchanged: true});
 		},
-		[saveDraftPayload],
+		[draftHydrated, isComposeDirty, saveDraftPayload],
 	);
 
 	const saveDraftBeforeClose = useCallback(async () => {
+		if (!draftHydrated) return;
 		if (!draftPayload) return;
 		await saveDraftPayload(draftPayload, {skipIfUnchanged: false, awaitRemote: true});
-	}, [draftPayload, saveDraftPayload]);
+	}, [draftHydrated, draftPayload, saveDraftPayload]);
 
 	useEffect(() => {
-		if (!draftPayload) return;
+		if (!draftHydrated || !draftPayload || !isComposeDirty) return;
 		if (autosaveTimerRef.current) {
 			clearTimeout(autosaveTimerRef.current);
 		}
@@ -673,7 +759,7 @@ function ComposeEmailPage() {
 				autosaveTimerRef.current = null;
 			}
 		};
-	}, [draftPayload, trySaveDraft]);
+	}, [draftHydrated, draftPayload, isComposeDirty, trySaveDraft]);
 
 	useEffect(() => {
 		if (autosaveIntervalRef.current) {
@@ -681,7 +767,7 @@ function ComposeEmailPage() {
 			autosaveIntervalRef.current = null;
 		}
 		autosaveIntervalRef.current = setInterval(() => {
-			if (!draftPayload) return;
+			if (!draftHydrated || !draftPayload || !isComposeDirty) return;
 			trySaveDraft(draftPayload);
 		}, DRAFT_AUTOSAVE_INTERVAL_MS);
 
@@ -691,7 +777,7 @@ function ComposeEmailPage() {
 				autosaveIntervalRef.current = null;
 			}
 		};
-	}, [draftPayload, trySaveDraft]);
+	}, [draftHydrated, draftPayload, isComposeDirty, trySaveDraft]);
 
 	useComposeWindowGuards({
 		isComposeDirty,
@@ -1315,6 +1401,37 @@ function CloudAttachmentPickerModal({
 	const rootPath = cloudRootToken(selectedProvider);
 	const breadcrumbs = buildCloudBreadcrumbs(currentPath, selectedProvider);
 	const isAtRoot = currentPath === rootPath;
+	const cloudAccountOptions = useMemo<FormSelectOption[]>(() => {
+		if (cloudAccounts.length === 0) {
+			return [{value: '', label: 'No cloud accounts', description: null, disabled: true}];
+		}
+		return cloudAccounts.map((account) => {
+			const primaryLabel = account.name?.trim() || cloudProviderLabel(account.provider);
+			const providerLabel = cloudProviderLabel(account.provider);
+			const details = account.user?.trim() || account.base_url?.trim() || null;
+			const monogram = getCloudAccountMonogram(account);
+			const colors = getAccountAvatarColors(
+				`cloud:${account.provider}:${account.id}:${account.user || account.name || account.base_url || ''}`,
+			);
+			return {
+				value: String(account.id),
+				label: primaryLabel,
+				description: details ? `${providerLabel} • ${details}` : providerLabel,
+				icon: (
+					<span
+						className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold"
+						style={{backgroundColor: colors.background, color: colors.foreground}}
+					>
+						{monogram}
+					</span>
+				),
+			};
+		});
+	}, [cloudAccounts]);
+	const selectedCloudAccountOption = useMemo(
+		() => cloudAccountOptions.find((option) => option.value === String(selectedAccountId)) ?? null,
+		[cloudAccountOptions, selectedAccountId],
+	);
 
 	return (
 		<Modal
@@ -1331,19 +1448,33 @@ function CloudAttachmentPickerModal({
 				</Button>
 			</div>
 
-			<div className="grid grid-cols-1 gap-2 border-b ui-border-default px-4 py-3 md:grid-cols-[280px_1fr_auto_auto_auto]">
-				<FormSelect
-					className="h-9"
-					value={selectedAccountId}
-					onChange={(event) => onAccountChange(event.target.value)}
-				>
-					{cloudAccounts.length === 0 ? <option value="">No cloud accounts</option> : null}
-					{cloudAccounts.map((account) => (
-						<option key={account.id} value={account.id}>
-							{account.name}
-						</option>
-					))}
-				</FormSelect>
+				<div className="grid grid-cols-1 gap-2 border-b ui-border-default px-4 py-3 md:grid-cols-[280px_1fr_auto_auto_auto]">
+					<FormSelect
+						className="h-9"
+						value={selectedAccountId}
+						onChange={(event) => onAccountChange(event.target.value)}
+						options={cloudAccountOptions}
+						renderSelectedOption={() => {
+							if (!selectedCloudAccountOption) return 'No cloud accounts';
+							return (
+								<div className="flex min-w-0 items-center gap-2">
+									{selectedCloudAccountOption.icon}
+									<span className="min-w-0 flex-1 truncate text-left">{selectedCloudAccountOption.label}</span>
+								</div>
+							);
+						}}
+						renderOption={(option) => (
+							<div className="flex min-w-0 items-start gap-2 py-0.5">
+								{option.icon}
+								<div className="min-w-0 flex-1">
+									<div className="truncate text-sm ui-text-primary">{option.label}</div>
+									{option.description ? (
+										<div className="truncate text-[11px] ui-text-muted">{option.description}</div>
+									) : null}
+								</div>
+							</div>
+						)}
+					/>
 				<div className="surface-muted flex h-9 min-w-0 items-center gap-1 overflow-x-auto rounded-md border ui-border-default px-2 text-xs ui-text-secondary">
 					{breadcrumbs.map((crumb, index) => (
 						<React.Fragment key={`${crumb.path}-${index}`}>
@@ -1675,14 +1806,78 @@ function renderAttachmentTypeIcon(filename: string, contentType: string | null):
 }
 
 function renderCloudItemIcon(item: CloudItem): React.ReactNode {
-	if (item.isFolder) return <Folder size={16} />;
-	return renderAttachmentTypeIcon(item.name, item.mimeType);
+	const type = (item.mimeType || '').toLowerCase();
+	const ext = (item.name.split('.').pop() || '').toLowerCase();
+	const baseClassName = 'shrink-0';
+	const isPdf = ext === 'pdf' || type === 'application/pdf';
+	const isDocument = ['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(ext) || type.startsWith('text/');
+	const isSlides = ['ppt', 'pptx', 'key', 'odp'].includes(ext);
+	const isScript = ['js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h'].includes(ext);
+	const isWebCode = ['html', 'htm', 'css', 'scss', 'less', 'svg'].includes(ext);
+	const isStructuredData = ['json', 'xml', 'yml', 'yaml', 'toml', 'ini'].includes(ext);
+	const isDatabase = ['db', 'sqlite', 'sqlite3', 'sql'].includes(ext) || type.includes('sqlite');
+	const isBinary = ['exe', 'msi', 'dmg', 'pkg', 'appimage', 'deb', 'rpm', 'bin'].includes(ext);
+	if (item.isFolder) return <Folder size={16} className="shrink-0 fill-current cloud-icon-folder" />;
+	if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext))
+		return <FileImage size={16} className={`${baseClassName} cloud-icon-image`} />;
+	if (type.startsWith('video/') || ['mp4', 'mkv', 'mov', 'avi', 'webm'].includes(ext))
+		return <FileVideo2 size={16} className={`${baseClassName} cloud-icon-video`} />;
+	if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext))
+		return <FileMusic size={16} className={`${baseClassName} cloud-icon-audio`} />;
+	if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext))
+		return <FileArchive size={16} className={`${baseClassName} cloud-icon-archive`} />;
+	if (['csv', 'xls', 'xlsx', 'ods'].includes(ext))
+		return <FileSpreadsheet size={16} className={`${baseClassName} cloud-icon-spreadsheet`} />;
+	if (isPdf)
+		return <FileType2 size={16} className={`${baseClassName} cloud-icon-pdf`} />;
+	if (isSlides)
+		return <FileBarChart2 size={16} className={`${baseClassName} cloud-icon-slides`} />;
+	if (isDocument)
+		return <FileText size={16} className={`${baseClassName} cloud-icon-text`} />;
+	if (isScript)
+		return <FileTerminal size={16} className={`${baseClassName} cloud-icon-script`} />;
+	if (isStructuredData)
+		return <FileJson size={16} className={`${baseClassName} cloud-icon-code`} />;
+	if (isWebCode)
+		return <FileCode2 size={16} className={`${baseClassName} cloud-icon-code`} />;
+	if (isDatabase)
+		return <FileDigit size={16} className={`${baseClassName} cloud-icon-data`} />;
+	if (isBinary)
+		return <FileLock2 size={16} className={`${baseClassName} cloud-icon-binary`} />;
+	return <File size={16} className={`${baseClassName} cloud-icon-generic`} />;
 }
 
 function cloudFileTypeLabel(item: CloudItem): string {
 	const mimeType = (item.mimeType || '').trim();
 	if (mimeType) return mimeType;
 	return fileExtensionLabel(item.name);
+}
+
+function cloudProviderLabel(provider: PublicCloudAccount['provider']): string {
+	switch (provider) {
+		case 'nextcloud':
+			return 'Nextcloud';
+		case 'webdav':
+			return 'WebDAV';
+		case 'icloud-drive':
+			return 'iCloud Drive';
+		case 'google-drive':
+			return 'Google Drive';
+		case 'onedrive':
+			return 'OneDrive';
+		default:
+			return 'Cloud';
+	}
+}
+
+function getCloudAccountMonogram(account: PublicCloudAccount): string {
+	const base = (account.name?.trim() || account.user?.trim() || cloudProviderLabel(account.provider)).trim();
+	if (!base) return '?';
+	const words = base.split(/[\s._-]+/).filter(Boolean);
+	if (words.length >= 2) {
+		return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase();
+	}
+	return (words[0] || base).slice(0, 2).toUpperCase();
 }
 
 function cloudRootToken(provider: PublicCloudAccount['provider']): string {
@@ -1917,6 +2112,84 @@ function hasMeaningfulBodyContent(bodyHtml: string, plainBody: string, autoSigna
 		.replace(/\s+/g, ' ')
 		.trim();
 	return textOnly.length > 0;
+}
+
+function stripTrailingSignatureText(value: string, signatureText: string): string {
+	const text = String(value || '').trim();
+	const signature = String(signatureText || '').trim();
+	if (!signature || !text) return text;
+	if (text === signature) return '';
+	if (text.endsWith(signature)) {
+		return text.slice(0, text.length - signature.length).trimEnd();
+	}
+	return text;
+}
+
+function hasTrailingSignatureText(value: string, signatureText: string): boolean {
+	const text = String(value || '').trim();
+	const signature = String(signatureText || '').trim();
+	if (!text || !signature) return false;
+	if (text === signature) return true;
+	return text.endsWith(signature);
+}
+
+function hasAutoSignatureMarker(value: string): boolean {
+	const html = String(value || '').trim();
+	if (!html) return false;
+	try {
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(html, 'text/html');
+		return Boolean(
+			doc.querySelector(`[${AUTO_SIGNATURE_MARKER_ATTRIBUTE}="${AUTO_SIGNATURE_MARKER_VALUE}"]`),
+		);
+	} catch {
+		return false;
+	}
+}
+
+function stripAutoSignatureHtml(value: string): string {
+	const html = String(value || '').trim();
+	if (!html) return html;
+	try {
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(html, 'text/html');
+		doc
+			.querySelectorAll(`[${AUTO_SIGNATURE_MARKER_ATTRIBUTE}="${AUTO_SIGNATURE_MARKER_VALUE}"]`)
+			.forEach((node) => node.remove());
+		return doc.body.innerHTML.trim();
+	} catch {
+		return html;
+	}
+}
+
+function hasTrailingSignatureHtml(value: string, signatureHtml: string): boolean {
+	const html = String(value || '').trim();
+	const signature = String(signatureHtml || '').trim();
+	if (!html || !signature) return false;
+	if (html === signature) return true;
+	const withSpacer = `<p><br/></p>${signature}`;
+	if (html === withSpacer) return true;
+	return html.endsWith(signature) || html.endsWith(withSpacer);
+}
+
+function stripTrailingSignatureHtmlByContent(value: string, signatureHtml: string): string {
+	const html = String(value || '').trim();
+	const signature = String(signatureHtml || '').trim();
+	if (!html || !signature) return html;
+	if (html === signature) return '';
+	const withSpacer = `<p><br/></p>${signature}`;
+	if (html === withSpacer) return '';
+	if (html.endsWith(withSpacer)) {
+		return html.slice(0, html.length - withSpacer.length).trimEnd();
+	}
+	if (html.endsWith(signature)) {
+		return html.slice(0, html.length - signature.length).trimEnd();
+	}
+	return html;
+}
+
+function buildAutoSignatureHtmlBlock(signatureHtml: string): string {
+	return `<div ${AUTO_SIGNATURE_MARKER_ATTRIBUTE}="${AUTO_SIGNATURE_MARKER_VALUE}">${signatureHtml}</div>`;
 }
 
 function escapeRegExp(value: string): string {

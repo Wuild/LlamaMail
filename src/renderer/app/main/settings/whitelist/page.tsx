@@ -1,11 +1,13 @@
 import {useState} from 'react';
-import type {AppSettings} from '@/preload';
+import type {AppSettings} from '@preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {normalizeAllowlistEntry} from '@renderer/features/mail/remoteContent';
 import {Button} from '@llamamail/ui/button';
 import {FormCheckbox, FormInput} from '@llamamail/ui/form';
+import {Container} from '@llamamail/ui/container';
+import {Card} from '@llamamail/ui';
 
 export default function SettingsWhitelistPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);
@@ -13,7 +15,7 @@ export default function SettingsWhitelistPage() {
 	const [remoteAllowlistInput, setRemoteAllowlistInput] = useState('');
 
 	async function applySettingsPatch(patch: Partial<AppSettings>): Promise<boolean> {
-		setSettings((prev) => ({...prev, ...patch}));
+		setSettings((prev : AppSettings) => ({...prev, ...patch}));
 		setStatus('Saving...');
 		try {
 			const saved = await ipcClient.updateAppSettings(patch);
@@ -40,13 +42,13 @@ export default function SettingsWhitelistPage() {
 	}
 
 	async function onRemoveRemoteAllowlistEntry(entry: string): Promise<void> {
-		const next = (settings.remoteContentAllowlist || []).filter((item) => item !== entry);
+		const next = (settings.remoteContentAllowlist || []).filter((item : string) => item !== entry);
 		await applySettingsPatch({remoteContentAllowlist: next});
 	}
 
 	return (
-		<div className="mx-auto h-full min-h-0 w-full max-w-5xl space-y-4">
-			<div className="panel space-y-3 rounded-xl p-4">
+		<Container>
+			<Card>
 				<h2 className="ui-text-primary text-base font-semibold">Remote Content Whitelist</h2>
 				<p className="ui-text-muted text-sm">
 					Control remote image loading and sender/domain exceptions used while viewing emails.
@@ -63,6 +65,9 @@ export default function SettingsWhitelistPage() {
 						onChange={(event) => void applySettingsPatch({blockRemoteContent: event.target.checked})}
 					/>
 				</label>
+			</Card>
+
+			<Card>
 				<div className="pt-1">
 					<span className="ui-text-muted mb-1 block text-xs font-medium uppercase tracking-wide">
 						Allowlist senders/domains
@@ -93,7 +98,7 @@ export default function SettingsWhitelistPage() {
 						{(settings.remoteContentAllowlist || []).length === 0 && (
 							<p className="ui-text-muted text-xs">No allowlist entries yet.</p>
 						)}
-						{(settings.remoteContentAllowlist || []).map((entry) => (
+						{(settings.remoteContentAllowlist || []).map((entry: string, index: number) => (
 							<Button
 								key={entry}
 								type="button"
@@ -107,8 +112,9 @@ export default function SettingsWhitelistPage() {
 						))}
 					</div>
 				</div>
-			</div>
+			</Card>
+
 			{status && <div className="app-footer rounded-md px-3 py-2 text-xs ui-text-muted">{status}</div>}
-		</div>
+		</Container>
 	);
 }

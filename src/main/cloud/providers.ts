@@ -1,6 +1,6 @@
 import {type CloudAccountCredentials, setCloudAccountSecret} from '@main/db/repositories/cloudRepo.js';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
-import {refreshMailOAuthSession} from '@main/auth/authServerClient.js';
+import {AuthServerClientError, refreshMailOAuthSession} from '@main/auth/authServerClient.js';
 import type {OAuthSession} from '@llamamail/app/ipcTypes';
 
 export interface CloudItem {
@@ -156,6 +156,23 @@ export async function deleteCloudItem(
 	}
 	if (account.provider === 'onedrive') {
 		return deleteOneDriveItem(account, itemPathOrToken);
+	}
+	throw new Error(`Unsupported cloud provider: ${account.provider}`);
+}
+
+export async function moveCloudItem(
+	account: CloudAccountCredentials,
+	itemPathOrToken: string,
+	targetParentPathOrToken: string | null | undefined,
+): Promise<{moved: true}> {
+	if (account.provider === 'nextcloud' || account.provider === 'webdav') {
+		return moveWebDavItem(account, itemPathOrToken, targetParentPathOrToken);
+	}
+	if (account.provider === 'google-drive') {
+		return moveGoogleDriveItem(account, itemPathOrToken, targetParentPathOrToken);
+	}
+	if (account.provider === 'onedrive') {
+		return moveOneDriveItem(account, itemPathOrToken, targetParentPathOrToken);
 	}
 	throw new Error(`Unsupported cloud provider: ${account.provider}`);
 }
@@ -500,14 +517,80 @@ async function listOneDriveSharedRootItems(account: CloudAccountCredentials): Pr
 	if (sawSuccessfulResponse) {
 		if (!sawAnyRows) return [];
 		const mergedItems = Array.from(mergedByPath.values());
-		logger.info('OneDrive sharedWithMe merged result accountId=%d totalItems=%d', account.id, mergedItems.length);
-		return mergedItems;
+		const enrichedItems = await enrichOneDriveSharedRootItems(account, mergedItems);
+		logger.info(
+			'OneDrive sharedWithMe merged result accountId=%d totalItems=%d',
+			account.id,
+			enrichedItems.length,
+		);
+		return enrichedItems;
 	}
 	if (!sawSuccessfulResponse) {
 		const statusSummary = failedStatuses.length ? failedStatuses.join(', ') : 'unknown';
 		throw new Error(`OneDrive sharedWithMe request failed (${statusSummary}).`);
 	}
 	return [];
+}
+
+async function enrichOneDriveSharedRootItems(
+	account: CloudAccountCredentials,
+	items: CloudItem[],
+): Promise<CloudItem[]> {
+	const out: CloudItem[] = [];
+	const MAX_ENRICH_REQUESTS = 200;
+	let requestCount = 0;
+
+	for (const item of items) {
+		const parsedToken = parseOneDriveToken(item.path);
+		const isSharedAddressable = parsedToken.kind === 'shared' || parsedToken.kind === 'item';
+		const needsFolderHydration = !item.isFolder && !item.mimeType;
+		if (!isSharedAddressable || !needsFolderHydration || requestCount >= MAX_ENRICH_REQUESTS) {
+			out.push(item);
+			continue;
+		}
+
+		requestCount += 1;
+		try {
+			const resolvedToken = await resolveOneDriveItemAccessToken(account, parsedToken);
+			const endpoint = buildOneDriveItemEndpoint(resolvedToken);
+			const response = await oneDriveFetch(
+				account,
+				`${endpoint}?$select=id,name,folder,size,createdDateTime,lastModifiedDateTime,file,parentReference`,
+			);
+			if (!response.ok) {
+				out.push(item);
+				continue;
+			}
+			const payload = (await response.json()) as {
+				id?: string;
+				name?: string;
+				folder?: unknown;
+				size?: number;
+				createdDateTime?: string;
+				lastModifiedDateTime?: string;
+				file?: {mimeType?: string};
+				parentReference?: {driveId?: string};
+			};
+			const itemId = String(payload.id || ('itemId' in resolvedToken ? resolvedToken.itemId : item.id || '')).trim();
+			const driveId = String(payload.parentReference?.driveId || '').trim();
+			const hydratedToken = driveId && itemId ? {kind: 'shared' as const, driveId, itemId} : resolvedToken;
+			out.push({
+				...item,
+				id: itemId || item.id,
+				name: String(payload.name || item.name || itemId || item.id),
+				path: serializeOneDriveToken(hydratedToken),
+				isFolder: Boolean(payload.folder),
+				size: Number.isFinite(Number(payload.size)) ? Number(payload.size) : item.size,
+				createdAt: payload.createdDateTime || item.createdAt,
+				modifiedAt: payload.lastModifiedDateTime || item.modifiedAt,
+				mimeType: payload.file?.mimeType || item.mimeType,
+			});
+		} catch {
+			out.push(item);
+		}
+	}
+
+	return out;
 }
 
 async function expandOneDriveSharedFolders(
@@ -521,7 +604,7 @@ async function expandOneDriveSharedFolders(
 	const visitedFolderPaths = new Set<string>();
 	for (const item of sharedRootItems) {
 		mergedByPath.set(item.path, item);
-		if (item.isFolder) {
+		if (isPotentialOneDriveFolder(item)) {
 			folderQueue.push(item);
 		}
 	}
@@ -564,6 +647,12 @@ async function expandOneDriveSharedFolders(
 		try {
 			const endpoint = buildOneDriveChildrenEndpoint(parentToken);
 			rows = await fetchAllOneDriveValues(account, endpoint, 'OneDrive shared descendants request failed');
+			if (!parent.isFolder) {
+				mergedByPath.set(parent.path, {
+					...parent,
+					isFolder: true,
+				});
+			}
 		} catch (error: any) {
 			logger.warn(
 				'OneDrive shared descendants request failed accountId=%d parent=%s reason=%s',
@@ -589,7 +678,7 @@ async function expandOneDriveSharedFolders(
 				modifiedAt: row.lastModifiedDateTime || null,
 				mimeType: row.file?.mimeType || null,
 			};
-			if (!child.isFolder) continue;
+			if (!isPotentialOneDriveFolder(child)) continue;
 			mergedByPath.set(child.path, child);
 			folderQueue.push(child);
 		}
@@ -603,6 +692,12 @@ async function expandOneDriveSharedFolders(
 		requestCount,
 	);
 	return mergedItems;
+}
+
+function isPotentialOneDriveFolder(item: CloudItem): boolean {
+	if (item.isFolder) return true;
+	// sharedWithMe sometimes omits folder/file facets for folders; probe those paths.
+	return !item.mimeType;
 }
 
 async function fetchAllOneDriveValues<T>(
@@ -1097,6 +1192,36 @@ async function deleteWebDavItem(account: CloudAccountCredentials, itemPathOrToke
 	return {removed: true};
 }
 
+async function moveWebDavItem(
+	account: CloudAccountCredentials,
+	itemPathOrToken: string,
+	targetParentPathOrToken: string | null | undefined,
+): Promise<{moved: true}> {
+	const baseUrlRaw = resolveCloudWebDavBaseUrl(account);
+	const sourcePath = normalizeWebDavPath(itemPathOrToken);
+	if (sourcePath === '/') throw new Error('Cannot move root folder.');
+	const sourceName = decodeURIComponent(sourcePath.split('/').filter(Boolean).pop() || '').trim();
+	if (!sourceName) throw new Error('Cannot resolve source item name.');
+	const targetParentPath = normalizeWebDavPath(targetParentPathOrToken);
+	const destinationPath = joinWebDavChildPath(targetParentPath, sourceName);
+	if (destinationPath === sourcePath) return {moved: true};
+	const sourceUrl = resolveWebDavUrl(baseUrlRaw, sourcePath);
+	const destinationUrl = resolveWebDavUrl(baseUrlRaw, destinationPath);
+	const auth = Buffer.from(`${account.user || ''}:${account.secret}`).toString('base64');
+	const response = await fetch(sourceUrl, {
+		method: 'MOVE',
+		headers: {
+			Authorization: `Basic ${auth}`,
+			Destination: destinationUrl,
+			Overwrite: 'T',
+		},
+	});
+	if (!response.ok) {
+		throw new Error(`Move failed (${response.status})`);
+	}
+	return {moved: true};
+}
+
 async function downloadWebDavItem(
 	account: CloudAccountCredentials,
 	itemPathOrToken: string,
@@ -1215,6 +1340,51 @@ async function deleteGoogleDriveItem(
 		throw new Error(`Delete failed (${response.status})`);
 	}
 	return {removed: true};
+}
+
+async function moveGoogleDriveItem(
+	account: CloudAccountCredentials,
+	itemPathOrToken: string,
+	targetParentPathOrToken: string | null | undefined,
+): Promise<{moved: true}> {
+	const itemId = String(itemPathOrToken || '').trim();
+	if (!itemId || itemId === 'root') throw new Error('Cannot move this item.');
+	const targetParentId = String(targetParentPathOrToken || 'root').trim() || 'root';
+	const metadataRes = await googleDriveFetch(
+		account,
+		`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(itemId)}?fields=id,parents&supportsAllDrives=true`,
+	);
+	if (!metadataRes.ok) {
+		throw new Error(`Move metadata request failed (${metadataRes.status})`);
+	}
+	const metadata = (await metadataRes.json()) as {parents?: string[]};
+	const currentParents = (metadata.parents || []).filter(Boolean);
+	if (currentParents.includes(targetParentId) && currentParents.length === 1) {
+		return {moved: true};
+	}
+	const params = new URLSearchParams({
+		supportsAllDrives: 'true',
+		addParents: targetParentId,
+		fields: 'id',
+	});
+	if (currentParents.length > 0) {
+		params.set('removeParents', currentParents.join(','));
+	}
+	const response = await googleDriveFetch(
+		account,
+		`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(itemId)}?${params.toString()}`,
+		{
+			method: 'PATCH',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({}),
+		},
+	);
+	if (!response.ok) {
+		throw new Error(`Move failed (${response.status})`);
+	}
+	return {moved: true};
 }
 
 async function downloadGoogleDriveItem(
@@ -1419,6 +1589,73 @@ async function deleteOneDriveItem(
 		throw new Error(`Delete failed (${response.status})`);
 	}
 	return {removed: true};
+}
+
+async function moveOneDriveItem(
+	account: CloudAccountCredentials,
+	itemPathOrToken: string,
+	targetParentPathOrToken: string | null | undefined,
+): Promise<{moved: true}> {
+	const sourceParsedToken = parseOneDriveToken(itemPathOrToken);
+	const sourceResolvedToken = await resolveOneDriveItemAccessToken(account, sourceParsedToken);
+	if (
+		sourceResolvedToken.kind === 'root' ||
+		sourceResolvedToken.kind === 'scope' ||
+		sourceResolvedToken.kind === 'drive'
+	) {
+		throw new Error('Cannot move this item.');
+	}
+
+	const targetParentParsedToken = parseOneDriveToken(targetParentPathOrToken);
+	if (
+		targetParentParsedToken.kind === 'scope' &&
+		(targetParentParsedToken.scope === 'shares' || targetParentParsedToken.scope === 'recycle-bin')
+	) {
+		throw new Error('Cannot move items into this OneDrive view.');
+	}
+	const targetParentResolvedToken = await resolveOneDriveItemAccessToken(account, targetParentParsedToken);
+	const targetParentEndpoint = buildOneDriveItemEndpoint(targetParentResolvedToken);
+	const targetParentRes = await oneDriveFetch(account, `${targetParentEndpoint}?$select=id,parentReference`);
+	if (!targetParentRes.ok) {
+		throw new Error(`Move target request failed (${targetParentRes.status})`);
+	}
+	const targetParentPayload = (await targetParentRes.json()) as {
+		id?: string;
+		parentReference?: {driveId?: string};
+	};
+	const targetParentId = String(targetParentPayload.id || '').trim();
+	if (!targetParentId) throw new Error('Move target is invalid.');
+
+	const sourceEndpoint = buildOneDriveItemEndpoint(sourceResolvedToken);
+	const sourceRes = await oneDriveFetch(account, `${sourceEndpoint}?$select=id,parentReference`);
+	if (!sourceRes.ok) {
+		throw new Error(`Move source request failed (${sourceRes.status})`);
+	}
+	const sourcePayload = (await sourceRes.json()) as {
+		id?: string;
+		parentReference?: {id?: string; driveId?: string};
+	};
+	const sourceParentId = String(sourcePayload.parentReference?.id || '').trim();
+	const sourceParentDriveId = String(sourcePayload.parentReference?.driveId || '').trim();
+	const targetParentDriveId = String(targetParentPayload.parentReference?.driveId || '').trim();
+	if (sourceParentId && sourceParentId === targetParentId && sourceParentDriveId === targetParentDriveId) {
+		return {moved: true};
+	}
+
+	const response = await oneDriveFetch(account, sourceEndpoint, {
+		method: 'PATCH',
+		headers: {'Content-Type': 'application/json'},
+		body: JSON.stringify({
+			parentReference: {
+				id: targetParentId,
+				...(targetParentDriveId ? {driveId: targetParentDriveId} : {}),
+			},
+		}),
+	});
+	if (!response.ok) {
+		throw new Error(`Move failed (${response.status})`);
+	}
+	return {moved: true};
 }
 
 async function downloadOneDriveItem(
@@ -1751,7 +1988,23 @@ async function refreshGoogleDriveAccessToken(
 		clientId: String(payload.clientId || '').trim() || null,
 		tenantId: null,
 	};
-	const refreshed = await refreshMailOAuthSession(session);
+	let refreshed: Awaited<ReturnType<typeof refreshMailOAuthSession>>;
+	try {
+		refreshed = await refreshMailOAuthSession(session);
+	} catch (error) {
+		if (error instanceof AuthServerClientError) {
+			const causePayload = (error as AuthServerClientError & {causePayload?: any}).causePayload || {};
+			const reason = String(causePayload.error || '').trim().toLowerCase();
+			const description = String(causePayload.error_description || causePayload.errorDescription || '')
+				.trim()
+				.toLowerCase();
+			const tokenRevoked = reason === 'invalid_grant' || description.includes('expired') || description.includes('revoked');
+			if (tokenRevoked) {
+				throw new Error('Google Drive session expired or was revoked. Please reconnect this account.');
+			}
+		}
+		throw error;
+	}
 	const nextAccessToken = String(refreshed.accessToken || '').trim();
 	if (!nextAccessToken) {
 		throw new Error('Google Drive token refresh response did not include an access token.');

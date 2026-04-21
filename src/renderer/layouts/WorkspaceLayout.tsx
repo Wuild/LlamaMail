@@ -107,7 +107,7 @@ export default function WorkspaceLayout({
 			{showMenuBar && <header className="workspace-header shrink-0 px-5 py-3">{menubar}</header>}
 			<div className="min-h-0 flex flex-1 overflow-hidden">
 				{sidebar && (
-					<div className="relative min-h-0 shrink-0" style={sidebarWidth ? {width: sidebarWidth} : undefined}>
+					<div className="relative h-full min-h-0 shrink-0" style={sidebarWidth ? {width: sidebarWidth} : undefined}>
 						{sidebar}
 						{onSidebarResizeStart && (
 							<div
@@ -119,7 +119,7 @@ export default function WorkspaceLayout({
 						)}
 					</div>
 				)}
-				<main className={cn('workspace-content min-h-0 flex-1 overflow-auto p-5', contentClassName)}>
+				<main className={cn('workspace-content min-h-0 flex-1 overflow-hidden p-5', contentClassName)}>
 					{children}
 				</main>
 			</div>

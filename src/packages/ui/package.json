@@ -9,14 +9,74 @@
 		"build": "tsc -p tsconfig.json",
 		"dev": "tsc -p tsconfig.json -w"
 	},
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
+		"./badge": {
+			"types": "./dist/badge.d.ts",
+			"import": "./dist/badge.js"
+		},
+		"./button": {
+			"types": "./dist/button.d.ts",
+			"import": "./dist/button.js"
+		},
+		"./card": {
+			"types": "./dist/card.d.ts",
+			"import": "./dist/card.js"
+		},
+		"./container": {
+			"types": "./dist/container.d.ts",
+			"import": "./dist/container.js"
+		},
+		"./contextmenu": {
+			"types": "./dist/contextmenu.d.ts",
+			"import": "./dist/contextmenu.js"
+		},
+		"./editor": {
+			"types": "./dist/editor.d.ts",
+			"import": "./dist/editor.js"
+		},
+		"./form": {
+			"types": "./dist/form.d.ts",
+			"import": "./dist/form.js"
+		},
+		"./icon": {
+			"types": "./dist/icon.d.ts",
+			"import": "./dist/icon.js"
+		},
+		"./label": {
+			"types": "./dist/label.d.ts",
+			"import": "./dist/label.js"
+		},
+		"./modal": {
+			"types": "./dist/modal.d.ts",
+			"import": "./dist/modal.js"
+		},
+		"./scroll-area": {
+			"types": "./dist/scroll-area.d.ts",
+			"import": "./dist/scroll-area.js"
+		},
+		"./utils": {
+			"types": "./dist/utils.d.ts",
+			"import": "./dist/utils.js"
+		},
 		"./*": {
 			"types": "./dist/*.d.ts",
 			"import": "./dist/*.js"
 		}
+	},
+	"typesVersions": {
+		"*": {
+			"*": [
+				"./dist/*",
+				"./dist/*.d.ts"
+			]
+		}
+	},
+	"dependencies": {
+		"unicode-emoji": "^2.6.0"
 	}
 }

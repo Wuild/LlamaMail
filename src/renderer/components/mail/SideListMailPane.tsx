@@ -2,7 +2,7 @@ import React from 'react';
 import {Search, Star} from '@llamamail/ui/icon';
 import {useDrag} from 'react-dnd';
 import {getEmptyImage} from 'react-dnd-html5-backend';
-import type {MessageItem} from '@/preload';
+import type {MessageItem} from '@preload';
 import {ScrollArea} from '@llamamail/ui/scroll-area';
 import {formatSystemDateTime} from '@renderer/lib/dateTime';
 import {cn} from '@llamamail/ui/utils';

@@ -21,7 +21,7 @@ import {
 	verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
-import type {FolderItem, PublicAccount} from '@/preload';
+import type {FolderItem, PublicAccount} from '@preload';
 import {ScrollArea} from '@llamamail/ui/scroll-area';
 import {getAccountAvatarColorsForAccount, getAccountMonogram} from '@renderer/lib/accountAvatar';
 import {cn} from '@llamamail/ui/utils';

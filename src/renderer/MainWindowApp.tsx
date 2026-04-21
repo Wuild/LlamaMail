@@ -1,6 +1,6 @@
 import {Button} from '@llamamail/ui/button';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertTriangle, X} from '@llamamail/ui/icon';
+import {Loader2, X} from '@llamamail/ui/icon';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {DEFAULT_APP_SETTINGS} from '@llamamail/app/defaults';
 import {useAccounts} from './hooks/ipc/useAccounts';
@@ -9,12 +9,13 @@ import {useAppSettings} from './hooks/ipc/useAppSettings';
 import {useIpcEvent} from './hooks/ipc/useIpcEvent';
 import {ipcClient} from './lib/ipcClient';
 import type {GlobalErrorEvent} from '@llamamail/app/ipcTypes';
-import type {SendEmailBackgroundStatusEvent, SyncStatusEvent} from '@/preload';
+import type {SyncStatusEvent} from '@preload';
 import {ContextMenu, ContextMenuItem} from '@llamamail/ui/contextmenu';
 import MainWindowRoutes from './app/MainWindowRoutes';
 import {MainWindowIpcBridge} from './app/MainWindowIpcBridge';
 import {useApp} from '@renderer/app/AppContext';
 import {useRuntimeStore} from '@renderer/store/runtimeStore';
+import {useNotificationStore} from '@renderer/store/notificationStore';
 
 type MainNavContextItemId = 'email' | 'contacts' | 'calendar' | 'cloud' | 'settings' | 'debug' | 'help';
 type MainNavContextMenuState = {
@@ -43,12 +44,12 @@ function MainWindowShell() {
 	const showDebugNavItem = developerMode && Boolean(appSettings.developerShowDebugNavItem);
 	const [globalErrors, setGlobalErrors] = useState<GlobalErrorEvent[]>([]);
 	const [restartBusy, setRestartBusy] = useState(false);
-	const [sendStatus, setSendStatus] = useState<SendEmailBackgroundStatusEvent | null>(null);
-	const systemFailureToasts = useRuntimeStore((state) => state.syncNotices);
+	const notifications = useNotificationStore((state) => state.notifications);
+	const createNotification = useNotificationStore((state) => state.createNotification);
+	const updateNotification = useNotificationStore((state) => state.updateNotification);
+	const dismissNotification = useNotificationStore((state) => state.dismissNotification);
+	const clearNotificationsByCategory = useNotificationStore((state) => state.clearNotificationsByCategory);
 	const applySyncEvent = useRuntimeStore((state) => state.applySyncEvent);
-	const pushSyncNotice = useRuntimeStore((state) => state.pushSyncNotice);
-	const dismissSyncNotice = useRuntimeStore((state) => state.dismissSyncNotice);
-	const clearSyncNotices = useRuntimeStore((state) => state.clearSyncNotices);
 	const [mainNavContextMenu, setMainNavContextMenu] = useState<MainNavContextMenuState | null>(null);
 	const mainNavContextMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,34 +67,24 @@ function MainWindowShell() {
 	useIpcEvent(ipcClient.onGlobalError, pushGlobalError);
 	useIpcEvent(ipcClient.onSendEmailBackgroundStatus, (payload) => {
 		if (!showSendNotifications) return;
-		setSendStatus(payload);
+		const id = `send:${payload.jobId}`;
+		const clampedProgress = Math.max(0, Math.min(100, Math.round(payload.progress)));
+		const isFinal = payload.phase === 'sent' || payload.phase === 'failed';
+		const title = payload.phase === 'failed' ? 'Send failed' : 'Sending email';
+		createNotification({
+			id,
+			title,
+			message: payload.error ? `${payload.message} ${payload.error}` : payload.message,
+			progress: clampedProgress,
+			busy: !isFinal,
+			tone: payload.phase === 'failed' ? 'danger' : payload.phase === 'sent' ? 'success' : 'info',
+			category: 'send',
+			autoCloseMs: isFinal ? 4200 : null,
+		});
 	});
 	useIpcEvent(ipcClient.onAccountSyncStatus, (payload: SyncStatusEvent) => {
 		applySyncEvent(payload);
 		if (!showSystemFailureNotifications) return;
-		if (payload.status === 'done' && payload.summary?.partialSuccess) {
-			const accountName =
-				accounts.find((item) => item.id === payload.accountId)?.display_name?.trim() ||
-				accounts.find((item) => item.id === payload.accountId)?.email ||
-				`Account ${payload.accountId}`;
-			const failedModules = payload.summary.failedModules ?? [];
-			const moduleStatus = payload.summary.moduleStatus;
-			const details = failedModules
-				.map((module) => {
-					const reason = moduleStatus?.[module]?.reason?.trim();
-					return reason ? `${module}: ${reason}` : module;
-				})
-				.join('; ');
-			const message = details
-				? `${accountName}: Sync partially completed. ${details}`
-				: `${accountName}: Sync partially completed.`;
-			pushSyncNotice({
-				title: 'Sync partially completed',
-				message,
-				key: `partial:${payload.accountId}:${failedModules.join(',')}:${details}`,
-			});
-			return;
-		}
 		if (payload.status !== 'error') return;
 		const accountName =
 			accounts.find((item) => item.id === payload.accountId)?.display_name?.trim() ||
@@ -112,25 +103,18 @@ function MainWindowShell() {
 				: category === 'timeout'
 					? 'Sync timeout'
 					: 'Sync failed';
-		pushSyncNotice({
+		createNotification({
+			id: `system:${isAuthFailure ? 'auth' : 'sync'}:${payload.accountId}:${errorText}`.slice(0, 160),
 			title,
 			message: `${accountName}: ${errorText}`,
-			key: `${isAuthFailure ? 'auth' : 'sync'}:${payload.accountId}:${errorText}`,
+			progress: 100,
+			busy: false,
+			tone: 'danger',
+			category: 'system',
+			autoCloseMs: 6500,
 			accountId: isAuthFailure ? payload.accountId : undefined,
 		});
 	});
-
-	useEffect(() => {
-		if (!showSendNotifications && sendStatus) {
-			setSendStatus(null);
-		}
-	}, [showSendNotifications, sendStatus]);
-
-	useEffect(() => {
-		if (!showSystemFailureNotifications && systemFailureToasts.length > 0) {
-			clearSyncNotices();
-		}
-	}, [clearSyncNotices, showSystemFailureNotifications, systemFailureToasts.length]);
 
 	useEffect(() => {
 		if (!mainNavContextMenu) return;
@@ -154,81 +138,95 @@ function MainWindowShell() {
 	}, [location.pathname, location.search]);
 
 	useEffect(() => {
-		if (!sendStatus) return;
-		if (sendStatus.phase !== 'sent' && sendStatus.phase !== 'failed') return;
-		const timer = window.setTimeout(() => {
-			setSendStatus((prev) => (prev?.jobId === sendStatus.jobId ? null : prev));
-		}, 4200);
-		return () => window.clearTimeout(timer);
-	}, [sendStatus]);
+		if (!showSendNotifications) {
+			clearNotificationsByCategory('send');
+		}
+	}, [clearNotificationsByCategory, showSendNotifications]);
 
 	useEffect(() => {
-		if (systemFailureToasts.length === 0) return;
-		const timers = systemFailureToasts.map((item) =>
-			window.setTimeout(() => {
-				dismissSyncNotice(item.id);
-			}, 6500),
-		);
+		if (!showSystemFailureNotifications) {
+			clearNotificationsByCategory('system');
+		}
+	}, [clearNotificationsByCategory, showSystemFailureNotifications]);
+
+	useEffect(() => {
+		if (notifications.length === 0) return;
+		const timers = notifications
+			.filter((item) => !item.busy && typeof item.autoCloseMs === 'number' && item.autoCloseMs > 0)
+			.map((item) =>
+				window.setTimeout(() => {
+					dismissNotification(item.id);
+				}, item.autoCloseMs as number),
+			);
 		return () => {
 			for (const timer of timers) window.clearTimeout(timer);
 		};
-	}, [dismissSyncNotice, systemFailureToasts]);
+	}, [dismissNotification, notifications]);
 
 	useEffect(() => {
 		const timers: number[] = [];
 		const onPreview = () => {
 			const jobId = `preview-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-			const now = () => new Date().toISOString();
-			setSendStatus({
-				jobId,
-				accountId: -1,
-				phase: 'queued',
-				progress: 12,
+			const id = `send:${jobId}`;
+			createNotification({
+				id,
+				title: 'Sending email',
 				message: 'Queued email for background send...',
-				error: null,
-				timestamp: now(),
+				progress: 12,
+				busy: true,
+				tone: 'info',
+				category: 'send',
 			});
 			timers.push(
 				window.setTimeout(() => {
-					setSendStatus({
-						jobId,
-						accountId: -1,
-						phase: 'sending',
-						progress: 62,
+					updateNotification(id, {
+						title: 'Sending email',
 						message: 'Sending email...',
-						error: null,
-						timestamp: now(),
+						progress: 62,
+						busy: true,
+						tone: 'info',
+						category: 'send',
 					});
 				}, 450),
 			);
 			timers.push(
 				window.setTimeout(() => {
-					setSendStatus({
-						jobId,
-						accountId: -1,
-						phase: 'sent',
-						progress: 100,
+					updateNotification(id, {
+						title: 'Sending email',
 						message: 'Email sent successfully.',
-						error: null,
-						timestamp: now(),
+						progress: 100,
+						busy: false,
+						tone: 'success',
+						category: 'send',
+						autoCloseMs: 4200,
 					});
 				}, 1200),
 			);
 		};
 		window.addEventListener('llamamail:preview-send-notification', onPreview);
 		const onPreviewSyncFailure = () => {
-			pushSyncNotice({
+			createNotification({
+				id: `system:preview-sync-failure-${Date.now().toString(36)}`,
 				title: 'Sync failed',
 				message: 'Demo Account: Mailbox sync failed (timeout while fetching folder state).',
-				key: `preview-sync-failure-${Date.now()}`,
+				progress: 100,
+				busy: false,
+				tone: 'danger',
+				category: 'system',
+				autoCloseMs: 6500,
 			});
 		};
 		const onPreviewAuthFailure = () => {
 			const accountId = accounts[0]?.id ?? 1;
-			pushSyncNotice({
+			createNotification({
+				id: `system:preview-auth-failure-${Date.now().toString(36)}`,
 				title: 'Authentication failed',
 				message: 'Demo Account: Invalid credentials. Password or authentication may have changed.',
-				key: `preview-auth-failure-${Date.now()}`,
+				progress: 100,
+				busy: false,
+				tone: 'danger',
+				category: 'system',
+				autoCloseMs: 6500,
 				accountId,
 			});
 		};
@@ -240,7 +238,7 @@ function MainWindowShell() {
 			window.removeEventListener('llamamail:preview-auth-failure', onPreviewAuthFailure);
 			for (const timer of timers) window.clearTimeout(timer);
 		};
-	}, [accounts, pushSyncNotice]);
+	}, [accounts, createNotification, updateNotification]);
 
 	useEffect(() => {
 		const onWindowError = (event: ErrorEvent) => {
@@ -390,90 +388,67 @@ function MainWindowShell() {
 			{showRouteOverlay && (
 				<div
 					className={`overlay route-overlay-text pointer-events-none fixed right-3 z-1200 rounded-md px-2.5 py-1.5 font-mono text-[11px] shadow-sm ${
-						sendStatus ? 'bottom-21' : 'bottom-3'
+						notifications.length > 0 ? 'bottom-21' : 'bottom-3'
 					}`}
 				>
 					{`#${location.pathname}${location.search || ''}`}
 				</div>
 			)}
-			{showSendNotifications && sendStatus && (
-				<div className="overlay fixed bottom-3 right-3 z-1190 w-[320px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-md shadow-lg backdrop-blur">
-					<div className="px-3 py-2.5">
-						<div className="flex items-center justify-between gap-2">
-							<p className="ui-text-primary truncate text-sm font-medium">
-								{sendStatus.phase === 'failed' ? 'Send failed' : 'Sending email'}
-							</p>
-							<span className="ui-text-muted text-[11px]">
-								{Math.max(0, Math.min(100, Math.round(sendStatus.progress)))}%
-							</span>
-						</div>
-						<p className="ui-text-secondary mt-0.5 truncate text-xs">
-							{sendStatus.error ? `${sendStatus.message} ${sendStatus.error}` : sendStatus.message}
-						</p>
-					</div>
-					<div className="progress-track h-1.5 w-full">
+			{notifications.length > 0 && (
+				<div className="fixed bottom-3 right-3 z-1187 flex w-[320px] max-w-[calc(100vw-1.5rem)] flex-col-reverse gap-2">
+					{notifications.map((item) => (
 						<div
-							className={`h-full transition-all duration-300 ease-out ${
-								sendStatus.phase === 'failed' ? 'progress-fill-danger' : 'progress-fill-info'
-							}`}
-							style={{width: `${Math.max(0, Math.min(100, sendStatus.progress))}%`}}
-						/>
-					</div>
-				</div>
-			)}
-			{showSystemFailureNotifications && systemFailureToasts.length > 0 && (
-				<div
-					className={`fixed right-3 z-1188 flex w-[320px] max-w-[calc(100vw-1.5rem)] flex-col-reverse gap-2 ${
-						sendStatus ? 'bottom-[6.8rem]' : 'bottom-3'
-					}`}
-				>
-					{systemFailureToasts.map((toast) => (
-						<div
-							key={toast.id}
-							role={toast.accountId ? 'button' : undefined}
-							tabIndex={toast.accountId ? 0 : -1}
+							key={item.id}
+							role={item.accountId ? 'button' : undefined}
+							tabIndex={item.accountId ? 0 : -1}
 							onClick={() => {
-								if (!toast.accountId) return;
-								navigate(`/settings/account/${toast.accountId}`);
+								if (!item.accountId) return;
+								navigate(`/settings/account/${item.accountId}`);
 							}}
 							onKeyDown={(event) => {
-								if (!toast.accountId) return;
+								if (!item.accountId) return;
 								if (event.key !== 'Enter' && event.key !== ' ') return;
 								event.preventDefault();
-								navigate(`/settings/account/${toast.accountId}`);
+								navigate(`/settings/account/${item.accountId}`);
 							}}
-							className={`overlay overlay-danger overflow-hidden rounded-md shadow-lg backdrop-blur ${
-								toast.accountId ? 'cursor-pointer' : ''
+							className={`overlay overflow-hidden rounded-md shadow-lg backdrop-blur ${
+								item.accountId ? 'cursor-pointer' : ''
 							}`}
 						>
 							<div className="px-3 py-2.5">
 								<div className="flex items-center justify-between gap-2">
-									<p className="text-danger truncate text-sm font-semibold">{toast.title}</p>
-									<Button
-										type="button"
-										className="menu-item inline-flex h-6 w-6 items-center justify-center rounded"
-										onClick={(event) => {
-											event.stopPropagation();
-											dismissSyncNotice(toast.id);
-										}}
-										aria-label="Dismiss sync error notification"
-									>
-										<X size={13} />
-									</Button>
-								</div>
-								<div className="mt-1 flex items-start gap-2">
-									<AlertTriangle size={14} className="text-danger mt-0.5 shrink-0" />
-									<div className="min-w-0 flex-1">
-										<p className="ui-text-primary text-xs">{toast.message}</p>
-										{toast.accountId && (
-											<p className="text-danger mt-1 text-[11px] font-medium">
-												Click to open account settings
-											</p>
+									<p className="ui-text-primary truncate text-sm font-medium">{item.title}</p>
+									<div className="flex items-center gap-1">
+										<span className="ui-text-muted text-[11px]">{item.progress}%</span>
+										{!item.busy && (
+											<Button
+												type="button"
+												className="menu-item inline-flex h-6 w-6 items-center justify-center rounded"
+												onClick={() => dismissNotification(item.id)}
+												aria-label="Dismiss notification"
+											>
+												<X size={13} />
+											</Button>
 										)}
 									</div>
 								</div>
+								<p className="ui-text-secondary mt-0.5 flex items-center gap-1.5 truncate text-xs">
+									{item.busy && <Loader2 size={12} className="shrink-0 animate-spin" />}
+									<span className="truncate">{item.message}</span>
+								</p>
 							</div>
-							<div className="progress-fill-danger h-1.5 w-full" />
+							<div className="progress-track h-1.5 w-full">
+								<div
+									className={`h-full transition-all duration-300 ease-out ${
+										item.tone === 'danger'
+											? 'progress-fill-danger'
+											: item.tone === 'success'
+												? 'progress-fill-success'
+												: 'progress-fill-info'
+									}`}
+									style={{width: `${item.progress}%`}}
+								/>
+							</div>
 						</div>
 					))}
 				</div>

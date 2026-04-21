@@ -1,6 +1,6 @@
 import {Worker} from 'node:worker_threads';
 import {ImapFlow} from 'imapflow';
-import {createAppLogger, createMailDebugLogger} from '@main/debug/debugLog.js';
+import {createAppLogger, createMailDebugLogger, pushDebugLog} from '@main/debug/debugLog.js';
 import {
 	addAccount,
 	deleteAccount,
@@ -72,6 +72,7 @@ import {
 	isAccountContactsModuleEnabled,
 	isAccountEmailModuleEnabled,
 } from '@llamamail/app/accountModules';
+import {appEventHandler, AppEvent} from '@llamamail/app/appEventHandler';
 import {getAppSettingsSync} from '@main/settings/store.js';
 import {
 	broadcastAccountSyncStatus,
@@ -435,9 +436,15 @@ async function runAutoSyncCycle(source: 'startup' | 'interval'): Promise<void> {
 		const accounts = await getAccounts();
 		const syncableAccounts = accounts.filter(
 			(account) =>
-				!isDemoProvider(account.provider) && !isDemoModeEnabled() && isAccountEmailModuleEnabled(account),
+				!isDemoProvider(account.provider) &&
+				!isDemoModeEnabled() &&
+				(isAccountEmailModuleEnabled(account) ||
+					isAccountContactsModuleEnabled(account) ||
+					isAccountCalendarModuleEnabled(account)),
 		);
-		void ensureIdleWatchersForAccounts(syncableAccounts.map((account) => account.id));
+		void ensureIdleWatchersForAccounts(
+			syncableAccounts.filter((account) => isAccountEmailModuleEnabled(account)).map((account) => account.id),
+		);
 		for (const account of syncableAccounts) {
 			if (blockedSyncAccounts.has(account.id)) continue;
 			try {
@@ -464,6 +471,13 @@ async function runSyncAndBroadcast(accountId: number, source: string): Promise<A
 			newestMessageTarget: null,
 		};
 		broadcastSync({accountId, status: 'done', summary, source: 'demo-mode'});
+		appEventHandler.emit(AppEvent.AccountSyncCompleted, {
+			accountId,
+			source: 'demo-mode',
+			newMessages: 0,
+			messages: 0,
+			folders: 0,
+		});
 		return summary;
 	}
 	if (account && isDemoProvider(account.provider)) {
@@ -476,12 +490,25 @@ async function runSyncAndBroadcast(accountId: number, source: string): Promise<A
 			newestMessageTarget: null,
 		};
 		broadcastSync({accountId, status: 'done', summary, source});
+		appEventHandler.emit(AppEvent.AccountSyncCompleted, {
+			accountId,
+			source,
+			newMessages: 0,
+			messages: 0,
+			folders: 0,
+		});
 		return summary;
 	}
 	const blockedReason = blockedSyncAccounts.get(accountId);
 	if (blockedReason) {
 		const error = `Sync paused for this account: ${blockedReason}. Update account settings or restart app.`;
 		broadcastSync({accountId, status: 'error', error, source, syncError: normalizeProviderSyncError(error)});
+		appEventHandler.emit(AppEvent.AccountSyncFailed, {
+			accountId,
+			source,
+			error,
+			category: 'auth',
+		});
 		throw new Error(error);
 	}
 
@@ -520,7 +547,8 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 		let accountSnapshot: PublicAccount | null = null;
 		let cancelled = false;
 		let activeMailWorker: Worker | null = null;
-		let activeAncillaryWorker: Worker | null = null;
+		let activeContactsWorker: Worker | null = null;
+		let activeCalendarWorker: Worker | null = null;
 
 		state.cancelCurrent = () => {
 			cancelled = true;
@@ -535,13 +563,19 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 				// ignore termination errors
 			}
 			try {
-				activeAncillaryWorker?.terminate();
+				activeContactsWorker?.terminate();
+			} catch {
+				// ignore termination errors
+			}
+			try {
+				activeCalendarWorker?.terminate();
 			} catch {
 				// ignore termination errors
 			}
 		};
 
 		broadcastSync({accountId, status: 'syncing', source});
+		appEventHandler.emit(AppEvent.AccountSyncStarted, {accountId, source});
 		appLogger.info('Sync started accountId=%d source=%s', accountId, source);
 
 		try {
@@ -597,32 +631,78 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 				}
 			}
 
-			const ancillarySummary = await syncAccountAncillaryInWorker(
-				accountId,
-				{
-					modules: {
-						contacts: contactsEnabled,
-						calendar: calendarEnabled,
-					},
-				},
-				(worker) => {
-					activeAncillaryWorker = worker;
-				},
-			);
-			const davSummary: DavSyncSummary | undefined = ancillarySummary.dav;
+			const [contactsAncillarySummary, calendarAncillarySummary] = await Promise.all([
+				contactsEnabled
+					? syncAccountAncillaryInWorker(
+							accountId,
+							{
+								modules: {
+									contacts: true,
+									calendar: false,
+								},
+							},
+							(worker) => {
+								activeContactsWorker = worker;
+							},
+						)
+					: Promise.resolve<ProviderAncillarySyncResult>({}),
+				calendarEnabled
+					? syncAccountAncillaryInWorker(
+							accountId,
+							{
+								modules: {
+									contacts: false,
+									calendar: true,
+								},
+							},
+							(worker) => {
+								activeCalendarWorker = worker;
+							},
+						)
+					: Promise.resolve<ProviderAncillarySyncResult>({}),
+			]);
+			const contactsDavSummary = contactsAncillarySummary.dav;
+			const calendarDavSummary = calendarAncillarySummary.dav;
+			const discoveredSummary =
+				contactsDavSummary?.discovered ??
+				calendarDavSummary?.discovered ??
+				undefined;
+			const davSummary: DavSyncSummary | undefined = discoveredSummary
+				? {
+						accountId: discoveredSummary.accountId,
+						discovered: discoveredSummary,
+						contacts:
+							contactsDavSummary?.contacts ??
+							{
+								upserted: 0,
+								removed: 0,
+								books: 0,
+							},
+						events:
+							calendarDavSummary?.events ??
+							{
+								upserted: 0,
+								removed: 0,
+								calendars: 0,
+							},
+					}
+				: undefined;
 			if (contactsEnabled) {
-				moduleStatus.contacts = ancillarySummary.moduleStatus?.contacts ?? {
+				moduleStatus.contacts = contactsAncillarySummary.moduleStatus?.contacts ?? {
 					state: 'skipped',
 					reason: 'Contacts sync was not executed.',
 				};
 			}
 			if (calendarEnabled) {
-				moduleStatus.calendar = ancillarySummary.moduleStatus?.calendar ?? {
+				moduleStatus.calendar = calendarAncillarySummary.moduleStatus?.calendar ?? {
 					state: 'skipped',
 					reason: 'Calendar sync was not executed.',
 				};
 			}
-			moduleStatus.files = ancillarySummary.moduleStatus?.files ?? moduleStatus.files;
+			moduleStatus.files =
+				contactsAncillarySummary.moduleStatus?.files ??
+				calendarAncillarySummary.moduleStatus?.files ??
+				moduleStatus.files;
 			const failedModules = (
 				Object.entries(moduleStatus) as Array<[SyncModuleKey, AccountSyncModuleStatusMap[SyncModuleKey]]>
 			)
@@ -648,7 +728,22 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 					target: mailSummary.newestMessageTarget,
 				});
 			}
+			if (emailsEnabled && mailSummary.newMessages > 0) {
+				appEventHandler.emit(AppEvent.EmailNew, {
+					accountId,
+					newMessages: mailSummary.newMessages,
+					source,
+					target: mailSummary.newestMessageTarget,
+				});
+			}
 			broadcastSync({accountId, status: 'done', summary, source});
+			appEventHandler.emit(AppEvent.AccountSyncCompleted, {
+				accountId,
+				source,
+				newMessages: Number(summary.newMessages || 0),
+				messages: Number(summary.messages || 0),
+				folders: Number(summary.folders || 0),
+			});
 			appLogger.info(
 				'Sync done accountId=%d source=%s messages=%d newMessages=%d',
 				accountId,
@@ -690,6 +785,12 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 							message: providerError,
 						},
 					});
+					appEventHandler.emit(AppEvent.AccountSyncFailed, {
+						accountId,
+						source,
+						error: providerError,
+						category: 'provider_api',
+					});
 					appLogger.warn('Sync unavailable accountId=%d source=%s error=%s', accountId, source, message);
 				} else if (
 					normalizedError.category === 'auth' ||
@@ -705,9 +806,21 @@ async function runSyncLoop(accountId: number, state: AccountSyncState): Promise<
 						source,
 						syncError: normalizedError,
 					});
+					appEventHandler.emit(AppEvent.AccountSyncFailed, {
+						accountId,
+						source,
+						error: message,
+						category: normalizedError.category ?? 'auth',
+					});
 					appLogger.warn('Sync paused accountId=%d source=%s error=%s', accountId, source, message);
 				} else {
 					broadcastSync({accountId, status: 'error', error: message, source, syncError: normalizedError});
+					appEventHandler.emit(AppEvent.AccountSyncFailed, {
+						accountId,
+						source,
+						error: message,
+						category: normalizedError.category ?? null,
+					});
 					appLogger.warn('Sync error accountId=%d source=%s error=%s', accountId, source, message);
 				}
 			}
@@ -826,6 +939,40 @@ async function syncAccountAncillaryInWorker(
 	const requestedCalendarEnabled = options?.modules?.calendar ?? true;
 	const effectiveContactsEnabled = accountContactsEnabled && requestedContactsEnabled;
 	const effectiveCalendarEnabled = accountCalendarEnabled && requestedCalendarEnabled;
+	const carddavLogger = createMailDebugLogger('carddav', `sync:${accountId}`);
+	const caldavLogger = createMailDebugLogger('caldav', `sync:${accountId}`);
+	const authMethod = String(account?.auth_method || '').trim().toLowerCase() || 'unknown';
+	const provider = String(account?.provider || '').trim().toLowerCase() || 'none';
+	const oauthProvider = String(account?.oauth_provider || '').trim().toLowerCase() || 'none';
+	let driverKey = 'unknown';
+	try {
+		const driver = await providerManager.resolveDriverForAccount(accountId);
+		driverKey = String(driver.key() || '').trim().toLowerCase() || 'unknown';
+	} catch {
+		// Keep unknown driver key when provider resolution fails; sync path below will report actual failure.
+	}
+	const route =
+		authMethod === 'oauth2' && (driverKey === 'google' || driverKey === 'microsoft') ? 'oauth-api' : 'dav';
+	carddavLogger.debug(
+		'Ancillary sync dispatch account=%d route=%s provider=%s oauthProvider=%s authMethod=%s driver=%s contacts=%s',
+		accountId,
+		route,
+		provider,
+		oauthProvider,
+		authMethod,
+		driverKey,
+		effectiveContactsEnabled ? 'on' : 'off',
+	);
+	caldavLogger.debug(
+		'Ancillary sync dispatch account=%d route=%s provider=%s oauthProvider=%s authMethod=%s driver=%s calendar=%s',
+		accountId,
+		route,
+		provider,
+		oauthProvider,
+		authMethod,
+		driverKey,
+		effectiveCalendarEnabled ? 'on' : 'off',
+	);
 	if (!effectiveContactsEnabled && !effectiveCalendarEnabled) {
 		return {
 			moduleStatus: {
@@ -870,7 +1017,29 @@ async function syncAccountAncillaryInWorker(
 
 		worker.on('message', (payload: unknown) => {
 			if (!payload || typeof payload !== 'object') return;
-			const data = payload as {type?: string; summary?: ProviderAncillarySyncResult; error?: string};
+			const data = payload as {
+				type?: string;
+				summary?: ProviderAncillarySyncResult;
+				error?: string;
+				entry?: {
+					source?: 'imap' | 'smtp' | 'carddav' | 'caldav' | 'cloud' | 'app';
+					level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+					scope?: string;
+					message?: string;
+				};
+			};
+			if (data.type === 'debug-log' && data.entry) {
+				const source = data.entry.source;
+				const level = data.entry.level;
+				if (!source || !level) return;
+				pushDebugLog({
+					source,
+					level,
+					scope: String(data.entry.scope || 'mail'),
+					message: String(data.entry.message || ''),
+				});
+				return;
+			}
 			if (data.type === 'result' && data.summary) {
 				finish(() => resolve(data.summary as ProviderAncillarySyncResult));
 				return;
@@ -945,6 +1114,7 @@ function notifyUnreadCountChanged(): void {
 	const count = getVisibleUnreadCount(getAccountsSyncSnapshot());
 	appLogger.debug('Broadcast unread-count-updated count=%d', count);
 	broadcastUnreadCountUpdated(count);
+	appEventHandler.emit(AppEvent.UnreadCountUpdated, {unreadCount: count});
 	if (!unreadCountListener) return;
 	unreadCountListener(count);
 }
@@ -959,6 +1129,12 @@ function broadcastMessageReadUpdated(payload: {
 	isRead: number;
 }): void {
 	broadcastMessageReadUpdatedEvent(payload);
+	appEventHandler.emit(AppEvent.EmailReadUpdated, {
+		messageId: payload.messageId,
+		isRead: Number(payload.isRead) > 0,
+		accountId: payload.accountId,
+		folderPath: payload.folderPath,
+	});
 }
 
 function notifyAccountCountChanged(): void {

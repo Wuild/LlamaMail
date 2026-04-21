@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Activity, TerminalSquare, Trash2, X} from '@llamamail/ui/icon';
-import type {DebugLogEntry} from '@/preload';
+import type {DebugLogEntry} from '@preload';
 import {Navigate} from 'react-router-dom';
 import {FormCheckbox} from '@llamamail/ui/form';
 import {Button} from '@llamamail/ui/button';

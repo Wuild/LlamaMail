@@ -1,6 +1,6 @@
 import React from 'react';
 import {Star} from '@llamamail/ui/icon';
-import type {FolderItem, MessageItem, PublicAccount} from '@/preload';
+import type {FolderItem, MessageItem, PublicAccount} from '@preload';
 import type {MailView} from '@llamamail/app/ipcTypes';
 import AccountContextMenu from '@renderer/components/mail/AccountContextMenu';
 import AccountFolderSidebar from '@renderer/components/mail/AccountFolderSidebar';

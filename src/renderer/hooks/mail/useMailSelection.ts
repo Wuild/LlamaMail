@@ -1,5 +1,5 @@
 import {useCallback, useRef} from 'react';
-import type {MessageItem} from '@/preload';
+import type {MessageItem} from '@preload';
 import {
 	computeSelectionOnClick,
 	computeSelectionOnNavigate,

@@ -1,5 +1,5 @@
 import {useOutletContext} from 'react-router-dom';
-import type {MailFilterActionType, MailFilterField, MailFilterMatchMode, MailFilterOperator} from '@/preload';
+import type {MailFilterActionType, MailFilterField, MailFilterMatchMode, MailFilterOperator} from '@preload';
 import {Button} from '@llamamail/ui/button';
 import {FormCheckbox, FormInput, FormSelect} from '@llamamail/ui/form';
 import {Modal} from '@llamamail/ui/modal';

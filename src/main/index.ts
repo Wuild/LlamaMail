@@ -8,7 +8,6 @@ import {
 	registerAccountIpc,
 	setAccountCountChangedListener,
 	setAutoSyncIntervalMinutes,
-	setNewMailListener,
 	setUnreadCountListener,
 	startAccountAutoSync,
 	stopAccountAutoSync,
@@ -56,6 +55,7 @@ import {
 } from './windows/windowFactory.js';
 import {initTray, tray} from './windows/tray';
 import {APP_NAME, APP_PROTOCOL} from '@llamamail/app/appConfig';
+import {appEventHandler, AppEvent} from '@llamamail/app/appEventHandler';
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -69,6 +69,7 @@ let pendingMainWindowNavigation: {route: string; replaceHistory: boolean} | null
 let pendingStartupRoute: string | null = null;
 let pendingStartupCompose = false;
 let stopDebugForwarding: (() => void) | null = null;
+let stopEmailNewEventListener: (() => void) | null = null;
 let backgroundUpdateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let initialBackgroundUpdateCheckTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationOpenCooldownTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1140,7 +1141,7 @@ if (!gotSingleInstanceLock) {
 			setAccountCountChangedListener((_count) => {
 				setMainWindowActionsEnabled(true);
 			});
-			setNewMailListener(({newMessages, source, target}) => {
+			stopEmailNewEventListener = appEventHandler.on(AppEvent.EmailNew, ({newMessages, source, target}) => {
 				if (newMessages <= 0) return;
 				if (source === 'send') return;
 				if (!Notification.isSupported()) return;
@@ -1278,6 +1279,10 @@ if (!gotSingleInstanceLock) {
 		if (stopDebugForwarding) {
 			stopDebugForwarding();
 			stopDebugForwarding = null;
+		}
+		if (stopEmailNewEventListener) {
+			stopEmailNewEventListener();
+			stopEmailNewEventListener = null;
 		}
 		stopAccountAutoSync();
 		logger.info('Auto sync stopped');

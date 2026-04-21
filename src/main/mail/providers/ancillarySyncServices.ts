@@ -90,6 +90,22 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 		const supportsCalendar = this.#driver.supports('calendar');
 		const shouldSyncContacts = supportsContacts && syncContacts;
 		const shouldSyncCalendar = supportsCalendar && syncCalendar;
+		const carddavLogger = createMailDebugLogger('carddav', `sync:${accountId}`);
+		const caldavLogger = createMailDebugLogger('caldav', `sync:${accountId}`);
+		carddavLogger.debug(
+			'OAuth provider sync start provider=%s account=%d contactsRequested=%s contactsEnabled=%s',
+			this.#provider,
+			accountId,
+			syncContacts ? 'yes' : 'no',
+			shouldSyncContacts ? 'yes' : 'no',
+		);
+		caldavLogger.debug(
+			'OAuth provider sync start provider=%s account=%d calendarRequested=%s calendarEnabled=%s',
+			this.#provider,
+			accountId,
+			syncCalendar ? 'yes' : 'no',
+			shouldSyncCalendar ? 'yes' : 'no',
+		);
 		if (!supportsContacts && !supportsCalendar) {
 			return {
 				moduleStatus: {
@@ -118,6 +134,18 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 			let accessToken = String(credentials.oauth_session?.accessToken || '').trim();
 			if (credentials.auth_method !== 'oauth2' || !accessToken) {
 				const dav = await syncDav(accountId, options ?? null);
+				carddavLogger.debug(
+					'OAuth token unavailable; fell back to DAV sync account=%d contactsUpserted=%d contactsRemoved=%d',
+					accountId,
+					dav.contacts.upserted,
+					dav.contacts.removed,
+				);
+				caldavLogger.debug(
+					'OAuth token unavailable; fell back to DAV sync account=%d eventsUpserted=%d eventsRemoved=%d',
+					accountId,
+					dav.events.upserted,
+					dav.events.removed,
+				);
 				return {
 					dav,
 					moduleStatus: {
@@ -151,24 +179,44 @@ export class OAuthApiAncillarySyncService implements ProviderAncillarySyncServic
 				oauthProvider: this.#provider,
 				accessToken,
 				calendarRange: options?.calendarRange ?? null,
-				carddavLogger: createMailDebugLogger('carddav', `sync:${accountId}`),
-				caldavLogger: createMailDebugLogger('caldav', `sync:${accountId}`),
+				carddavLogger,
+				caldavLogger,
 			});
+			const contactsStatus =
+				dav.moduleStatus?.contacts ??
+				(shouldSyncContacts
+					? {state: 'success' as const}
+					: {state: 'skipped' as const, reason: resolveSkippedReason('contacts', supportsContacts, syncContacts)});
+			const calendarStatus =
+				dav.moduleStatus?.calendar ??
+				(shouldSyncCalendar
+					? {state: 'success' as const}
+					: {state: 'skipped' as const, reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar)});
+			carddavLogger.debug(
+				'OAuth provider contacts sync done provider=%s account=%d upserted=%d removed=%d',
+				this.#provider,
+				accountId,
+				dav.contacts.upserted,
+				dav.contacts.removed,
+			);
+			caldavLogger.debug(
+				'OAuth provider calendar sync done provider=%s account=%d upserted=%d removed=%d',
+				this.#provider,
+				accountId,
+				dav.events.upserted,
+				dav.events.removed,
+			);
 			return {
 				dav,
 				moduleStatus: {
-					contacts: shouldSyncContacts
-						? {state: 'success'}
-						: {state: 'skipped', reason: resolveSkippedReason('contacts', supportsContacts, syncContacts)},
-					calendar: shouldSyncCalendar
-						? {state: 'success'}
-						: {state: 'skipped', reason: resolveSkippedReason('calendar', supportsCalendar, syncCalendar)},
+					contacts: contactsStatus,
+					calendar: calendarStatus,
 				},
 			};
 		} catch (error: any) {
 			const reason = error?.message || String(error);
-			createMailDebugLogger('carddav', `sync:${accountId}`).error('OAuth ancillary sync failed: %s', reason);
-			createMailDebugLogger('caldav', `sync:${accountId}`).error('OAuth ancillary sync failed: %s', reason);
+			carddavLogger.error('OAuth ancillary contacts sync failed provider=%s account=%d reason=%s', this.#provider, accountId, reason);
+			caldavLogger.error('OAuth ancillary calendar sync failed provider=%s account=%d reason=%s', this.#provider, accountId, reason);
 			return {
 				moduleStatus: {
 					contacts: shouldSyncContacts

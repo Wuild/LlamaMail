@@ -7,7 +7,7 @@ import {
 	getAccountSyncCredentials,
 	getLocalAccountVCardPath,
 } from '@main/db/repositories/accountsRepo.js';
-import {getMessageContext, upsertLocalDraftSnapshot} from '@main/db/repositories/mailRepo.js';
+import {getMessageById, getMessageContext, upsertLocalDraftSnapshot} from '@main/db/repositories/mailRepo.js';
 import {createMailDebugLogger} from '@main/debug/debugLog.js';
 import {markdownToEmailHtml} from './markdown.js';
 import {resolveImapSecurity, resolveSmtpSecurity} from './security.js';
@@ -186,7 +186,15 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
 	const normalizedInReplyTo = normalizeMessageId(payload.inReplyTo);
 	const normalizedReferences = normalizeReferences(payload.references);
 	const attachments = normalizeAttachments(payload.attachments);
-	const hasContent = Boolean(to || cc || bcc || subject || text || html || attachments.length > 0);
+	const hasContent = Boolean(
+		to ||
+			cc ||
+			bcc ||
+			subject ||
+			hasMeaningfulDraftText(text) ||
+			hasMeaningfulDraftHtml(html) ||
+			attachments.length > 0,
+	);
 	const draftMessageId =
 		typeof payload.draftMessageId === 'number' && Number.isFinite(payload.draftMessageId)
 			? Math.floor(payload.draftMessageId)
@@ -197,7 +205,12 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
 
 	const account = await getAccountSyncCredentials(payload.accountId);
 	if (draftMessageId) {
+		const existingDraftMessage = getMessageById(draftMessageId);
+		const existingDraftRfcMessageId = normalizeMessageId(existingDraftMessage?.message_id ?? null);
 		await deleteDraftByMessageId(payload.accountId, draftMessageId);
+		if (existingDraftRfcMessageId) {
+			await deleteDraftByRfcMessageId(payload.accountId, existingDraftRfcMessageId);
+		}
 	}
 	await deleteDraftsBySession(payload.accountId, effectiveDraftId);
 	const message = {
@@ -224,12 +237,15 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
 		logger: createMailDebugLogger('imap', `draft:${payload.accountId}`),
 	});
 
-	await (async () => {
+	const appendedDraftUid = await (async () => {
 		try {
 			await client.connect();
 			const mailbox = await resolveDraftMailbox(client);
 			if (!mailbox) throw new Error('Drafts mailbox not found');
-			return await client.append(mailbox, raw, ['\\Seen', '\\Draft'], message.date);
+			const appendResult = await client.append(mailbox, raw, ['\\Seen', '\\Draft'], message.date);
+			const appendUid = extractAppendUid(appendResult);
+			if (appendUid) return appendUid;
+			return await resolveDraftUidByMessageId(client, mailbox, message.messageId);
 		} finally {
 			try {
 				await client.logout();
@@ -242,6 +258,7 @@ export async function saveDraftEmail(payload: SaveDraftPayload): Promise<SaveDra
 	const localDraftMessageId = upsertLocalDraftSnapshot({
 		accountId: payload.accountId,
 		draftMessageId,
+		draftUid: appendedDraftUid,
 		messageId: message.messageId,
 		inReplyTo: normalizedInReplyTo ?? null,
 		referencesText: normalizedReferences?.join(' ') ?? null,
@@ -509,6 +526,41 @@ async function deleteDraftByMessageId(accountId: number, draftMessageId: number)
 	}
 }
 
+async function deleteDraftByRfcMessageId(accountId: number, messageId: string): Promise<void> {
+	const account = await getAccountSyncCredentials(accountId);
+	const client = new ImapFlow({
+		host: account.imap_host,
+		port: account.imap_port,
+		...resolveImapSecurity(account.imap_secure),
+		auth: resolveImapAuth(account),
+		logger: createMailDebugLogger('imap', `draft-replace-message-id:${accountId}`),
+	});
+
+	try {
+		await client.connect();
+		const mailbox = await resolveDraftMailbox(client);
+		if (!mailbox) return;
+		const normalizedMessageId = messageId.trim().replace(/^<|>$/g, '');
+		if (!normalizedMessageId) return;
+		const lock = await client.getMailboxLock(mailbox);
+		try {
+			const uids = await client.search({header: {'Message-ID': normalizedMessageId}}, {uid: true});
+			if (!uids || uids.length === 0) return;
+			await (client as any).messageDelete(uids, {uid: true});
+		} catch {
+			// Ignore lookup/deletion failures and rely on session cleanup/local snapshot reconciliation.
+		} finally {
+			lock.release();
+		}
+	} finally {
+		try {
+			await client.logout();
+		} catch {
+			// ignore close errors
+		}
+	}
+}
+
 function normalizeRecipients(raw?: string | null): string | undefined {
 	if (!raw) return undefined;
 	const parts = raw
@@ -519,8 +571,68 @@ function normalizeRecipients(raw?: string | null): string | undefined {
 	return parts.join(', ');
 }
 
+function extractAppendUid(result: unknown): number | null {
+	if (typeof result === 'number' && Number.isFinite(result) && result > 0) {
+		return Math.floor(result);
+	}
+	if (!result || typeof result !== 'object') return null;
+	const row = result as Record<string, unknown>;
+	const directUid = Number(row.uid);
+	if (Number.isFinite(directUid) && directUid > 0) {
+		return Math.floor(directUid);
+	}
+	const uidSet = row.uidSet;
+	if (Array.isArray(uidSet)) {
+		const first = Number(uidSet[0]);
+		if (Number.isFinite(first) && first > 0) return Math.floor(first);
+	}
+	return null;
+}
+
+async function resolveDraftUidByMessageId(client: ImapFlow, mailbox: string, messageId: string): Promise<number | null> {
+	const normalizedMessageId = String(messageId || '').trim().replace(/^<|>$/g, '');
+	if (!normalizedMessageId) return null;
+	const lock = await client.getMailboxLock(mailbox);
+	try {
+		const uids = await client.search({header: {'Message-ID': normalizedMessageId}}, {uid: true});
+		if (!uids || uids.length === 0) return null;
+		const highest = Math.max(...uids.map((uid) => Number(uid)).filter((uid) => Number.isFinite(uid) && uid > 0));
+		return Number.isFinite(highest) && highest > 0 ? Math.floor(highest) : null;
+	} catch {
+		return null;
+	} finally {
+		lock.release();
+	}
+}
+
 function textToHtml(text: string): string {
 	return `<pre style="font-family:inherit;white-space:pre-wrap;word-break:break-word;margin:0;">${escapeHtml(text)}</pre>`;
+}
+
+function hasMeaningfulDraftText(value: string | null | undefined): boolean {
+	return String(value || '')
+		.replace(/\s+/g, ' ')
+		.trim().length > 0;
+}
+
+function hasMeaningfulDraftHtml(value: string | null | undefined): boolean {
+	const html = String(value || '').trim();
+	if (!html) return false;
+	if (/<img[\s>]/i.test(html)) return true;
+	if (/<hr[\s/>]/i.test(html)) return true;
+	const textOnly = html
+		.replace(/<style[\s\S]*?<\/style>/gi, ' ')
+		.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+		.replace(/<[^>]+>/g, ' ')
+		.replace(/&nbsp;/g, ' ')
+		.replace(/&amp;/g, '&')
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&#39;/g, "'")
+		.replace(/&quot;/g, '"')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return textOnly.length > 0;
 }
 
 function normalizeMessageId(value?: string | null): string | undefined {

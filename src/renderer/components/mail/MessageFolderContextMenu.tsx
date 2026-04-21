@@ -11,7 +11,7 @@ import {
 	Star,
 	Trash2,
 } from '@llamamail/ui/icon';
-import type {FolderItem, MessageItem} from '@/preload';
+import type {FolderItem, MessageItem} from '@preload';
 import ContextItem from './ContextItem';
 import {cn} from '@llamamail/ui/utils';
 import {

@@ -1,7 +1,6 @@
 import {app, BrowserWindow} from 'electron';
 import path from 'path';
 import {fileURLToPath} from 'url';
-import windowStateKeeper from 'electron-window-state';
 import {loadWindowContent} from './loadWindowContent.js';
 import {getAppSettingsSync, getSpellCheckerLanguages} from '@main/settings/store.js';
 import {
@@ -10,6 +9,7 @@ import {
 	createAppWindow,
 	createFramelessAppWindow,
 } from './windowFactory.js';
+import {loadWindowState} from './windowState.js';
 
 const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -54,7 +54,7 @@ export function openComposeWindow(parentWindow?: BrowserWindow, draft?: ComposeD
 	}
 
 	const preloadPath = path.join(app.getAppPath(), 'preload.cjs');
-	const windowState = windowStateKeeper({
+	const windowState = loadWindowState({
 		defaultWidth: 920,
 		defaultHeight: 760,
 		file: 'compose-window-state.json',
@@ -78,7 +78,8 @@ export function openComposeWindow(parentWindow?: BrowserWindow, draft?: ComposeD
 			spellcheck: true,
 		}),
 	});
-	windowState.manage(composeWin);
+	windowState.restoreDisplayState(composeWin);
+	windowState.attach(composeWin);
 	composeWin.webContents.session.setSpellCheckerLanguages(getSpellCheckerLanguages(getAppSettingsSync().language));
 	attachWindowShortcuts(composeWin, {closeOnEscape: true});
 

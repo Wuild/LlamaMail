@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import type {AppSettings} from '@/preload';
+import type {AppSettings} from '@preload';
 import {useAppSettings as useIpcAppSettings} from '@renderer/hooks/ipc/useAppSettings';
 import {useAutoUpdateState} from '@renderer/hooks/ipc/useAutoUpdateState';
 import {ipcClient} from '@renderer/lib/ipcClient';
@@ -9,6 +9,9 @@ import {Button} from '@llamamail/ui/button';
 import {FormCheckbox, FormSelect} from '@llamamail/ui/form';
 import {normalizeSyncIntervalMinutes, parseAppLanguage} from '@llamamail/app/settingsRules';
 import {APP_LANGUAGE_OPTIONS, SYNC_INTERVAL_OPTIONS} from '@llamamail/app/settingsOptions';
+import {Card} from '@llamamail/ui/card';
+import {Label} from '@llamamail/ui';
+import {Container} from '@llamamail/ui/container';
 
 export default function SettingsApplicationPage() {
 	const {appSettings: settings, setAppSettings: setSettings} = useIpcAppSettings(DEFAULT_APP_SETTINGS);
@@ -36,7 +39,7 @@ export default function SettingsApplicationPage() {
 	}, []);
 
 	async function applySettingsPatch(patch: Partial<AppSettings>): Promise<boolean> {
-		setSettings((prev) => ({...prev, ...patch}));
+		setSettings((prev: AppSettings) => ({...prev, ...patch}));
 		setAppStatus('Saving...');
 		try {
 			const saved = await ipcClient.updateAppSettings(patch);
@@ -116,204 +119,226 @@ export default function SettingsApplicationPage() {
 			: settings.hardwareAcceleration;
 
 	return (
-		<div className="mx-auto h-full min-h-0 w-full max-w-5xl space-y-4 pb-6">
-			<div className="panel rounded-xl p-4">
-				<div className="flex items-start justify-between gap-3">
-					<div className="min-w-0">
-						<p className="ui-text-secondary text-sm font-medium">Updates</p>
-						<p className="ui-text-muted mt-1 text-xs">Current version: {autoUpdateState.currentVersion}</p>
-						<p className="ui-text-muted mt-1 text-xs">
-							{autoUpdateState.message || describeUpdatePhase(autoUpdateState)}
-						</p>
+		<Container>
+				<Card>
+					<div className="flex items-start justify-between gap-3">
+						<div className="min-w-0">
+							<p className="ui-text-secondary text-sm font-medium">Updates</p>
+							<p className="ui-text-muted mt-1 text-xs">
+								Current version: {autoUpdateState.currentVersion}
+							</p>
+							<p className="ui-text-muted mt-1 text-xs">
+								{autoUpdateState.message || describeUpdatePhase(autoUpdateState)}
+							</p>
+						</div>
+						<div className="flex shrink-0 items-center gap-2">
+							{autoUpdateState.phase === 'downloaded' ? (
+								<Button
+									type="button"
+									variant="success"
+									className="rounded-md px-3 py-2 text-sm font-medium"
+									onClick={() => void onInstallUpdate()}
+								>
+									Restart to Update
+								</Button>
+							) : autoUpdateState.phase === 'available' || autoUpdateState.phase === 'downloading' ? (
+								<Button
+									type="button"
+									className="button-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+									onClick={() => void onDownloadUpdate()}
+									disabled={updateActionBusy || autoUpdateState.phase === 'downloading'}
+								>
+									{autoUpdateState.phase === 'downloading'
+										? `Downloading${autoUpdateState.percent !== null ? ` ${Math.round(autoUpdateState.percent)}%` : '...'}`
+										: 'Download Update'}
+								</Button>
+							) : (
+								<Button
+									type="button"
+									className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-50"
+									onClick={() => void onCheckForUpdates()}
+									disabled={updateActionBusy || !autoUpdateState.enabled}
+								>
+									Check for Updates
+								</Button>
+							)}
+						</div>
 					</div>
-					<div className="flex shrink-0 items-center gap-2">
-						{autoUpdateState.phase === 'downloaded' ? (
-							<Button
-								type="button"
-								variant="success"
-								className="rounded-md px-3 py-2 text-sm font-medium"
-								onClick={() => void onInstallUpdate()}
-							>
-								Restart to Update
-							</Button>
-						) : autoUpdateState.phase === 'available' || autoUpdateState.phase === 'downloading' ? (
-							<Button
-								type="button"
-								className="button-primary rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-								onClick={() => void onDownloadUpdate()}
-								disabled={updateActionBusy || autoUpdateState.phase === 'downloading'}
-							>
-								{autoUpdateState.phase === 'downloading'
-									? `Downloading${autoUpdateState.percent !== null ? ` ${Math.round(autoUpdateState.percent)}%` : '...'}`
-									: 'Download Update'}
-							</Button>
-						) : (
-							<Button
-								type="button"
-								className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-50"
-								onClick={() => void onCheckForUpdates()}
-								disabled={updateActionBusy || !autoUpdateState.enabled}
-							>
-								Check for Updates
-							</Button>
-						)}
-					</div>
-				</div>
-				<label className="ui-border-default mt-3 flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-					<div className="pr-3">
-						<span className="ui-text-secondary">Auto update</span>
-						<p className="ui-text-muted mt-1 text-xs">
-							Automatically checks for new versions and prepares update downloads.
-						</p>
-					</div>
-					<FormCheckbox
-						checked={settings.autoUpdateEnabled}
-						onChange={(e) => void applySettingsPatch({autoUpdateEnabled: e.target.checked})}
-					/>
-				</label>
-			</div>
+					<label className="ui-border-default mt-3 flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+						<div className="pr-3">
+							<span className="ui-text-secondary">Auto update</span>
+							<p className="ui-text-muted mt-1 text-xs">
+								Automatically checks for new versions and prepares update downloads.
+							</p>
+						</div>
+						<FormCheckbox
+							checked={settings.autoUpdateEnabled}
+							onChange={(e) => void applySettingsPatch({autoUpdateEnabled: e.target.checked})}
+						/>
+					</label>
+				</Card>
 
-			<div className="panel rounded-xl p-4">
-				<div className="flex items-center justify-between gap-3">
-					<div className="min-w-0">
-						<p className="ui-text-secondary text-sm font-medium">Default Email App</p>
-						<p className="ui-text-muted mt-1 text-xs">
-							Use LlamaMail for `mailto:` links from browsers and other apps.
-						</p>
-						{isDefaultEmailClient === true && (
-							<p className="text-success mt-1 text-xs">LlamaMail is already your default email app.</p>
+				<Card>
+					<div className="flex items-center justify-between gap-3">
+						<div className="min-w-0">
+							<p className="ui-text-secondary text-sm font-medium">Default Email App</p>
+							<p className="ui-text-muted mt-1 text-xs">
+								Use LlamaMail for `mailto:` links from browsers and other apps.
+							</p>
+							{isDefaultEmailClient === true && (
+								<p className="text-success mt-1 text-xs">
+									LlamaMail is already your default email app.
+								</p>
+							)}
+						</div>
+						{isDefaultEmailClient !== true && (
+							<Button
+								type="button"
+								className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-60"
+								onClick={() => void onSetDefaultEmailClient()}
+								disabled={defaultEmailClientBusy}
+							>
+								{defaultEmailClientBusy ? 'Setting...' : 'Set as default'}
+							</Button>
 						)}
 					</div>
-					{isDefaultEmailClient !== true && (
-						<Button
-							type="button"
-							className="button-secondary rounded-md px-3 py-2 text-sm disabled:opacity-60"
-							onClick={() => void onSetDefaultEmailClient()}
-							disabled={defaultEmailClientBusy}
+				</Card>
+
+				<Card title={'General'}>
+					<Label
+						label={'Language'}
+						subtitle={'Sets the app interface language for menus, labels, and settings.'}
+					>
+						<FormSelect
+							className="field-select h-10 w-full rounded-md px-3 text-sm"
+							value={settings.language}
+							onChange={(e) => void applySettingsPatch({language: parseAppLanguage(e.target.value)})}
 						>
-							{defaultEmailClientBusy ? 'Setting...' : 'Set as default'}
-						</Button>
+							{APP_LANGUAGE_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</FormSelect>
+					</Label>
+
+					<Label
+						label={'Auto sync interval (minutes)'}
+						subtitle={'How often the app checks mail and updates unread counts in the background.'}
+					>
+						<FormSelect
+							className="field-select h-10 w-full rounded-md px-3 text-sm"
+							value={settings.syncIntervalMinutes}
+							onChange={(e) =>
+								void applySettingsPatch({
+									syncIntervalMinutes: normalizeSyncIntervalMinutes(e.target.value),
+								})
+							}
+						>
+							{SYNC_INTERVAL_OPTIONS.map((m) => (
+								<option key={m} value={m}>
+									Every {m} minute{m > 1 ? 's' : ''}
+								</option>
+							))}
+						</FormSelect>
+					</Label>
+				</Card>
+
+				<Card title={'Window And Startup'}>
+					<Label
+						label={'Auto sync interval (minutes)'}
+						subtitle={'How often the app checks mail and updates unread counts in the background.'}
+					>
+						<FormSelect
+							className="field-select h-10 w-full rounded-md px-3 text-sm"
+							value={settings.syncIntervalMinutes}
+							onChange={(e) =>
+								void applySettingsPatch({
+									syncIntervalMinutes: normalizeSyncIntervalMinutes(e.target.value),
+								})
+							}
+						>
+							{SYNC_INTERVAL_OPTIONS.map((m) => (
+								<option key={m} value={m}>
+									Every {m} minute{m > 1 ? 's' : ''}
+								</option>
+							))}
+						</FormSelect>
+					</Label>
+					<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+						<div className="pr-3">
+							<span className="ui-text-secondary">Minimize to tray</span>
+							<p className="ui-text-muted mt-1 text-xs">
+								Keeps LunaMail running in the background when minimized.
+							</p>
+						</div>
+						<FormCheckbox
+							checked={settings.minimizeToTray}
+							onChange={(e) => void applySettingsPatch({minimizeToTray: e.target.checked})}
+						/>
+					</label>
+					<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+						<div className="pr-3">
+							<span className="ui-text-secondary">Show unread in titlebar</span>
+							<p className="ui-text-muted mt-1 text-xs">
+								Adds unread count to the window title when new mail is available.
+							</p>
+						</div>
+						<FormCheckbox
+							checked={settings.showUnreadInTitleBar}
+							onChange={(event) => void applySettingsPatch({showUnreadInTitleBar: event.target.checked})}
+						/>
+					</label>
+				</Card>
+
+				<Card title={'Composer And Notifications'}>
+					<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+						<div className="pr-3">
+							<span className="ui-text-secondary">Spell check</span>
+							<p className="ui-text-muted mt-1 text-xs">
+								Highlights misspelled words in editors and compose fields.
+							</p>
+						</div>
+						<FormCheckbox
+							checked={settings.spellcheckEnabled}
+							onChange={(event) => void applySettingsPatch({spellcheckEnabled: event.target.checked})}
+						/>
+					</label>
+					<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+						<div className="pr-3">
+							<span className="ui-text-secondary">Notification sound</span>
+							<p className="ui-text-muted mt-1 text-xs">
+								Plays an alert sound for new mail notifications.
+							</p>
+						</div>
+						<FormCheckbox
+							checked={settings.playNotificationSound}
+							onChange={(event) => void applySettingsPatch({playNotificationSound: event.target.checked})}
+						/>
+					</label>
+				</Card>
+
+				<Card title={'Performance'}>
+					<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
+						<div className="pr-3">
+							<span className="ui-text-secondary">Hardware acceleration</span>
+							<p className="ui-text-muted mt-1 text-xs">
+								Uses your GPU to render the app. Disable if you see flickering, blank windows, or driver
+								issues.
+							</p>
+						</div>
+						<FormCheckbox
+							checked={effectiveHardwareAcceleration}
+							onChange={(event) => void onHardwareAccelerationChange(event.target.checked)}
+						/>
+					</label>
+					{settings.pendingHardwareAcceleration !== null && (
+						<p className="notice-warning rounded-md px-2 py-1 text-xs">
+							Restart queued: will switch to{' '}
+							{settings.pendingHardwareAcceleration ? 'enabled' : 'disabled'}.
+						</p>
 					)}
-				</div>
-			</div>
-
-			<section className="panel space-y-3 rounded-xl p-4">
-				<h2 className="ui-text-primary text-base font-semibold">General</h2>
-				<label className="block text-sm">
-					<span className="ui-text-secondary mb-1 block font-medium">Language</span>
-					<p className="ui-text-muted mb-2 text-xs">
-						Sets the app interface language for menus, labels, and settings.
-					</p>
-					<FormSelect
-						className="field-select h-10 w-full rounded-md px-3 text-sm"
-						value={settings.language}
-						onChange={(e) => void applySettingsPatch({language: parseAppLanguage(e.target.value)})}
-					>
-						{APP_LANGUAGE_OPTIONS.map((option) => (
-							<option key={option.value} value={option.value}>
-								{option.label}
-							</option>
-						))}
-					</FormSelect>
-				</label>
-				<label className="block text-sm">
-					<span className="ui-text-secondary mb-1 block font-medium">Auto sync interval (minutes)</span>
-					<p className="ui-text-muted mb-2 text-xs">
-						How often the app checks mail and updates unread counts in the background.
-					</p>
-					<FormSelect
-						className="field-select h-10 w-full rounded-md px-3 text-sm"
-						value={settings.syncIntervalMinutes}
-						onChange={(e) =>
-							void applySettingsPatch({syncIntervalMinutes: normalizeSyncIntervalMinutes(e.target.value)})
-						}
-					>
-						{SYNC_INTERVAL_OPTIONS.map((m) => (
-							<option key={m} value={m}>
-								Every {m} minute{m > 1 ? 's' : ''}
-							</option>
-						))}
-					</FormSelect>
-				</label>
-			</section>
-
-			<section className="panel space-y-3 rounded-xl p-4">
-				<h2 className="ui-text-primary text-base font-semibold">Window And Startup</h2>
-				<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-					<div className="pr-3">
-						<span className="ui-text-secondary">Minimize to tray</span>
-						<p className="ui-text-muted mt-1 text-xs">
-							Keeps LunaMail running in the background when minimized.
-						</p>
-					</div>
-					<FormCheckbox
-						checked={settings.minimizeToTray}
-						onChange={(e) => void applySettingsPatch({minimizeToTray: e.target.checked})}
-					/>
-				</label>
-				<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-					<div className="pr-3">
-						<span className="ui-text-secondary">Show unread in titlebar</span>
-						<p className="ui-text-muted mt-1 text-xs">
-							Adds unread count to the window title when new mail is available.
-						</p>
-					</div>
-					<FormCheckbox
-						checked={settings.showUnreadInTitleBar}
-						onChange={(event) => void applySettingsPatch({showUnreadInTitleBar: event.target.checked})}
-					/>
-				</label>
-			</section>
-
-			<section className="panel space-y-3 rounded-xl p-4">
-				<h2 className="ui-text-primary text-base font-semibold">Composer And Notifications</h2>
-				<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-					<div className="pr-3">
-						<span className="ui-text-secondary">Spell check</span>
-						<p className="ui-text-muted mt-1 text-xs">
-							Highlights misspelled words in editors and compose fields.
-						</p>
-					</div>
-					<FormCheckbox
-						checked={settings.spellcheckEnabled}
-						onChange={(event) => void applySettingsPatch({spellcheckEnabled: event.target.checked})}
-					/>
-				</label>
-				<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-					<div className="pr-3">
-						<span className="ui-text-secondary">Notification sound</span>
-						<p className="ui-text-muted mt-1 text-xs">Plays an alert sound for new mail notifications.</p>
-					</div>
-					<FormCheckbox
-						checked={settings.playNotificationSound}
-						onChange={(event) => void applySettingsPatch({playNotificationSound: event.target.checked})}
-					/>
-				</label>
-			</section>
-
-			<section className="panel space-y-3 rounded-xl p-4">
-				<h2 className="ui-text-primary text-base font-semibold">Performance</h2>
-				<label className="ui-border-default flex items-center justify-between rounded-md border px-3 py-2.5 text-sm">
-					<div className="pr-3">
-						<span className="ui-text-secondary">Hardware acceleration</span>
-						<p className="ui-text-muted mt-1 text-xs">
-							Uses your GPU to render the app. Disable if you see flickering, blank windows, or driver
-							issues.
-						</p>
-					</div>
-					<FormCheckbox
-						checked={effectiveHardwareAcceleration}
-						onChange={(event) => void onHardwareAccelerationChange(event.target.checked)}
-					/>
-				</label>
-				{settings.pendingHardwareAcceleration !== null && (
-					<p className="notice-warning rounded-md px-2 py-1 text-xs">
-						Restart queued: will switch to {settings.pendingHardwareAcceleration ? 'enabled' : 'disabled'}.
-					</p>
-				)}
-			</section>
-
-			{appStatus && <div className="app-footer rounded-md px-3 py-2 text-xs ui-text-muted">{appStatus}</div>}
-		</div>
+				</Card>
+		</Container>
 	);
 }

@@ -9,6 +9,7 @@ import type {
 	CalendarEventItem,
 	CloudItem,
 	CloudItemStatus,
+	CloudMoveResult,
 	CloudOpenItemResult,
 	CloudShareLinkResult,
 	CloudStorageUsage,
@@ -53,7 +54,7 @@ import type {
 	WindowControlsCapabilities,
 	StartMailOAuthPayload,
 	OAuthSession,
-} from '@/preload';
+} from '@preload';
 
 const noopUnsubscribe = () => undefined;
 
@@ -189,6 +190,11 @@ export const ipcClient = {
 		window.electronAPI.uploadCloudFiles(accountId, parentPathOrToken ?? null),
 	deleteCloudItem: (accountId: number, itemPathOrToken: string): Promise<{removed: true}> =>
 		window.electronAPI.deleteCloudItem(accountId, itemPathOrToken),
+	moveCloudItem: (
+		accountId: number,
+		itemPathOrToken: string,
+		targetParentPathOrToken: string | null,
+	): Promise<CloudMoveResult> => window.electronAPI.moveCloudItem(accountId, itemPathOrToken, targetParentPathOrToken ?? null),
 	getCloudItemStatus: (accountId: number, itemPathOrToken: string): Promise<CloudItemStatus> =>
 		window.electronAPI.getCloudItemStatus(accountId, itemPathOrToken),
 	openCloudItem: (

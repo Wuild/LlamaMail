@@ -12,9 +12,9 @@ const llamaTraySource = path.join(projectRoot, 'src', 'resources', 'llamatray.pn
 const buildDir = path.join(projectRoot, 'build');
 const iconsDir = path.join(buildDir, 'icons');
 const appIconOut = path.join(buildDir, 'icon.png');
-const trayIconOut = path.join(buildDir, 'lunatray.png');
+const trayIconOut = path.join(buildDir, 'llamatray.png');
 const appIconIcoOut = path.join(buildDir, 'icon.ico');
-const trayIconIcoOut = path.join(buildDir, 'lunatray.ico');
+const trayIconIcoOut = path.join(buildDir, 'llamatray.ico');
 
 const iconSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
 

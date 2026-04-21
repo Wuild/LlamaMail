@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import type {FolderItem} from '@/preload';
+import type {FolderItem} from '@preload';
 
 type MailFoldersStoreState = {
 	accountFoldersById: Record<number, FolderItem[]>;

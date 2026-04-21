@@ -13,7 +13,7 @@ import {arrayMove, horizontalListSortingStrategy, SortableContext, useSortable} 
 import {CSS} from '@dnd-kit/utilities';
 import {useDrag} from 'react-dnd';
 import {getEmptyImage} from 'react-dnd-html5-backend';
-import type {MessageItem} from '@/preload';
+import type {MessageItem} from '@preload';
 import {ScrollArea} from '@llamamail/ui/scroll-area';
 import {cn} from '@llamamail/ui/utils';
 import {Button} from '@llamamail/ui/button';

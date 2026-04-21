@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {ipcClient} from '@renderer/lib/ipcClient';
-import type {WindowControlsCapabilities} from '@/preload';
+import type {WindowControlsCapabilities} from '@preload';
 
 export function useWindowControlsState() {
 	const [isMaximized, setIsMaximized] = useState(false);

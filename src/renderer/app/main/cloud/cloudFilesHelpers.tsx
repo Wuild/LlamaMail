@@ -3,14 +3,21 @@ import React from 'react';
 import {
 	File,
 	FileArchive,
-	FileAudio2,
-	FileCode,
+	FileBarChart2,
+	FileCode2,
+	FileDigit,
 	FileImage,
+	FileJson,
+	FileLock2,
+	FileMusic,
 	FileSpreadsheet,
+	FileTerminal,
 	FileText,
-	FileVideo,
+	FileType2,
+	FileVideo2,
+	FolderOpen,
 } from '@llamamail/ui/icon';
-import type {CloudItem, CloudProvider, CloudStorageUsage} from '@/preload';
+import type {CloudItem, CloudProvider, CloudStorageUsage} from '@preload';
 
 export type NavigationEntry = {token: string; label: string};
 export type CloudTableColumnKey = 'name' | 'type' | 'size' | 'modified' | 'created';
@@ -42,6 +49,8 @@ export const providerLabels: Record<CloudProvider, string> = {
 const CLOUD_FOLDER_CACHE_PREFIX = 'llamamail.cloud.folder.cache.v1';
 const CLOUD_TABLE_COLUMNS_STORAGE_KEY = 'llamamail.cloud.table.columns.v1';
 const CLOUD_ACCOUNT_COLLAPSE_STORAGE_KEY = 'llamamail.cloud.accountCollapseState.v1';
+const CLOUD_STORAGE_USAGE_CACHE_PREFIX = 'llamamail.cloud.storage.usage.v1';
+const CLOUD_AUTO_SYNC_STORAGE_KEY = 'llamamail.cloud.auto-sync.enabled.v1';
 
 export const CLOUD_TABLE_RESIZE_HANDLE_CLASS =
 	"cloud-resize-handle absolute -right-1 top-1/2 h-[calc(100%-10px)] w-2 -translate-y-1/2 cursor-col-resize rounded bg-transparent after:absolute after:bottom-1 after:left-1/2 after:top-1 after:w-px after:-translate-x-1/2 after:content-['']";
@@ -224,36 +233,65 @@ export function formatStorageUsage(usage: CloudStorageUsage | null): string {
 	return `${usedLabel} / ${totalLabel}`;
 }
 
-export function renderCloudFileTypeIcon(item: CloudItem): React.ReactNode {
+export function renderCloudItemIcon(item: CloudItem, size = 15): React.ReactNode {
+	if (item.isFolder) {
+		return <FolderOpen size={size} className="cloud-icon-folder shrink-0 fill-current" />;
+	}
+	return renderCloudFileTypeIcon(item, size);
+}
+
+export function renderCloudFileTypeIcon(item: CloudItem, size = 15): React.ReactNode {
 	const type = (item.mimeType || '').toLowerCase();
 	const ext = (item.name.split('.').pop() || '').toLowerCase();
-	const baseClassName = 'ui-text-muted shrink-0';
+	const baseClassName = 'shrink-0';
+	const isPdf = ext === 'pdf' || type === 'application/pdf';
+	const isDocument = ['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(ext) || type.startsWith('text/');
+	const isSlides = ['ppt', 'pptx', 'key', 'odp'].includes(ext);
+	const isScript = ['js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h'].includes(ext);
+	const isWebCode = ['html', 'htm', 'css', 'scss', 'less', 'svg'].includes(ext);
+	const isStructuredData = ['json', 'xml', 'yml', 'yaml', 'toml', 'ini'].includes(ext);
+	const isDatabase = ['db', 'sqlite', 'sqlite3', 'sql'].includes(ext) || type.includes('sqlite');
+	const isBinary = ['exe', 'msi', 'dmg', 'pkg', 'appimage', 'deb', 'rpm', 'bin'].includes(ext);
 	if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)) {
-		return <FileImage size={15} className={baseClassName} />;
+		return <FileImage size={size} className={`${baseClassName} cloud-icon-image`} />;
 	}
 	if (type.startsWith('video/') || ['mp4', 'mkv', 'mov', 'avi', 'webm'].includes(ext)) {
-		return <FileVideo size={15} className={baseClassName} />;
+		return <FileVideo2 size={size} className={`${baseClassName} cloud-icon-video`} />;
 	}
 	if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
-		return <FileAudio2 size={15} className={baseClassName} />;
+		return <FileMusic size={size} className={`${baseClassName} cloud-icon-audio`} />;
 	}
 	if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) {
-		return <FileArchive size={15} className={baseClassName} />;
+		return <FileArchive size={size} className={`${baseClassName} cloud-icon-archive`} />;
 	}
 	if (['csv', 'xls', 'xlsx', 'ods'].includes(ext)) {
-		return <FileSpreadsheet size={15} className={baseClassName} />;
+		return <FileSpreadsheet size={size} className={`${baseClassName} cloud-icon-spreadsheet`} />;
 	}
-	if (['txt', 'md', 'rtf', 'doc', 'docx', 'pdf'].includes(ext) || type.startsWith('text/')) {
-		return <FileText size={15} className={baseClassName} />;
+	if (isPdf) {
+		return <FileType2 size={size} className={`${baseClassName} cloud-icon-pdf`} />;
 	}
-	if (
-		['json', 'xml', 'yml', 'yaml', 'js', 'ts', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h'].includes(
-			ext,
-		)
-	) {
-		return <FileCode size={15} className={baseClassName} />;
+	if (isSlides) {
+		return <FileBarChart2 size={size} className={`${baseClassName} cloud-icon-slides`} />;
 	}
-	return <File size={15} className={baseClassName} />;
+	if (isDocument) {
+		return <FileText size={size} className={`${baseClassName} cloud-icon-text`} />;
+	}
+	if (isScript) {
+		return <FileTerminal size={size} className={`${baseClassName} cloud-icon-script`} />;
+	}
+	if (isStructuredData) {
+		return <FileJson size={size} className={`${baseClassName} cloud-icon-code`} />;
+	}
+	if (isWebCode) {
+		return <FileCode2 size={size} className={`${baseClassName} cloud-icon-code`} />;
+	}
+	if (isDatabase) {
+		return <FileDigit size={size} className={`${baseClassName} cloud-icon-data`} />;
+	}
+	if (isBinary) {
+		return <FileLock2 size={size} className={`${baseClassName} cloud-icon-binary`} />;
+	}
+	return <File size={size} className={`${baseClassName} cloud-icon-generic`} />;
 }
 
 export function formatStorageUsagePercent(usage: CloudStorageUsage | null): number {
@@ -270,6 +308,61 @@ export function formatStorageUsagePercent(usage: CloudStorageUsage | null): numb
 		return 0;
 	}
 	return Math.max(0, Math.min(100, Math.round((used / total) * 100)));
+}
+
+function buildStorageUsageCacheStorageKey(accountId: number): string {
+	return `${CLOUD_STORAGE_USAGE_CACHE_PREFIX}:${accountId}`;
+}
+
+export function readPersistedStorageUsage(accountId: number): CloudStorageUsage | null {
+	try {
+		const raw = window.localStorage.getItem(buildStorageUsageCacheStorageKey(accountId));
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as {
+			usedBytes?: unknown;
+			totalBytes?: unknown;
+		};
+		const usedBytes =
+			typeof parsed.usedBytes === 'number' && Number.isFinite(parsed.usedBytes) ? parsed.usedBytes : null;
+		const totalBytes =
+			typeof parsed.totalBytes === 'number' && Number.isFinite(parsed.totalBytes) ? parsed.totalBytes : null;
+		return {usedBytes, totalBytes};
+	} catch {
+		return null;
+	}
+}
+
+export function writePersistedStorageUsage(accountId: number, usage: CloudStorageUsage): void {
+	try {
+		window.localStorage.setItem(
+			buildStorageUsageCacheStorageKey(accountId),
+			JSON.stringify({
+				updatedAt: Date.now(),
+				usedBytes: usage?.usedBytes ?? null,
+				totalBytes: usage?.totalBytes ?? null,
+			}),
+		);
+	} catch {
+		// Ignore cache persistence failures.
+	}
+}
+
+export function readCloudAutoSyncEnabled(): boolean {
+	try {
+		const raw = window.localStorage.getItem(CLOUD_AUTO_SYNC_STORAGE_KEY);
+		if (!raw) return true;
+		return JSON.parse(raw) !== false;
+	} catch {
+		return true;
+	}
+}
+
+export function writeCloudAutoSyncEnabled(enabled: boolean): void {
+	try {
+		window.localStorage.setItem(CLOUD_AUTO_SYNC_STORAGE_KEY, JSON.stringify(Boolean(enabled)));
+	} catch {
+		// Ignore preference persistence failures.
+	}
 }
 
 function buildFolderCacheStorageKey(accountId: number, folderToken: string): string {

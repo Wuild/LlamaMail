@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import type {PublicAccount} from '@/preload';
+import type {PublicAccount} from '@preload';
 
 type Updater<T> = T | ((current: T) => T);
 

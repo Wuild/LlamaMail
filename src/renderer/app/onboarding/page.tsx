@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {Check, Globe2, LayoutTemplate, MonitorCog, Moon, Sparkles, Sun} from '@llamamail/ui/icon';
 import {Button} from '@llamamail/ui/button';
@@ -10,8 +10,16 @@ import type {AppLanguage, AppTheme, MailView} from '@llamamail/app/ipcTypes';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import llamaArt from '@resource/llama.png';
 import {useThemePreference} from '@renderer/hooks/useAppTheme';
+import {useForm} from '@renderer/hooks/useForm';
 
 type ThemeOptionValue = 'light' | 'dark' | 'system';
+type OnboardingFormValues = {
+	language: AppLanguage;
+	theme: AppTheme;
+	mailView: MailView;
+	minimizeToTray: boolean;
+	autoUpdateEnabled: boolean;
+};
 
 const THEME_OPTION_META: Record<ThemeOptionValue, {icon: React.ReactNode; subtitle: string}> = {
 	light: {
@@ -31,14 +39,42 @@ const THEME_OPTION_META: Record<ThemeOptionValue, {icon: React.ReactNode; subtit
 export default function OnboardingPage() {
 	const navigate = useNavigate();
 	const defaults = useMemo(() => createDefaultAppSettings(), []);
-	const [language, setLanguage] = useState<AppLanguage>(defaults.language);
-	const [theme, setTheme] = useState<AppTheme>(defaults.theme);
-	const [mailView, setMailView] = useState<MailView>(defaults.mailView);
-	const [minimizeToTray, setMinimizeToTray] = useState<boolean>(defaults.minimizeToTray);
-	const [autoUpdateEnabled, setAutoUpdateEnabled] = useState<boolean>(defaults.autoUpdateEnabled);
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	useThemePreference(theme);
+	const allowedThemeValues = useMemo(() => new Set(APP_THEME_OPTIONS.map((option) => option.value)), []);
+	const allowedLanguageValues = useMemo(() => new Set(APP_LANGUAGE_OPTIONS.map((option) => option.value)), []);
+	const allowedMailViewValues = useMemo(() => new Set(MAIL_VIEW_OPTIONS.map((option) => option.value)), []);
+	const form = useForm<OnboardingFormValues, {ok: true}>({
+		initialValues: {
+			language: defaults.language,
+			theme: defaults.theme,
+			mailView: defaults.mailView,
+			minimizeToTray: defaults.minimizeToTray,
+			autoUpdateEnabled: defaults.autoUpdateEnabled,
+		},
+		validate: (values) => {
+			const errors: Partial<Record<keyof OnboardingFormValues, string>> = {};
+			if (!allowedLanguageValues.has(values.language)) errors.language = 'Select a valid language.';
+			if (!allowedThemeValues.has(values.theme)) errors.theme = 'Select a valid theme.';
+			if (!allowedMailViewValues.has(values.mailView)) errors.mailView = 'Select a valid mail layout.';
+			return errors;
+		},
+		submit: async (values, {ipc}) => {
+			await ipc(() =>
+				ipcClient.updateAppSettings({
+					language: values.language,
+					theme: values.theme,
+					mailView: values.mailView,
+					minimizeToTray: values.minimizeToTray,
+					autoUpdateEnabled: values.autoUpdateEnabled,
+				}),
+			);
+			return {ok: true};
+		},
+		onSuccess: async () => {
+			navigate('/settings/application', {replace: true});
+		},
+	});
+	const setFormValues = form.setValues;
+	useThemePreference(form.values.theme);
 
 	useEffect(() => {
 		let active = true;
@@ -46,36 +82,19 @@ export default function OnboardingPage() {
 			.getAppSettings()
 			.then((settings) => {
 				if (!active || !settings) return;
-				setLanguage(settings.language ?? defaults.language);
-				setTheme(settings.theme ?? defaults.theme);
-				setMailView(settings.mailView ?? defaults.mailView);
-				setMinimizeToTray(Boolean(settings.minimizeToTray));
-				setAutoUpdateEnabled(Boolean(settings.autoUpdateEnabled));
+				setFormValues({
+					language: settings.language ?? defaults.language,
+					theme: settings.theme ?? defaults.theme,
+					mailView: settings.mailView ?? defaults.mailView,
+					minimizeToTray: Boolean(settings.minimizeToTray),
+					autoUpdateEnabled: Boolean(settings.autoUpdateEnabled),
+				});
 			})
 			.catch(() => undefined);
 		return () => {
 			active = false;
 		};
-	}, [defaults.autoUpdateEnabled, defaults.language, defaults.mailView, defaults.minimizeToTray, defaults.theme]);
-
-	async function onSaveAndContinue() {
-		setSaving(true);
-		setError(null);
-		try {
-			await ipcClient.updateAppSettings({
-				language,
-				theme,
-				mailView,
-				minimizeToTray,
-				autoUpdateEnabled,
-			});
-			navigate('/settings/application', {replace: true});
-		} catch (e: any) {
-			setError(e?.message || String(e));
-		} finally {
-			setSaving(false);
-		}
-	}
+	}, [defaults.autoUpdateEnabled, defaults.language, defaults.mailView, defaults.minimizeToTray, defaults.theme, setFormValues]);
 
 	return (
 		<div className="workspace-content h-full w-full overflow-hidden">
@@ -184,7 +203,7 @@ export default function OnboardingPage() {
 										<div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
 											{APP_THEME_OPTIONS.map((option) => {
 												const meta = THEME_OPTION_META[option.value as ThemeOptionValue];
-												const selected = theme === option.value;
+												const selected = form.values.theme === option.value;
 												return (
 													<Button
 														key={option.value}
@@ -192,7 +211,7 @@ export default function OnboardingPage() {
 														variant={selected ? 'default' : 'secondary'}
 														size="none"
 														className={`h-auto rounded-lg border px-3 py-2.5 text-left ${selected ? 'border-transparent' : 'ui-border-default'}`}
-														onClick={() => setTheme(option.value)}
+														onClick={() => form.setFieldValue('theme', option.value)}
 													>
 														<span className="flex w-full items-start gap-2.5">
 															<span className="mt-0.5">{meta.icon}</span>
@@ -219,8 +238,8 @@ export default function OnboardingPage() {
 												Language
 											</span>
 											<FormSelect
-												value={language}
-												onChange={(event) => setLanguage(parseAppLanguage(event.target.value))}
+												value={form.values.language}
+												onChange={(event) => form.setFieldValue('language', parseAppLanguage(event.target.value))}
 											>
 												{APP_LANGUAGE_OPTIONS.map((option) => (
 													<option key={option.value} value={option.value}>
@@ -235,8 +254,8 @@ export default function OnboardingPage() {
 												Mail layout
 											</span>
 											<FormSelect
-												value={mailView}
-												onChange={(event) => setMailView(event.target.value as MailView)}
+												value={form.values.mailView}
+												onChange={(event) => form.setFieldValue('mailView', event.target.value as MailView)}
 											>
 												{MAIL_VIEW_OPTIONS.map((option) => (
 													<option key={option.value} value={option.value}>
@@ -257,8 +276,8 @@ export default function OnboardingPage() {
 												</span>
 											</span>
 											<FormCheckbox
-												checked={minimizeToTray}
-												onChange={(event) => setMinimizeToTray(event.target.checked)}
+												checked={form.values.minimizeToTray}
+												onChange={(event) => form.setFieldValue('minimizeToTray', event.target.checked)}
 											/>
 										</label>
 										<label className="ui-border-default flex items-start justify-between rounded-lg border px-3 py-3 text-sm">
@@ -271,12 +290,14 @@ export default function OnboardingPage() {
 												</span>
 											</span>
 											<FormCheckbox
-												checked={autoUpdateEnabled}
-												onChange={(event) => setAutoUpdateEnabled(event.target.checked)}
+												checked={form.values.autoUpdateEnabled}
+												onChange={(event) => form.setFieldValue('autoUpdateEnabled', event.target.checked)}
 											/>
 										</label>
 									</section>
-									{error && <p className="notice-danger rounded-lg px-4 py-2 text-sm">{error}</p>}
+									{form.formError && (
+										<p className="notice-danger rounded-lg px-4 py-2 text-sm">{form.formError}</p>
+									)}
 									<p className="ui-text-muted text-xs">
 										You can change any of these options later in Settings.
 									</p>
@@ -289,12 +310,10 @@ export default function OnboardingPage() {
 										variant="default"
 										size="default"
 										className="rounded-md px-5 font-semibold"
-										disabled={saving}
-										onClick={() => {
-											void onSaveAndContinue();
-										}}
+										disabled={form.isSubmitting}
+										onClick={() => void form.submit()}
 									>
-										{saving ? 'Saving...' : 'Save and continue'}
+										{form.isSubmitting ? 'Saving...' : 'Save and continue'}
 									</Button>
 								</div>
 							</footer>

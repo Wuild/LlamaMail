@@ -30,6 +30,7 @@ import {
 	$createParagraphNode,
 	$createRangeSelection,
 	$getNearestNodeFromDOMNode,
+	$getNodeByKey,
 	$getRoot,
 	$getSelection,
 	$isDecoratorNode,
@@ -44,6 +45,7 @@ import {
 	SELECTION_CHANGE_COMMAND,
 } from 'lexical';
 import {$getNearestNodeOfType} from '@lexical/utils';
+import {getEmojis, type BaseEmoji, type Category} from 'unicode-emoji';
 import {
 	Bold,
 	Code,
@@ -56,6 +58,7 @@ import {
 	ListOrdered,
 	ListX,
 	MessageSquareQuote,
+	Smile,
 	SeparatorHorizontal,
 	Strikethrough,
 	Underline,
@@ -104,6 +107,66 @@ const AUTO_LINK_MATCHERS = [
 	createLinkMatcherWithRegExp(/\+?\d[\d\s().-]{6,}\d/i, (text) => `tel:${normalizePhoneForTel(text)}`),
 ];
 
+type EmojiPickerCategory = 'most-used' | Category;
+
+type EmojiPickerItem = {
+	emoji: string;
+	description: string;
+	keywords: string[];
+	category: Category;
+	searchText: string;
+};
+
+type SavedRangeSelection = {
+	anchor: {
+		key: string;
+		offset: number;
+		type: 'text' | 'element';
+	};
+	focus: {
+		key: string;
+		offset: number;
+		type: 'text' | 'element';
+	};
+	format: number;
+};
+
+const EMOJI_PICKER_STORAGE_KEY = 'llamamail.editor.emoji-most-used.v1';
+const EMOJI_PICKER_MAX_MOST_USED = 24;
+const EMOJI_PICKER_CATEGORY_ORDER: Category[] = [
+	'face-emotion',
+	'person-people',
+	'animals-nature',
+	'food-drink',
+	'travel-places',
+	'activities-events',
+	'objects',
+	'symbols',
+	'flags',
+];
+const EMOJI_PICKER_CATEGORY_LABEL: Record<Category, string> = {
+	'face-emotion': 'Smileys',
+	'person-people': 'People',
+	'animals-nature': 'Nature',
+	'food-drink': 'Food',
+	'travel-places': 'Travel',
+	'activities-events': 'Activities',
+	objects: 'Objects',
+	symbols: 'Symbols',
+	flags: 'Flags',
+};
+const EMOJI_PICKER_CATEGORY_ICON: Record<Category, string> = {
+	'face-emotion': '😀',
+	'person-people': '🧑',
+	'animals-nature': '🌿',
+	'food-drink': '🍔',
+	'travel-places': '✈️',
+	'activities-events': '⚽',
+	objects: '💡',
+	symbols: '🔣',
+	flags: '🏳️',
+};
+
 function normalizePhoneForTel(value: string): string {
 	const raw = String(value || '').trim();
 	if (!raw) return raw;
@@ -113,12 +176,115 @@ function normalizePhoneForTel(value: string): string {
 	return keepLeadingPlus ? `+${digitsOnly}` : digitsOnly;
 }
 
+function buildEmojiPickerItems(emojis: BaseEmoji[]): EmojiPickerItem[] {
+	return emojis.map((entry) => ({
+		emoji: entry.emoji,
+		description: entry.description,
+		keywords: entry.keywords,
+		category: entry.category,
+		searchText: `${entry.description} ${entry.keywords.join(' ')} ${entry.emoji}`.toLowerCase(),
+	}));
+}
+
+function readMostUsedEmojis(): Record<string, number> {
+	if (typeof window === 'undefined') return {};
+	try {
+		const raw = window.localStorage.getItem(EMOJI_PICKER_STORAGE_KEY);
+		if (!raw) return {};
+		const parsed = JSON.parse(raw);
+		if (!parsed || typeof parsed !== 'object') return {};
+		const next: Record<string, number> = {};
+		for (const [emoji, value] of Object.entries(parsed as Record<string, unknown>)) {
+			const count = Number(value);
+			if (!Number.isFinite(count) || count <= 0) continue;
+			next[emoji] = Math.floor(count);
+		}
+		return next;
+	} catch {
+		return {};
+	}
+}
+
+function writeMostUsedEmojis(value: Record<string, number>): void {
+	if (typeof window === 'undefined') return;
+	try {
+		window.localStorage.setItem(EMOJI_PICKER_STORAGE_KEY, JSON.stringify(value));
+	} catch {
+		// ignore storage errors
+	}
+}
+
+function captureRangeSelection(editor: LexicalEditor): SavedRangeSelection | null {
+	let saved: SavedRangeSelection | null = null;
+	editor.getEditorState().read(() => {
+		const selection = $getSelection();
+		if (!$isRangeSelection(selection)) return;
+		saved = {
+			anchor: {
+				key: selection.anchor.key,
+				offset: selection.anchor.offset,
+				type: selection.anchor.type,
+			},
+			focus: {
+				key: selection.focus.key,
+				offset: selection.focus.offset,
+				type: selection.focus.type,
+			},
+			format: selection.format,
+		};
+	});
+	return saved;
+}
+
+function restoreRangeSelection(saved: SavedRangeSelection): boolean {
+	const anchorNode = $getNodeByKey(saved.anchor.key);
+	const focusNode = $getNodeByKey(saved.focus.key);
+	if (!anchorNode || !focusNode) return false;
+	const nextSelection = $createRangeSelection();
+	nextSelection.anchor.set(saved.anchor.key, saved.anchor.offset, saved.anchor.type);
+	nextSelection.focus.set(saved.focus.key, saved.focus.offset, saved.focus.type);
+	nextSelection.format = saved.format;
+	$setSelection(nextSelection);
+	return true;
+}
+
 function toHtmlDocument(value: string): string {
 	const raw = value || '';
 	if (!raw.trim()) return '';
 	if (/<\/?[a-z][\s\S]*>/i.test(raw)) return raw;
 	const escaped = escapeHtml(raw).replace(/\r\n?/g, '\n').replace(/\n/g, '<br/>');
 	return `<p>${escaped}</p>`;
+}
+
+function isEmptyParagraph(element: Element | null): element is HTMLParagraphElement {
+	if (!element || element.tagName.toLowerCase() !== 'p') return false;
+	for (const child of Array.from(element.childNodes)) {
+		if (child.nodeType === Node.TEXT_NODE && String(child.textContent || '').trim().length > 0) {
+			return false;
+		}
+		if (child.nodeType !== Node.ELEMENT_NODE) {
+			continue;
+		}
+		const tag = (child as Element).tagName.toLowerCase();
+		// Treat a lone <br> as empty placeholder spacing.
+		if (tag === 'br') continue;
+		return false;
+	}
+	return true;
+}
+
+function trimEmptyParagraphsAroundHorizontalRules(doc: Document): void {
+	const hrs = Array.from(doc.querySelectorAll('hr'));
+	for (const hr of hrs) {
+		const before = hr.previousElementSibling;
+		if (isEmptyParagraph(before)) {
+			before.remove();
+		}
+		const after = hr.nextElementSibling;
+		if (isEmptyParagraph(after)) {
+			after.remove();
+		}
+	}
 }
 
 function applyHtmlToEditor(editor: LexicalEditor, value: string): void {
@@ -137,6 +303,7 @@ function applyHtmlToEditor(editor: LexicalEditor, value: string): void {
 			doc.querySelectorAll('[contenteditable]').forEach((element) => {
 				element.removeAttribute('contenteditable');
 			});
+			trimEmptyParagraphsAroundHorizontalRules(doc);
 			const nodes = normalizeImportedNodes($generateNodesFromDOM(editor, doc));
 			if (nodes.length === 0) {
 				root.append($createParagraphNode());
@@ -153,6 +320,10 @@ function normalizeImportedNodes(nodes: Array<any>): Array<any> {
 	let paragraphBuffer: any | null = null;
 
 	for (const node of nodes) {
+		if ($isTextNode(node) && !node.getTextContent().trim()) {
+			// Ignore import-time whitespace text nodes so we don't fabricate empty paragraph rows.
+			continue;
+		}
 		if ($isElementNode(node) || $isDecoratorNode(node)) {
 			paragraphBuffer = null;
 			normalized.push(node);
@@ -164,11 +335,6 @@ function normalizeImportedNodes(nodes: Array<any>): Array<any> {
 			normalized.push(paragraphBuffer);
 		}
 		paragraphBuffer.append(node);
-	}
-
-	const lastNode = normalized[normalized.length - 1];
-	if (lastNode && $isDecoratorNode(lastNode)) {
-		normalized.push($createParagraphNode());
 	}
 
 	return normalized;
@@ -209,6 +375,12 @@ function ExternalHtmlSyncPlugin({
 
 function ToolbarPlugin({appearance = 'default'}: {appearance?: 'default' | 'embedded'}) {
 	const [editor] = useLexicalComposerContext();
+	const [isEmojiDrawerOpen, setIsEmojiDrawerOpen] = useState(false);
+	const [emojiSearch, setEmojiSearch] = useState('');
+	const [selectedEmojiCategory, setSelectedEmojiCategory] = useState<EmojiPickerCategory>('most-used');
+	const [emojiMostUsed, setEmojiMostUsed] = useState<Record<string, number>>(() => readMostUsedEmojis());
+	const toolbarRootRef = useRef<HTMLDivElement | null>(null);
+	const savedEmojiSelectionRef = useRef<SavedRangeSelection | null>(null);
 	const [activeFormats, setActiveFormats] = useState({
 		bold: false,
 		italic: false,
@@ -220,6 +392,31 @@ function ToolbarPlugin({appearance = 'default'}: {appearance?: 'default' | 'embe
 		listBullet: false,
 		listNumbered: false,
 	});
+	const emojiItems = useMemo(() => buildEmojiPickerItems(getEmojis()), []);
+	const emojiByChar = useMemo(() => new Map(emojiItems.map((entry) => [entry.emoji, entry])), [emojiItems]);
+	const emojiMostUsedItems = useMemo(
+		() =>
+			Object.entries(emojiMostUsed)
+				.sort((left, right) => right[1] - left[1])
+				.map(([emoji]) => emojiByChar.get(emoji))
+				.filter((entry): entry is EmojiPickerItem => Boolean(entry))
+				.slice(0, EMOJI_PICKER_MAX_MOST_USED),
+		[emojiByChar, emojiMostUsed],
+	);
+	const categoryOptions = useMemo(
+		() =>
+			EMOJI_PICKER_CATEGORY_ORDER.filter((category) => emojiItems.some((entry) => entry.category === category)),
+		[emojiItems],
+	);
+	const normalizedEmojiSearch = emojiSearch.trim().toLowerCase();
+	const emojiItemsForGrid = useMemo(() => {
+		const scoped =
+			selectedEmojiCategory === 'most-used'
+				? emojiMostUsedItems
+				: emojiItems.filter((entry) => entry.category === selectedEmojiCategory);
+		if (!normalizedEmojiSearch) return scoped;
+		return scoped.filter((entry) => entry.searchText.includes(normalizedEmojiSearch));
+	}, [emojiItems, emojiMostUsedItems, normalizedEmojiSearch, selectedEmojiCategory]);
 
 	const updateToolbarState = useCallback(() => {
 		editor.getEditorState().read(() => {
@@ -279,6 +476,36 @@ function ToolbarPlugin({appearance = 'default'}: {appearance?: 'default' | 'embe
 			unregisterSelection();
 		};
 	}, [editor, updateToolbarState]);
+
+	useEffect(() => {
+		if (!isEmojiDrawerOpen) return;
+		const onPointerDown = (event: MouseEvent) => {
+			const node = toolbarRootRef.current;
+			if (!node) return;
+			if (node.contains(event.target as Node)) return;
+			setIsEmojiDrawerOpen(false);
+		};
+		const onEscape = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape') return;
+			setIsEmojiDrawerOpen(false);
+		};
+		window.addEventListener('mousedown', onPointerDown);
+		window.addEventListener('keydown', onEscape);
+		return () => {
+			window.removeEventListener('mousedown', onPointerDown);
+			window.removeEventListener('keydown', onEscape);
+		};
+	}, [isEmojiDrawerOpen]);
+
+	useEffect(() => {
+		writeMostUsedEmojis(emojiMostUsed);
+	}, [emojiMostUsed]);
+
+	useEffect(() => {
+		if (selectedEmojiCategory === 'most-used' && emojiMostUsedItems.length > 0) return;
+		if (selectedEmojiCategory !== 'most-used') return;
+		setSelectedEmojiCategory(categoryOptions[0] ?? 'most-used');
+	}, [categoryOptions, emojiMostUsedItems.length, selectedEmojiCategory]);
 
 	const format = (kind: 'bold' | 'italic' | 'underline' | 'strikethrough' | 'highlight') => {
 		editor.dispatchCommand(FORMAT_TEXT_COMMAND, kind);
@@ -354,107 +581,219 @@ function ToolbarPlugin({appearance = 'default'}: {appearance?: 'default' | 'embe
 		input.click();
 	};
 
-	return (
-		<div
-			className={
-				appearance === 'embedded'
-					? 'editor-toolbar-embedded flex shrink-0 flex-wrap items-center gap-1 p-2'
-					: 'editor-toolbar-default flex shrink-0 flex-wrap items-center gap-1 p-2'
+	const insertEmoji = (emoji: string) => {
+		editor.focus();
+		editor.update(() => {
+			let selection = $getSelection();
+			if (!$isRangeSelection(selection) && savedEmojiSelectionRef.current) {
+				restoreRangeSelection(savedEmojiSelectionRef.current);
+				selection = $getSelection();
 			}
-		>
-			<ToolbarIcon
-				title="Bold"
-				onClick={() => format('bold')}
-				appearance={appearance}
-				active={activeFormats.bold}
+			if (!$isRangeSelection(selection)) {
+				$getRoot().selectEnd();
+				selection = $getSelection();
+			}
+			if ($isRangeSelection(selection)) {
+				selection.insertText(emoji);
+			}
+		});
+		savedEmojiSelectionRef.current = captureRangeSelection(editor);
+		setEmojiMostUsed((prev) => ({
+			...prev,
+			[emoji]: (prev[emoji] || 0) + 1,
+		}));
+		setIsEmojiDrawerOpen(false);
+	};
+
+	return (
+		<div ref={toolbarRootRef} className="relative flex shrink-0 flex-col">
+			<div
+				className={
+					appearance === 'embedded'
+						? 'editor-toolbar-embedded flex shrink-0 flex-wrap items-center gap-1 p-2'
+						: 'editor-toolbar-default flex shrink-0 flex-wrap items-center gap-1 p-2'
+				}
 			>
-				<Bold size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="Italic"
-				onClick={() => format('italic')}
-				appearance={appearance}
-				active={activeFormats.italic}
-			>
-				<Italic size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="Underline"
-				onClick={() => format('underline')}
-				appearance={appearance}
-				active={activeFormats.underline}
-			>
-				<Underline size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="Strikethrough"
-				onClick={() => format('strikethrough')}
-				appearance={appearance}
-				active={activeFormats.strikethrough}
-			>
-				<Strikethrough size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon title="Highlight" onClick={() => format('highlight')} appearance={appearance}>
-				<Highlighter size={18} />
-			</ToolbarIcon>
-			<div className="editor-toolbar-divider mx-1 h-5 w-px" />
-			<ToolbarIcon
-				title="H1"
-				onClick={() => setHeading('h1')}
-				appearance={appearance}
-				active={activeFormats.headingH1}
-			>
-				<Heading1 size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="H2"
-				onClick={() => setHeading('h2')}
-				appearance={appearance}
-				active={activeFormats.headingH2}
-			>
-				<Heading2 size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon title="Quote" onClick={setQuote} appearance={appearance} active={activeFormats.quote}>
-				<MessageSquareQuote size={18} />
-			</ToolbarIcon>
-			<div className="editor-toolbar-divider mx-1 h-5 w-px" />
-			<ToolbarIcon
-				title="Bulleted list"
-				onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)}
-				appearance={appearance}
-				active={activeFormats.listBullet}
-			>
-				<List size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="Numbered list"
-				onClick={() => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)}
-				appearance={appearance}
-				active={activeFormats.listNumbered}
-			>
-				<ListOrdered size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="Remove list"
-				onClick={() => editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)}
-				appearance={appearance}
-			>
-				<ListX size={18} />
-			</ToolbarIcon>
-			<div className="editor-toolbar-divider mx-1 h-5 w-px" />
-			<ToolbarIcon title="Insert image" onClick={insertImage} appearance={appearance}>
-				<ImagePlus size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon title="Code block" onClick={insertCodeBlock} appearance={appearance}>
-				<Code size={18} />
-			</ToolbarIcon>
-			<ToolbarIcon
-				title="Horizontal rule"
-				onClick={() => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined)}
-				appearance={appearance}
-			>
-				<SeparatorHorizontal size={18} />
-			</ToolbarIcon>
+				<ToolbarIcon
+					title="Bold"
+					onClick={() => format('bold')}
+					appearance={appearance}
+					active={activeFormats.bold}
+				>
+					<Bold size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="Italic"
+					onClick={() => format('italic')}
+					appearance={appearance}
+					active={activeFormats.italic}
+				>
+					<Italic size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="Underline"
+					onClick={() => format('underline')}
+					appearance={appearance}
+					active={activeFormats.underline}
+				>
+					<Underline size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="Strikethrough"
+					onClick={() => format('strikethrough')}
+					appearance={appearance}
+					active={activeFormats.strikethrough}
+				>
+					<Strikethrough size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon title="Highlight" onClick={() => format('highlight')} appearance={appearance}>
+					<Highlighter size={18} />
+				</ToolbarIcon>
+				<div className="editor-toolbar-divider mx-1 h-5 w-px" />
+				<ToolbarIcon
+					title="H1"
+					onClick={() => setHeading('h1')}
+					appearance={appearance}
+					active={activeFormats.headingH1}
+				>
+					<Heading1 size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="H2"
+					onClick={() => setHeading('h2')}
+					appearance={appearance}
+					active={activeFormats.headingH2}
+				>
+					<Heading2 size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon title="Quote" onClick={setQuote} appearance={appearance} active={activeFormats.quote}>
+					<MessageSquareQuote size={18} />
+				</ToolbarIcon>
+				<div className="editor-toolbar-divider mx-1 h-5 w-px" />
+				<ToolbarIcon
+					title="Bulleted list"
+					onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)}
+					appearance={appearance}
+					active={activeFormats.listBullet}
+				>
+					<List size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="Numbered list"
+					onClick={() => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)}
+					appearance={appearance}
+					active={activeFormats.listNumbered}
+				>
+					<ListOrdered size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="Remove list"
+					onClick={() => editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)}
+					appearance={appearance}
+				>
+					<ListX size={18} />
+				</ToolbarIcon>
+				<div className="editor-toolbar-divider mx-1 h-5 w-px" />
+				<div className="relative">
+					<ToolbarIcon
+						title="Emoji picker"
+						onClick={() => {
+							setIsEmojiDrawerOpen((open) => {
+								const next = !open;
+								if (next) {
+									savedEmojiSelectionRef.current = captureRangeSelection(editor);
+								}
+								return next;
+							});
+							setEmojiSearch('');
+						}}
+						appearance={appearance}
+						active={isEmojiDrawerOpen}
+					>
+						<Smile size={18} />
+					</ToolbarIcon>
+					{isEmojiDrawerOpen && (
+						<div className="menu ui-border-default ui-surface-card absolute left-0 top-full z-40 mt-1 h-[22rem] w-[24rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border shadow-lg">
+							<div className="flex h-full">
+								<div className="ui-surface-content ui-border-default flex h-full w-12 flex-col items-center gap-1 border-r p-2">
+									<Button
+										type="button"
+										variant={selectedEmojiCategory === 'most-used' ? 'secondary' : 'ghost'}
+										size="icon"
+										title="Recent"
+										aria-label="Recent"
+										onMouseDown={(event) => event.preventDefault()}
+										onClick={() => setSelectedEmojiCategory('most-used')}
+										className="h-8 w-8 rounded-md p-0"
+									>
+										<span aria-hidden>🕘</span>
+									</Button>
+									<div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+										{categoryOptions.map((category) => (
+											<Button
+												key={category}
+												type="button"
+												variant={selectedEmojiCategory === category ? 'secondary' : 'ghost'}
+												size="icon"
+												title={EMOJI_PICKER_CATEGORY_LABEL[category]}
+												aria-label={EMOJI_PICKER_CATEGORY_LABEL[category]}
+												onMouseDown={(event) => event.preventDefault()}
+												onClick={() => setSelectedEmojiCategory(category)}
+												className="h-8 w-8 rounded-md p-0"
+											>
+												<span aria-hidden>{EMOJI_PICKER_CATEGORY_ICON[category]}</span>
+											</Button>
+										))}
+									</div>
+								</div>
+								<div className="flex min-w-0 flex-1 flex-col p-2">
+									<input
+										type="search"
+										value={emojiSearch}
+										onChange={(event) => setEmojiSearch(event.target.value)}
+										placeholder="Search emojis"
+										className="ui-border-default ui-surface-content ui-text-primary w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+									/>
+									<div className="mt-2 grid min-h-0 flex-1 grid-cols-8 gap-2 overflow-y-auto overflow-x-hidden">
+										{emojiItemsForGrid.map((item) => (
+											<Button
+												key={item.emoji}
+												type="button"
+												variant="outline"
+												size="icon"
+												title={item.description}
+												onMouseDown={(event) => event.preventDefault()}
+												onClick={() => insertEmoji(item.emoji)}
+												className="h-8 w-8 rounded-md p-0 text-lg leading-none"
+											>
+												{item.emoji}
+											</Button>
+										))}
+										{emojiItemsForGrid.length === 0 && (
+											<div className="col-span-8 py-2 text-center text-xs ui-text-muted">
+												No emojis found.
+											</div>
+										)}
+									</div>
+								</div>
+							</div>
+						</div>
+					)}
+				</div>
+				<ToolbarIcon title="Insert image" onClick={insertImage} appearance={appearance}>
+					<ImagePlus size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon title="Code block" onClick={insertCodeBlock} appearance={appearance}>
+					<Code size={18} />
+				</ToolbarIcon>
+				<ToolbarIcon
+					title="Horizontal rule"
+					onClick={() => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined)}
+					appearance={appearance}
+				>
+					<SeparatorHorizontal size={18} />
+				</ToolbarIcon>
+			</div>
 		</div>
 	);
 }
@@ -820,6 +1159,7 @@ function toInlineEmailHtml(inputHtml: string): string {
 	if (!html.trim()) return '';
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(html, 'text/html');
+	trimEmptyParagraphsAroundHorizontalRules(doc);
 
 	const applyStyle = (el: Element, style: string) => {
 		const existing = el.getAttribute('style');
@@ -870,9 +1210,6 @@ function toInlineEmailHtml(inputHtml: string): string {
 		applyStyle(el, 'max-width:100%; height:auto; display:block;');
 		if (!el.getAttribute('alt')) el.setAttribute('alt', '');
 	});
-	doc.querySelectorAll('hr').forEach((el) =>
-		applyStyle(el, 'border:0; border-top:1px solid var(--content-border); margin:12px 0;'),
-	);
 	doc.querySelectorAll('h1').forEach((el) => applyStyle(el, 'margin:0 0 12px 0; font-size:28px; line-height:1.25;'));
 	doc.querySelectorAll('h2').forEach((el) => applyStyle(el, 'margin:0 0 12px 0; font-size:24px; line-height:1.3;'));
 	doc.querySelectorAll('h3').forEach((el) => applyStyle(el, 'margin:0 0 10px 0; font-size:20px; line-height:1.35;'));

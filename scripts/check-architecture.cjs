@@ -21,6 +21,7 @@ const FORBIDDEN_RENDERER_COLOR_PATTERNS = [
 		regex: /\b(?:bg|text|border|ring|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)(?:-[0-9]{2,3}(?:\/[0-9]{1,3})?|\/[0-9]{1,3})?\b/g,
 	},
 ];
+const FORBIDDEN_RENDERER_FORM_TAG_PATTERN = /<\s*(input|select|textarea|button)\b/g;
 const EVENT_ALLOWLIST = new Set([
 	normalizePath('src/renderer/hooks/ipc/useIpcEvent.ts'),
 	normalizePath('src/renderer/lib/ipcClient.ts'),
@@ -77,6 +78,7 @@ function main() {
 	const oversized = [];
 	const directEventUsages = [];
 	const forbiddenRendererColorUsages = [];
+	const forbiddenRendererFormTags = [];
 	const unexpectedLegacyRouteModules = [];
 
 	for (const file of files) {
@@ -109,6 +111,18 @@ function main() {
 					match = pattern.regex.exec(raw);
 				}
 				pattern.regex.lastIndex = 0;
+			}
+
+			if (relative.endsWith('.tsx')) {
+				let match = FORBIDDEN_RENDERER_FORM_TAG_PATTERN.exec(raw);
+				while (match) {
+					forbiddenRendererFormTags.push({
+						relative,
+						tag: match[1],
+					});
+					match = FORBIDDEN_RENDERER_FORM_TAG_PATTERN.exec(raw);
+				}
+				FORBIDDEN_RENDERER_FORM_TAG_PATTERN.lastIndex = 0;
 			}
 		}
 
@@ -170,6 +184,28 @@ function main() {
 			});
 	} else {
 		console.log('[architecture-check] Renderer color utility guard passed.');
+	}
+
+	if (forbiddenRendererFormTags.length > 0) {
+		hasError = true;
+		console.error(
+			'[architecture-check] Found raw renderer form tags. Use @llamamail/ui/form and @llamamail/ui/button primitives.',
+		);
+		const grouped = new Map();
+		for (const usage of forbiddenRendererFormTags) {
+			const key = usage.relative;
+			const existing = grouped.get(key) || {count: 0, tags: new Set()};
+			existing.count += 1;
+			existing.tags.add(usage.tag);
+			grouped.set(key, existing);
+		}
+		[...grouped.entries()]
+			.sort((a, b) => b[1].count - a[1].count)
+			.forEach(([file, info]) => {
+				console.error(`  - ${file}: ${info.count} occurrence(s) [${[...info.tags].sort().join(', ')}]`);
+			});
+	} else {
+		console.log('[architecture-check] Renderer form primitives guard passed.');
 	}
 
 	if (unexpectedLegacyRouteModules.length > 0) {

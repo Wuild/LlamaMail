@@ -18,7 +18,7 @@ import type {
 	SendEmailPayload,
 	SendEmailResult,
 	UpdateCalendarEventPayload,
-} from '@/preload';
+} from '@preload';
 import {ipcClient} from '@renderer/lib/ipcClient';
 import {useIpcEvent} from './useIpcEvent';
 import {selectTotalUnreadCount, useAccountsRuntimeStore} from '@renderer/store/accountsRuntimeStore';
