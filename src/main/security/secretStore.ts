@@ -17,6 +17,7 @@ const allowDevKeychainMigration = String(process.env.LLAMAMAIL_DEV_KEYCHAIN_MIGR
 const allowDevVaultLegacyFallback = String(process.env.LLAMAMAIL_DEV_KEYCHAIN_LEGACY_FALLBACK || '').trim() === '1';
 const devSecretsFilePath = path.join(os.homedir(), 'Library', 'Application Support', 'LlamaMail', 'dev-secrets.json');
 const devVaultAccountKey = '__dev_keychain_vault__';
+const devVaultService = 'LlamaMail.SecretsVault';
 
 let devSecretsLoaded = false;
 let devSecrets: SecretFileShape = {};
@@ -47,7 +48,7 @@ async function persistDevSecrets(): Promise<void> {
 }
 
 function useDevKeychainVault(): boolean {
-	return isMacDev && !useDevFileStore;
+	return process.platform === 'darwin' && !useDevFileStore;
 }
 
 async function ensureDevVaultLoaded(service: string): Promise<void> {
@@ -58,7 +59,7 @@ async function ensureDevVaultLoaded(service: string): Promise<void> {
 		return;
 	}
 	try {
-		const raw = await keytar.getPassword(service, devVaultAccountKey);
+		const raw = await keytar.getPassword(devVaultService, devVaultAccountKey);
 		if (!raw) {
 			devVault = {};
 			devVaultLoaded = true;
@@ -76,7 +77,7 @@ async function ensureDevVaultLoaded(service: string): Promise<void> {
 async function persistDevVault(service: string): Promise<void> {
 	if (!useDevKeychainVault()) return;
 	if (devVaultKeychainLockedOut) return;
-	await keytar.setPassword(service, devVaultAccountKey, JSON.stringify(devVault));
+	await keytar.setPassword(devVaultService, devVaultAccountKey, JSON.stringify(devVault));
 }
 
 export async function getPassword(service: string, account: string): Promise<string | null> {
@@ -86,7 +87,8 @@ export async function getPassword(service: string, account: string): Promise<str
 	}
 	if (useDevKeychainVault()) {
 		await ensureDevVaultLoaded(service);
-		const vaultValue = devVault[account];
+		const vaultKey = toCacheKey(service, account);
+		const vaultValue = devVault[vaultKey];
 		if (typeof vaultValue === 'string' && vaultValue.trim()) {
 			memoryCache.set(cacheKey, vaultValue);
 			return vaultValue;
@@ -95,7 +97,7 @@ export async function getPassword(service: string, account: string): Promise<str
 			try {
 				const legacy = await keytar.getPassword(service, account);
 				if (typeof legacy === 'string' && legacy.trim()) {
-					devVault[account] = legacy;
+					devVault[vaultKey] = legacy;
 					memoryCache.set(cacheKey, legacy);
 					await persistDevVault(service);
 					return legacy;
@@ -142,7 +144,8 @@ export async function setPassword(service: string, account: string, password: st
 	memoryCache.set(cacheKey, password);
 	if (useDevKeychainVault()) {
 		await ensureDevVaultLoaded(service);
-		devVault[account] = password;
+		const vaultKey = toCacheKey(service, account);
+		devVault[vaultKey] = password;
 		if (!devVaultKeychainLockedOut) {
 			try {
 				await persistDevVault(service);
@@ -166,9 +169,10 @@ export async function deletePassword(service: string, account: string): Promise<
 	memoryCache.delete(cacheKey);
 	if (useDevKeychainVault()) {
 		await ensureDevVaultLoaded(service);
-		const existedInVault = account in devVault;
+		const vaultKey = toCacheKey(service, account);
+		const existedInVault = vaultKey in devVault;
 		if (existedInVault) {
-			delete devVault[account];
+			delete devVault[vaultKey];
 			if (!devVaultKeychainLockedOut) {
 				try {
 					await persistDevVault(service);
