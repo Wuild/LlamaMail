@@ -124,6 +124,7 @@
 		"appId": "com.llamamail.app",
 		"productName": "LlamaMail",
 		"beforeBuild": "./scripts/electron-builder-before-build.cjs",
+		"afterSign": "./scripts/electron-builder-after-sign.cjs",
 		"directories": {
 			"output": "dist",
 			"buildResources": "build"
@@ -220,6 +221,10 @@
 		},
 		"mac": {
 			"strictVerify": false,
+			"hardenedRuntime": true,
+			"gatekeeperAssess": false,
+			"entitlements": "build/entitlements.mac.plist",
+			"entitlementsInherit": "build/entitlements.mac.inherit.plist",
 			"icon": "build/icon-mac.png",
 			"target": [
 				"dmg",

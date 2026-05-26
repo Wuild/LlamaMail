@@ -213,32 +213,27 @@ function toErrorDetail(error: unknown): string | null {
 
 async function runStartupUpdateFlowWithTimeout(timeoutMs: number): Promise<'proceed' | 'installing'> {
 	const startupPromise = runStartupUpdateFlow();
-	while (true) {
-		const raceResult = await Promise.race<
-			| {type: 'done'; result: 'proceed' | 'installing'}
-			| {
-					type: 'timeout';
-			  }
-		>([
-			startupPromise.then((result) => ({type: 'done' as const, result})),
-			new Promise<{type: 'timeout'}>((resolve) => {
-				setTimeout(() => resolve({type: 'timeout'}), timeoutMs);
-			}),
-		]);
-		if (raceResult.type === 'done') {
-			return raceResult.result;
-		}
-		const phase = getAutoUpdateState().phase;
-		if (phase === 'error' || phase === 'disabled') {
-			logger.warn(
-				'Startup update flow timeout after %dms in terminal phase=%s, continuing startup',
-				timeoutMs,
-				phase,
-			);
-			return 'proceed';
-		}
-		logger.warn('Startup update flow timeout after %dms while phase=%s, continuing to wait', timeoutMs, phase);
+	const raceResult = await Promise.race<
+		| {type: 'done'; result: 'proceed' | 'installing'}
+		| {
+				type: 'timeout';
+		  }
+	>([
+		startupPromise.then((result) => ({type: 'done' as const, result})),
+		new Promise<{type: 'timeout'}>((resolve) => {
+			setTimeout(() => resolve({type: 'timeout'}), timeoutMs);
+		}),
+	]);
+	if (raceResult.type === 'done') {
+		return raceResult.result;
 	}
+	const phase = getAutoUpdateState().phase;
+	logger.warn(
+		'Startup update flow timeout after %dms while phase=%s, continuing startup',
+		timeoutMs,
+		phase,
+	);
+	return 'proceed';
 }
 
 function createGlobalErrorEvent(params: {
@@ -1345,6 +1340,12 @@ if (!gotSingleInstanceLock) {
 		}
 		stopAccountAutoSync();
 		logger.info('Auto sync stopped');
+	});
+
+	app.on('before-quit-for-update', () => {
+		logger.warn('App before-quit-for-update');
+		isQuitting = true;
+		closeAllWindowsForQuit();
 	});
 
 	app.on('window-all-closed', () => {

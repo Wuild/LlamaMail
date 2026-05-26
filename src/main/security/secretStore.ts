@@ -61,7 +61,22 @@ async function ensureDevVaultLoaded(service: string): Promise<void> {
 	try {
 		const raw = await keytar.getPassword(devVaultService, devVaultAccountKey);
 		if (!raw) {
-			devVault = {};
+			// One-time migration path from previous service-scoped vault entries.
+			try {
+				const legacyVaultRaw = await keytar.getPassword(service, devVaultAccountKey);
+				if (legacyVaultRaw) {
+					const legacyParsed = JSON.parse(legacyVaultRaw) as DevVaultShape;
+					if (legacyParsed && typeof legacyParsed === 'object') {
+						for (const [legacyAccount, legacyValue] of Object.entries(legacyParsed)) {
+							if (typeof legacyValue !== 'string' || !legacyValue.trim()) continue;
+							devVault[toCacheKey(service, legacyAccount)] = legacyValue;
+						}
+						await keytar.setPassword(devVaultService, devVaultAccountKey, JSON.stringify(devVault));
+					}
+				}
+			} catch {
+				// Ignore legacy vault migration failure and continue with empty vault.
+			}
 			devVaultLoaded = true;
 			return;
 		}
@@ -93,7 +108,7 @@ export async function getPassword(service: string, account: string): Promise<str
 			memoryCache.set(cacheKey, vaultValue);
 			return vaultValue;
 		}
-		if (!devVaultKeychainLockedOut && allowDevVaultLegacyFallback) {
+		if (!devVaultKeychainLockedOut) {
 			try {
 				const legacy = await keytar.getPassword(service, account);
 				if (typeof legacy === 'string' && legacy.trim()) {

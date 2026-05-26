@@ -193,12 +193,20 @@ export async function checkForUpdates(): Promise<AutoUpdateState> {
 	}
 
 	try {
+		setState({
+			enabled: true,
+			phase: 'checking',
+			message: __('updater.state.checking'),
+			percent: null,
+			transferred: null,
+			total: null,
+		});
 		await runWithTransientRetry('check', () => autoUpdater.checkForUpdates());
 		logger.info('checkForUpdates finished phase=%s', updateState.phase);
 	} catch (error: any) {
 		logger.error('checkForUpdates failed: %s', (error as any)?.message || String(error));
 		setState({
-			phase: 'error',
+			phase: 'idle',
 			message: getUpdateErrorMessage(error, 'check'),
 		});
 	}
@@ -235,9 +243,13 @@ export async function downloadUpdate(): Promise<AutoUpdateState> {
 		logger.info('downloadUpdate finished phase=%s', updateState.phase);
 	} catch (error: any) {
 		logger.error('downloadUpdate failed: %s', (error as any)?.message || String(error));
+		const retryPhase = updateState.latestVersion ? 'available' : 'idle';
 		setState({
-			phase: 'error',
+			phase: retryPhase,
 			message: getUpdateErrorMessage(error, 'download'),
+			percent: null,
+			transferred: null,
+			total: null,
 		});
 	}
 	return getAutoUpdateState();
@@ -246,7 +258,8 @@ export async function downloadUpdate(): Promise<AutoUpdateState> {
 export function quitAndInstallUpdate(): void {
 	if (!app.isPackaged) return;
 	logger.warn('quitAndInstallUpdate requested');
-	autoUpdater.quitAndInstall();
+	// Use explicit args to avoid platform-default ambiguity and relaunch after install.
+	autoUpdater.quitAndInstall(false, true);
 }
 
 export async function runStartupUpdateFlow(): Promise<'proceed' | 'installing'> {
