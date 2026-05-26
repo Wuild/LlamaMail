@@ -130,10 +130,16 @@ export const ipcClient = {
 		window.electronAPI.onSendEmailBackgroundStatus?.(cb) ?? noopUnsubscribe,
 	onDebugLog: (cb: (entry: DebugLogEntry) => void): (() => void) =>
 		window.electronAPI.onDebugLog?.(cb) ?? noopUnsubscribe,
+	onWindowFullscreenChanged: (cb: (payload: {isFullScreen: boolean; isMaximized: boolean}) => void): (() => void) =>
+		window.electronAPI.onWindowFullscreenChanged?.(cb) ?? noopUnsubscribe,
 	getDebugLogs: (limit?: number): Promise<DebugLogEntry[]> => window.electronAPI.getDebugLogs(limit),
 	clearDebugLogs: (): Promise<{ok: true}> => window.electronAPI.clearDebugLogs(),
 
 	isWindowMaximized: (): Promise<boolean> => window.electronAPI.isWindowMaximized(),
+	isWindowFullScreen: (): Promise<boolean> =>
+		typeof window.electronAPI.isWindowFullScreen === 'function'
+			? window.electronAPI.isWindowFullScreen()
+			: Promise.resolve(false),
 	minimizeWindow: (): Promise<{ok: true}> => window.electronAPI.minimizeWindow(),
 	toggleMaximizeWindow: (): Promise<{ok: true; isMaximized: boolean}> => window.electronAPI.toggleMaximizeWindow(),
 	closeWindow: (): Promise<{ok: true}> => window.electronAPI.closeWindow(),

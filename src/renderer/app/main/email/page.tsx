@@ -79,15 +79,6 @@ function compareMessagesByDateDesc(a: MessageItem, b: MessageItem): number {
 
 function sortMessagesByMode(messages: MessageItem[], mode: MailListSort): MessageItem[] {
 	const rows = [...messages];
-	if (mode === 'unread_then_arrived_desc') {
-		rows.sort((a, b) => {
-			const readA = Number(a.is_read ?? 0) > 0 ? 1 : 0;
-			const readB = Number(b.is_read ?? 0) > 0 ? 1 : 0;
-			if (readA !== readB) return readA - readB;
-			return compareMessagesByDateDesc(a, b);
-		});
-		return rows;
-	}
 	rows.sort(compareMessagesByDateDesc);
 	return rows;
 }

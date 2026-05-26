@@ -30,6 +30,12 @@ export function resolveWindowIconPath(): string | null {
 	if (cachedWindowIconPath !== undefined) {
 		return cachedWindowIconPath;
 	}
+	const darwinCandidates = [
+		path.join(app.getAppPath(), 'build/icon-mac.png'),
+		path.join(app.getAppPath(), 'src/resources/llama-app.png'),
+		path.join(process.cwd(), 'build/icon-mac.png'),
+		path.join(process.cwd(), 'src/resources/llama-app.png'),
+	];
 	const linuxCandidates = [
 		path.join(app.getAppPath(), 'build/icons/512x512.png'),
 		path.join(app.getAppPath(), 'build/icon.png'),
@@ -50,7 +56,8 @@ export function resolveWindowIconPath(): string | null {
 		path.join(process.cwd(), 'src/resources/llama.ico'),
 		path.join(process.cwd(), 'src/resources/llama.png'),
 	];
-	const candidates = process.platform === 'linux' ? linuxCandidates : defaultCandidates;
+	const candidates =
+		process.platform === 'darwin' ? darwinCandidates : process.platform === 'linux' ? linuxCandidates : defaultCandidates;
 	for (const candidate of candidates) {
 		if (fs.existsSync(candidate)) {
 			cachedWindowIconPath = candidate;
@@ -73,6 +80,18 @@ export function createAppWindow(options: BrowserWindowConstructorOptions): Brows
 	});
 	win.setMenuBarVisibility(false);
 	win.removeMenu();
+	const emitWindowState = () => {
+		if (win.isDestroyed()) return;
+		win.webContents.send('window-fullscreen-changed', {
+			isFullScreen: win.isFullScreen(),
+			isMaximized: win.isMaximized(),
+		});
+	};
+	win.on('enter-full-screen', emitWindowState);
+	win.on('leave-full-screen', emitWindowState);
+	win.on('maximize', emitWindowState);
+	win.on('unmaximize', emitWindowState);
+	win.once('ready-to-show', emitWindowState);
 	return win;
 }
 

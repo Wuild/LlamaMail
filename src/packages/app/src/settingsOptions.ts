@@ -22,7 +22,6 @@ export const MAIL_VIEW_OPTIONS: ReadonlyArray<LabeledOption<MailView>> = [
 	{value: 'top-table', label: 'Top Table'},
 ];
 export const MAIL_LIST_SORT_OPTIONS: ReadonlyArray<LabeledOption<MailListSort>> = [
-	{value: 'unread_then_arrived_desc', label: 'Unread first, then newest'},
 	{value: 'arrived_desc', label: 'Newest first'},
 ];
 

@@ -1256,7 +1256,7 @@ async function syncAccountAncillaryInWorker(
 			},
 		};
 	}
-	const worker = new Worker(new URL('../main/ancillarySyncWorker', import.meta.url), {
+	const worker = new Worker(new URL('../main/ancillarySyncWorker.js', import.meta.url), {
 		workerData: {
 			dbPath: getSqlitePath(),
 			accountId,

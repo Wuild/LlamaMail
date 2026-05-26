@@ -1,4 +1,4 @@
-import {app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, Notification, shell} from 'electron';
+import {app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell} from 'electron';
 import path from 'path';
 import {createAppLogger, onDebugLog} from './debug/debugLog';
 import {initDb} from '@main/db/index';
@@ -121,6 +121,14 @@ const mainWindowManager = createMainWindowManager({
 
 initTray({
 	appIconPath,
+	useMonochromeIcon: () => {
+		if (process.platform === 'darwin') return true;
+		if (process.platform === 'linux') {
+			// Linux tray styles vary by DE/theme; prefer symbolic icon for light trays.
+			return !nativeTheme.shouldUseDarkColors;
+		}
+		return false;
+	},
 	isActionsEnabled: () => mainWindowActionsEnabled,
 	onShowApp: showMainWindow,
 	onCompose: openComposeQuickAction,
@@ -647,6 +655,7 @@ function applyRuntimeSettings(): void {
 }
 
 function notifyNativeThemeUpdated(): void {
+	tray.refresh();
 	const settings = getAppSettingsSync();
 	if (settings.theme !== 'system') return;
 	const payload = {shouldUseDarkColors: nativeTheme.shouldUseDarkColors};
@@ -1094,6 +1103,18 @@ function configureLinuxDesktopEntryName(): void {
 	}
 }
 
+function applyMacDockIcon(): void {
+	if (process.platform !== 'darwin' || !app.dock) return;
+	if (!appIconPath) return;
+	const icon = nativeImage.createFromPath(appIconPath);
+	if (icon.isEmpty()) return;
+	try {
+		app.dock.setIcon(icon);
+	} catch {
+		// ignore dock icon assignment failures
+	}
+}
+
 const allowMultipleInstances =
 	String(process.env.LLAMA_ALLOW_MULTI_INSTANCE || process.env.LUNAMAIL_ALLOW_MULTI_INSTANCE || '').trim() === '1';
 const gotSingleInstanceLock = allowMultipleInstances ? true : app.requestSingleInstanceLock();
@@ -1106,6 +1127,7 @@ if (!gotSingleInstanceLock) {
 		logger.warn('Single instance lock bypassed via LLAMA_ALLOW_MULTI_INSTANCE=1');
 	}
 	configureLinuxDesktopEntryName();
+	applyMacDockIcon();
 	registerGlobalErrorHandlers();
 	protocolHandler.registerEventHandlers();
 	installExternalNavigationPolicy();

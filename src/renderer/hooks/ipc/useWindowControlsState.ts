@@ -4,6 +4,8 @@ import type {WindowControlsCapabilities} from '@preload';
 
 export function useWindowControlsState() {
 	const [isMaximized, setIsMaximized] = useState(false);
+	const [isFullScreen, setIsFullScreen] = useState(false);
+	const [isExpandedByBounds, setIsExpandedByBounds] = useState(false);
 	const [capabilities, setCapabilities] = useState<WindowControlsCapabilities>({
 		minimizable: true,
 		maximizable: true,
@@ -12,13 +14,32 @@ export function useWindowControlsState() {
 	useEffect(() => {
 		let active = true;
 		const refreshMaximizedState = () => {
-			void ipcClient
-				.isWindowMaximized()
-				.then((value) => {
-					if (!active) return;
-					setIsMaximized(Boolean(value));
-				})
-				.catch(() => undefined);
+			const widthSlack = 8;
+			const heightSlack = 8;
+			const nearScreenSized =
+				window.innerWidth >= window.screen.availWidth - widthSlack &&
+				window.innerHeight >= window.screen.availHeight - heightSlack;
+			setIsExpandedByBounds((prev) => (prev === nearScreenSized ? prev : nearScreenSized));
+			try {
+				void ipcClient
+					.isWindowMaximized()
+					.then((value) => {
+						if (!active) return;
+						const next = Boolean(value);
+						setIsMaximized((prev) => (prev === next ? prev : next));
+					})
+					.catch(() => undefined);
+				void ipcClient
+					.isWindowFullScreen()
+					.then((value) => {
+						if (!active) return;
+						const next = Boolean(value);
+						setIsFullScreen((prev) => (prev === next ? prev : next));
+					})
+					.catch(() => undefined);
+			} catch {
+				// Ignore API surface mismatches during dev preload hot swaps.
+			}
 		};
 		const refreshCapabilities = () => {
 			void ipcClient
@@ -34,9 +55,21 @@ export function useWindowControlsState() {
 		};
 		refreshMaximizedState();
 		refreshCapabilities();
+		const unsubscribeWindowState = ipcClient.onWindowFullscreenChanged((payload) => {
+			if (!active) return;
+			const nextFullScreen = Boolean(payload?.isFullScreen);
+			const nextMaximized = Boolean(payload?.isMaximized);
+			setIsFullScreen((prev) => (prev === nextFullScreen ? prev : nextFullScreen));
+			setIsMaximized((prev) => (prev === nextMaximized ? prev : nextMaximized));
+		});
+		const intervalId = window.setInterval(refreshMaximizedState, 800);
+		window.addEventListener('focus', refreshMaximizedState);
 		window.addEventListener('resize', refreshMaximizedState);
 		return () => {
 			active = false;
+			unsubscribeWindowState();
+			window.clearInterval(intervalId);
+			window.removeEventListener('focus', refreshMaximizedState);
 			window.removeEventListener('resize', refreshMaximizedState);
 		};
 	}, []);
@@ -55,6 +88,8 @@ export function useWindowControlsState() {
 
 	return {
 		isMaximized,
+		isFullScreen,
+		isExpandedByBounds,
 		capabilities,
 		toggleMaximize,
 		minimize,

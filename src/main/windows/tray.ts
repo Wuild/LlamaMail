@@ -6,6 +6,7 @@ import {__} from '@llamamail/app/i18n/main';
 type TrayControllerDeps = {
 	appName?: string;
 	appIconPath: string | null;
+	useMonochromeIcon: () => boolean;
 	isActionsEnabled: () => boolean;
 	onShowApp: () => void;
 	onCompose: () => void;
@@ -48,7 +49,7 @@ export const tray = {
 		const deps = state.deps;
 		const appName = deps.appName || APP_NAME;
 
-		const icon = resolveBestTrayIcon(deps.appIconPath);
+		const icon = resolveBestTrayIcon(deps.appIconPath, deps.useMonochromeIcon());
 		state.tray = new Tray(icon);
 		state.tray.setToolTip(buildTrayTooltip(appName, state.unreadCount));
 
@@ -59,7 +60,7 @@ export const tray = {
 		});
 
 		state.tray.on('click', () => {
-			if (process.platform !== 'linux') return;
+			if (process.platform !== 'linux' && process.platform !== 'darwin') return;
 			runAsync(() => deps.onShowApp());
 		});
 	},
@@ -76,6 +77,7 @@ export const tray = {
 	refresh() {
 		if (!state.tray || !state.deps) return;
 		const appName = state.deps.appName || APP_NAME;
+		state.tray.setImage(resolveBestTrayIcon(state.deps.appIconPath, state.deps.useMonochromeIcon()));
 		state.tray.setToolTip(buildTrayTooltip(appName, state.unreadCount));
 		buildMenu();
 	},
@@ -148,16 +150,19 @@ function buildTrayTooltip(appName: string, unreadCount: number): string {
 	return __('main.tray.tooltip.unread_count', {appName, count: unreadCount});
 }
 
-function buildTrayIcon(appIconPath: string | null) {
+function buildTrayIcon(appIconPath: string | null, useMonochromeIcon: boolean) {
 	const windowsTrayIconPath = resolveWindowsTrayIconPath(appIconPath);
-	const linuxTrayIconPath = resolveLinuxTrayIconPath(appIconPath);
+	const linuxTrayIconPath = resolveLinuxTrayIconPath(appIconPath, useMonochromeIcon);
+	const macTrayIconPath = resolveMacTrayIconPath(appIconPath, useMonochromeIcon);
 
 	const trayPath =
 		process.platform === 'win32'
 			? windowsTrayIconPath || appIconPath
 			: process.platform === 'linux'
 				? linuxTrayIconPath || appIconPath || path.join(app.getAppPath(), 'build/icons/64x64.png')
-				: appIconPath;
+				: process.platform === 'darwin'
+					? macTrayIconPath || appIconPath
+					: appIconPath;
 
 	const trayBaseImage = trayPath ? nativeImage.createFromPath(trayPath) : null;
 
@@ -170,6 +175,11 @@ function buildTrayIcon(appIconPath: string | null) {
 			const linuxIcon = trayBaseImage.resize({width: 24, height: 24});
 			return nativeImage.createFromBuffer(linuxIcon.toPNG());
 		}
+		if (process.platform === 'darwin') {
+			const macIcon = trayBaseImage.resize({width: 18, height: 18});
+			macIcon.setTemplateImage(true);
+			return macIcon;
+		}
 
 		return trayBaseImage;
 	}
@@ -177,8 +187,8 @@ function buildTrayIcon(appIconPath: string | null) {
 	return nativeImage.createEmpty();
 }
 
-function resolveBestTrayIcon(appIconPath: string | null): Electron.NativeImage {
-	const icon = buildTrayIcon(appIconPath);
+function resolveBestTrayIcon(appIconPath: string | null, useMonochromeIcon: boolean): Electron.NativeImage {
+	const icon = buildTrayIcon(appIconPath, useMonochromeIcon);
 	if (!icon.isEmpty()) {
 		state.lastGoodIcon = icon;
 		return icon;
@@ -186,9 +196,24 @@ function resolveBestTrayIcon(appIconPath: string | null): Electron.NativeImage {
 	return state.lastGoodIcon || nativeImage.createEmpty();
 }
 
-export function resolveLinuxTrayIconPath(appIconPath: string | null): string | null {
+export function resolveLinuxTrayIconPath(appIconPath: string | null, useMonochromeIcon: boolean): string | null {
 	const resourceRoot = process.resourcesPath || '';
+	const monochromeCandidatePaths = [
+		path.join(app.getAppPath(), 'build/llamatray-monochromed.png'),
+		path.join(app.getAppPath(), 'build/llamatray-monochrome.png'),
+		resourceRoot ? path.join(resourceRoot, 'build/llamatray-monochromed.png') : '',
+		resourceRoot ? path.join(resourceRoot, 'build/llamatray-monochrome.png') : '',
+		resourceRoot ? path.join(resourceRoot, 'app.asar.unpacked/build/llamatray-monochromed.png') : '',
+		resourceRoot ? path.join(resourceRoot, 'app.asar.unpacked/build/llamatray-monochrome.png') : '',
+		path.join(process.cwd(), 'build/llamatray-monochromed.png'),
+		path.join(process.cwd(), 'build/llamatray-monochrome.png'),
+		path.join(process.cwd(), 'src/resources/llamatray-monochromed.png'),
+		path.join(process.cwd(), 'src/resources/llamatray-monochrome.png'),
+		path.join(app.getAppPath(), 'src/resources/llamatray-monochromed.png'),
+		path.join(app.getAppPath(), 'src/resources/llamatray-monochrome.png'),
+	];
 	const candidatePaths = [
+		...(useMonochromeIcon ? monochromeCandidatePaths : []),
 		path.join(app.getAppPath(), 'build/llamatray.png'),
 		resourceRoot ? path.join(resourceRoot, 'build/llamatray.png') : '',
 		resourceRoot ? path.join(resourceRoot, 'app.asar.unpacked/build/llamatray.png') : '',
@@ -199,6 +224,35 @@ export function resolveLinuxTrayIconPath(appIconPath: string | null): string | n
 		path.join(process.cwd(), 'build/llamatray.png'),
 		path.join(process.cwd(), 'build/icon.png'),
 		path.join(process.cwd(), 'src/resources/llamatray.png'),
+		appIconPath,
+	];
+	for (const candidate of candidatePaths) {
+		if (!candidate) continue;
+		const icon = nativeImage.createFromPath(candidate);
+		if (!icon.isEmpty()) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+export function resolveMacTrayIconPath(appIconPath: string | null, useMonochromeIcon: boolean): string | null {
+	const monochromeCandidatePaths = [
+		path.join(app.getAppPath(), 'build/llamatray-monochromed.png'),
+		path.join(app.getAppPath(), 'build/llamatray-monochrome.png'),
+		path.join(process.cwd(), 'build/llamatray-monochromed.png'),
+		path.join(process.cwd(), 'build/llamatray-monochrome.png'),
+		path.join(process.cwd(), 'src/resources/llamatray-monochromed.png'),
+		path.join(process.cwd(), 'src/resources/llamatray-monochrome.png'),
+		path.join(app.getAppPath(), 'src/resources/llamatray-monochromed.png'),
+		path.join(app.getAppPath(), 'src/resources/llamatray-monochrome.png'),
+	];
+	const candidatePaths = [
+		...(useMonochromeIcon ? monochromeCandidatePaths : []),
+		path.join(app.getAppPath(), 'build/llamatray.png'),
+		path.join(process.cwd(), 'build/llamatray.png'),
+		path.join(process.cwd(), 'src/resources/llamatray.png'),
+		path.join(app.getAppPath(), 'src/resources/llamatray.png'),
 		appIconPath,
 	];
 	for (const candidate of candidatePaths) {

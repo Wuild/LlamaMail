@@ -31,18 +31,26 @@ export default function WindowTitleBar({
 }: WindowTitleBarProps) {
 	const {t} = useI18n();
 	const {appSettings} = useAppSettings(DEFAULT_APP_SETTINGS);
-	const {isMaximized, capabilities, toggleMaximize, minimize, close} = useWindowControlsState();
+	const {isMaximized, isFullScreen, isExpandedByBounds, capabilities, toggleMaximize, minimize, close} =
+		useWindowControlsState();
 	const {appVersion} = useAutoUpdateState();
 	const hasPageTitle = String(title || '').trim().length > 0;
+	const isMacOs = /mac/i.test(navigator.platform || navigator.userAgent || '');
+	const shouldUseMacInset = isMacOs && !isFullScreen && !isMaximized && !isExpandedByBounds;
 	if (appSettings.useNativeTitleBar) {
 		return null;
 	}
 	const allowMinimize = showMinimize && capabilities.minimizable;
 	const allowMaximize = showMaximize && capabilities.maximizable;
+	const showCustomControls = !isMacOs;
 
 	return (
 		<div
-			className={cn('titlebar relative flex h-9 shrink-0 items-center justify-between px-2', className)}
+			className={cn(
+				'titlebar relative flex h-9 shrink-0 items-center justify-between px-2',
+				shouldUseMacInset && 'titlebar-macos-inset',
+				className,
+			)}
 			style={{WebkitAppRegion: 'drag'} as React.CSSProperties}
 			onDoubleClick={() => {
 				if (!allowMaximize) return;
@@ -75,7 +83,7 @@ export default function WindowTitleBar({
 				style={{WebkitAppRegion: 'no-drag'} as React.CSSProperties}
 			>
 				{titleActions}
-				{allowMinimize && (
+				{showCustomControls && allowMinimize && (
 					<Button
 						type="button"
 						className="titlebar-button inline-flex h-7 w-7 items-center justify-center rounded"
@@ -86,7 +94,7 @@ export default function WindowTitleBar({
 						<Minus size={14} />
 					</Button>
 				)}
-				{allowMaximize && (
+				{showCustomControls && allowMaximize && (
 					<Button
 						type="button"
 						className="titlebar-button inline-flex h-7 w-7 items-center justify-center rounded"
@@ -97,7 +105,7 @@ export default function WindowTitleBar({
 						{isMaximized ? <Copy size={13} /> : <Square size={13} />}
 					</Button>
 				)}
-				{showClose && (
+				{showCustomControls && showClose && (
 					<Button
 						type="button"
 						className="titlebar-button-close inline-flex h-7 w-7 items-center justify-center rounded"

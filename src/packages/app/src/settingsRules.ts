@@ -4,7 +4,7 @@ import type {AppLanguage, AppTheme, MailListSort, MailView, NavRailItemId} from 
 export const APP_LANGUAGE_VALUES = ['system', 'en-US', 'sv-SE'] as const;
 export const APP_THEME_VALUES = ['system', 'light', 'dark'] as const;
 export const MAIL_VIEW_VALUES = ['side-list', 'top-table'] as const;
-export const MAIL_LIST_SORT_VALUES = ['arrived_desc', 'unread_then_arrived_desc'] as const;
+export const MAIL_LIST_SORT_VALUES = ['arrived_desc'] as const;
 export const NAV_RAIL_ITEM_VALUES = ['email', 'contacts', 'calendar', 'cloud'] as const;
 
 export const SYNC_INTERVAL_MINUTES_MIN = 1;

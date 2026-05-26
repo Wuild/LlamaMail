@@ -90,6 +90,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
 		DEFAULT_APP_SETTINGS.playNotificationSound,
 	);
 	const showUnreadInTitleBar = parseBoolean(input?.showUnreadInTitleBar, DEFAULT_APP_SETTINGS.showUnreadInTitleBar);
+	const trayIconMonochrome = parseBoolean(input?.trayIconMonochrome, DEFAULT_APP_SETTINGS.trayIconMonochrome);
 	const autoUpdateEnabled = parseBoolean(input?.autoUpdateEnabled, DEFAULT_APP_SETTINGS.autoUpdateEnabled);
 	const developerMode = parseBoolean(input?.developerMode, DEFAULT_APP_SETTINGS.developerMode);
 	const developerDemoMode = parseBoolean(input?.developerDemoMode, DEFAULT_APP_SETTINGS.developerDemoMode);
@@ -121,6 +122,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
 		spellcheckEnabled,
 		playNotificationSound,
 		showUnreadInTitleBar,
+		trayIconMonochrome,
 		blockRemoteContent,
 		remoteContentAllowlist,
 		minimizeToTray,

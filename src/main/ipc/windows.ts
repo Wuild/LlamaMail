@@ -124,6 +124,18 @@ export function registerWindowIpc(options?: {onOpenAddAccountRoute?: () => void}
 		return win.isMaximized();
 	});
 
+	ipcMain.handle('window-is-full-screen', async (event) => {
+		logger.debug('IPC window-is-full-screen');
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win || win.isDestroyed()) return false;
+		const isNativeFullScreen = win.isFullScreen();
+		const isSimpleFullScreen =
+			process.platform === 'darwin' && typeof (win as unknown as {isSimpleFullScreen?: () => boolean}).isSimpleFullScreen === 'function'
+				? Boolean((win as unknown as {isSimpleFullScreen: () => boolean}).isSimpleFullScreen())
+				: false;
+		return isNativeFullScreen || isSimpleFullScreen;
+	});
+
 	ipcMain.handle('window-controls-capabilities', async (event) => {
 		logger.debug('IPC window-controls-capabilities');
 		const win = BrowserWindow.fromWebContents(event.sender);

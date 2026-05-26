@@ -9,6 +9,10 @@
 		color: var(--titlebar-text);
 	}
 
+	.titlebar-macos-inset .titlebar-left {
+		padding-left: 74px;
+	}
+
 	.titlebar-title {
 		color: var(--titlebar-text);
 	}

@@ -1,7 +1,7 @@
 export type AppLanguage = 'system' | 'en-US' | 'sv-SE';
 export type AppTheme = 'system' | 'light' | 'dark';
 export type MailView = 'side-list' | 'top-table';
-export type MailListSort = 'arrived_desc' | 'unread_then_arrived_desc';
+export type MailListSort = 'arrived_desc';
 export type NavRailItemId = 'email' | 'contacts' | 'calendar' | 'cloud';
 
 export interface AppSettings {
@@ -15,6 +15,7 @@ export interface AppSettings {
 	spellcheckEnabled: boolean;
 	playNotificationSound: boolean;
 	showUnreadInTitleBar: boolean;
+	trayIconMonochrome: boolean;
 	useNativeTitleBar: boolean;
 	pendingUseNativeTitleBar: boolean | null;
 	blockRemoteContent: boolean;

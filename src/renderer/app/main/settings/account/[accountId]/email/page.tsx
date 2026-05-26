@@ -141,7 +141,7 @@ export default function SettingsAccountEmailPage() {
 						<label className="block text-sm">
 							<Label>{t('settings.account_email.message_list_order')}</Label>
 							<FormSelect
-								value={editor.email_list_sort || 'unread_then_arrived_desc'}
+								value={editor.email_list_sort || 'arrived_desc'}
 								onChange={(event) =>
 									setEditor((prev) =>
 										prev
@@ -155,9 +155,7 @@ export default function SettingsAccountEmailPage() {
 							>
 								{MAIL_LIST_SORT_OPTIONS.map((option) => (
 									<option key={option.value} value={option.value}>
-										{option.value === 'unread_then_arrived_desc'
-											? t('settings.account_email.message_order_unread_first')
-											: t('settings.account_email.message_order_newest_first')}
+										{t('settings.account_email.message_order_newest_first')}
 									</option>
 								))}
 							</FormSelect>

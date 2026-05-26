@@ -878,6 +878,7 @@ const api = {
 	}> => ipcRenderer.invoke('window-toggle-maximize'),
 	closeWindow: (): Promise<{ok: true}> => ipcRenderer.invoke('window-close'),
 	isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window-is-maximized'),
+	isWindowFullScreen: (): Promise<boolean> => ipcRenderer.invoke('window-is-full-screen'),
 	getWindowControlsCapabilities: (): Promise<WindowControlsCapabilities> =>
 		ipcRenderer.invoke('window-controls-capabilities'),
 	openDevTools: (): Promise<{ok: true}> => ipcRenderer.invoke('window-open-dev-tools'),
@@ -994,6 +995,16 @@ const api = {
 		const listener = (_event: Electron.IpcRendererEvent, payload: DebugLogEntry) => callback(payload);
 		ipcRenderer.on('debug-log', listener);
 		return () => ipcRenderer.removeListener('debug-log', listener);
+	},
+	onWindowFullscreenChanged: (
+		callback: (payload: {isFullScreen: boolean; isMaximized: boolean}) => void,
+	): (() => void) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			payload: {isFullScreen: boolean; isMaximized: boolean},
+		) => callback(payload);
+		ipcRenderer.on('window-fullscreen-changed', listener);
+		return () => ipcRenderer.removeListener('window-fullscreen-changed', listener);
 	},
 	onAutoUpdateStatus: (callback: (payload: AutoUpdateState) => void): (() => void) => {
 		const listener = (_event: Electron.IpcRendererEvent, payload: AutoUpdateState) => callback(payload);

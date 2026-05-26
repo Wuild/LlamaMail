@@ -219,7 +219,12 @@
 			"category": "Network"
 		},
 		"mac": {
-			"strictVerify": false
+			"strictVerify": false,
+			"icon": "build/icon-mac.png",
+			"target": [
+				"dmg",
+				"zip"
+			]
 		},
 		"flatpak": {
 			"runtime": "org.freedesktop.Platform",

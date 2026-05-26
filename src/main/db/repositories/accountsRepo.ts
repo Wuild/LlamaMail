@@ -1,4 +1,4 @@
-import keytar from 'keytar';
+import * as secretStore from '@main/security/secretStore';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {eq} from 'drizzle-orm';
@@ -234,7 +234,7 @@ export async function addAccount(payload: AddAccountPayload): Promise<{id: numbe
 		sync_calendar = 1,
 		contacts_sync_interval_minutes = DEFAULT_ACCOUNT_CONTACTS_SYNC_INTERVAL_MINUTES,
 		calendar_sync_interval_minutes = DEFAULT_ACCOUNT_CALENDAR_SYNC_INTERVAL_MINUTES,
-		email_list_sort = 'unread_then_arrived_desc',
+		email_list_sort = 'arrived_desc',
 		email_sync_interval_minutes = DEFAULT_ACCOUNT_EMAIL_SYNC_INTERVAL_MINUTES,
 		email_sync_lookback_months = DEFAULT_ACCOUNT_EMAIL_SYNC_LOOKBACK_MONTHS,
 		imap_user = null,
@@ -342,29 +342,29 @@ export async function addAccount(payload: AddAccountPayload): Promise<{id: numbe
 	const accountId = result?.id as number;
 
 	if (normalizedAuthMethod !== 'oauth2' && normalizedImapPassword && normalizedSmtpPassword) {
-		await keytar.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'imap'), normalizedImapPassword);
-		await keytar.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'smtp'), normalizedSmtpPassword);
+		await secretStore.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'imap'), normalizedImapPassword);
+		await secretStore.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'smtp'), normalizedSmtpPassword);
 		if (normalizedCarddavPassword) {
-			await keytar.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'), normalizedCarddavPassword);
+			await secretStore.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'), normalizedCarddavPassword);
 		}
 		if (normalizedCaldavPassword) {
-			await keytar.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'), normalizedCaldavPassword);
+			await secretStore.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'), normalizedCaldavPassword);
 		}
 		const normalizedAccountPassword =
 			normalizedLegacyPassword || normalizedImapPassword || normalizedSmtpPassword || normalizedCarddavPassword || normalizedCaldavPassword;
 		if (normalizedAccountPassword) {
-			await keytar.setPassword(SERVICE_NAME, getAccountPasswordKey(accountId, email), normalizedAccountPassword);
+			await secretStore.setPassword(SERVICE_NAME, getAccountPasswordKey(accountId, email), normalizedAccountPassword);
 		}
 	}
 	if (normalizedAuthMethod === 'oauth2' && oauth_session) {
 		await setAccountOAuthSession(accountId, email, oauth_session);
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'imap'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'smtp'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'imap'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'smtp'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, email));
 	} else {
-		await keytar.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, email));
 	}
 	await ensureLocalAccountVCard(
 		accountId,
@@ -711,46 +711,46 @@ export async function updateAccount(accountId: number, payload: UpdateAccountPay
 		throw new Error('IMAP and SMTP passwords are required.');
 	}
 	if (authMethod !== 'oauth2' && nextImapPassword && nextSmtpPassword) {
-		await keytar.setPassword(
+		await secretStore.setPassword(
 			SERVICE_NAME,
 			getAccountProtocolPasswordKey(accountId, email, 'imap'),
 			nextImapPassword,
 		);
-		await keytar.setPassword(
+		await secretStore.setPassword(
 			SERVICE_NAME,
 			getAccountProtocolPasswordKey(accountId, email, 'smtp'),
 			nextSmtpPassword,
 		);
 		if (nextCarddavPassword) {
-			await keytar.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'), nextCarddavPassword);
+			await secretStore.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'), nextCarddavPassword);
 		}
 		if (nextCaldavPassword) {
-			await keytar.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'), nextCaldavPassword);
+			await secretStore.setPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'), nextCaldavPassword);
 		}
 		const nextAccountPassword = baseFallbackPassword || nextImapPassword || nextSmtpPassword || nextCarddavPassword || nextCaldavPassword;
 		if (nextAccountPassword) {
-			await keytar.setPassword(SERVICE_NAME, getAccountPasswordKey(accountId, email), nextAccountPassword);
+			await secretStore.setPassword(SERVICE_NAME, getAccountPasswordKey(accountId, email), nextAccountPassword);
 		}
 	}
 	if (authMethod === 'oauth2' && payload.oauth_session) {
 		await setAccountOAuthSession(accountId, email, payload.oauth_session);
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'imap'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'smtp'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'imap'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'smtp'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'carddav'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, 'caldav'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, email));
 	}
 	if (authMethod !== 'oauth2') {
-		await keytar.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, existing.email));
-		await keytar.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, existing.email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, email));
 	}
 	if (existing.email !== email) {
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'imap'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'smtp'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'carddav'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'caldav'));
-		await keytar.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, existing.email));
-		await keytar.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, existing.email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'imap'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'smtp'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'carddav'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'caldav'));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, existing.email));
+		await secretStore.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, existing.email));
 	}
 	await ensureLocalAccountVCard(
 		accountId,
@@ -851,12 +851,12 @@ export async function deleteAccount(accountId: number): Promise<{id: number; ema
 	});
 
 	tx(accountId);
-	await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'imap'));
-	await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'smtp'));
-	await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'carddav'));
-	await keytar.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'caldav'));
-	await keytar.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, existing.email));
-	await keytar.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, existing.email));
+	await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'imap'));
+	await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'smtp'));
+	await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'carddav'));
+	await secretStore.deletePassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, existing.email, 'caldav'));
+	await secretStore.deletePassword(SERVICE_NAME, getAccountPasswordKey(accountId, existing.email));
+	await secretStore.deletePassword(SERVICE_NAME, getAccountOAuthKey(accountId, existing.email));
 	await removeLocalAccountVCard(accountId, existing.email);
 	return {id: accountId, email: existing.email};
 }
@@ -894,7 +894,7 @@ async function getAccountProtocolPassword(
 	email: string,
 	protocol: 'imap' | 'smtp' | 'carddav' | 'caldav',
 ): Promise<string | null> {
-	const protocolValue = await keytar.getPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, protocol));
+	const protocolValue = await secretStore.getPassword(SERVICE_NAME, getAccountProtocolPasswordKey(accountId, email, protocol));
 	if (String(protocolValue || '').trim()) return String(protocolValue || '').trim();
 	const legacy = await getLegacyAccountPassword(accountId, email);
 	if (String(legacy || '').trim()) return String(legacy || '').trim();
@@ -902,7 +902,7 @@ async function getAccountProtocolPassword(
 }
 
 async function getLegacyAccountPassword(accountId: number, email: string): Promise<string | null> {
-	const value = await keytar.getPassword(SERVICE_NAME, getAccountPasswordKey(accountId, email));
+	const value = await secretStore.getPassword(SERVICE_NAME, getAccountPasswordKey(accountId, email));
 	const normalized = String(value || '').trim();
 	return normalized || null;
 }
@@ -986,7 +986,7 @@ function cleanupAccountDavSettings(
 }
 
 async function getAccountOAuthSession(accountId: number, email: string): Promise<OAuthSession | null> {
-	const raw = await keytar.getPassword(SERVICE_NAME, getAccountOAuthKey(accountId, email));
+	const raw = await secretStore.getPassword(SERVICE_NAME, getAccountOAuthKey(accountId, email));
 	if (!raw) return null;
 	try {
 		const parsed = JSON.parse(raw) as OAuthSession;
@@ -1011,7 +1011,7 @@ async function getAccountOAuthSession(accountId: number, email: string): Promise
 }
 
 async function setAccountOAuthSession(accountId: number, email: string, session: OAuthSession): Promise<void> {
-	await keytar.setPassword(SERVICE_NAME, getAccountOAuthKey(accountId, email), JSON.stringify(session));
+	await secretStore.setPassword(SERVICE_NAME, getAccountOAuthKey(accountId, email), JSON.stringify(session));
 }
 
 function hasOAuthSessionChanged(before: OAuthSession, after: OAuthSession): boolean {

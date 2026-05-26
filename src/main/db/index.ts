@@ -89,7 +89,7 @@ function ensureAccountsModuleColumns(db: any): void {
 		missing.push({
 			name: 'email_list_sort',
 			sqlType: 'text',
-			defaultValue: "'unread_then_arrived_desc'",
+			defaultValue: "'arrived_desc'",
 		});
 	}
 	if (!existing.has('imap_user')) {

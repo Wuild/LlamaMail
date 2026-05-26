@@ -1,4 +1,4 @@
-import keytar from 'keytar';
+import * as secretStore from '@main/security/secretStore';
 import {eq} from 'drizzle-orm';
 import {getDb, getDrizzle} from '@main/db/drizzle';
 import {cloudAccounts, type InsertCloudAccount} from '@main/db/schema';
@@ -92,7 +92,7 @@ export async function addCloudAccount(payload: AddCloudAccountPayload): Promise<
 	};
 	const inserted = await db.insert(cloudAccounts).values(insertPayload).returning({id: cloudAccounts.id}).get();
 	const accountId = Number(inserted?.id);
-	await keytar.setPassword(SERVICE_NAME, `cloud:${accountId}`, secret);
+	await secretStore.setPassword(SERVICE_NAME, `cloud:${accountId}`, secret);
 
 	const rows = await getCloudAccounts();
 	const created = rows.find((row) => row.id === accountId);
@@ -103,7 +103,7 @@ export async function addCloudAccount(payload: AddCloudAccountPayload): Promise<
 export async function deleteCloudAccount(accountId: number): Promise<{removed: boolean}> {
 	const db = getDrizzle();
 	await db.delete(cloudAccounts).where(eq(cloudAccounts.id, accountId)).run();
-	await keytar.deletePassword(SERVICE_NAME, `cloud:${accountId}`);
+	await secretStore.deletePassword(SERVICE_NAME, `cloud:${accountId}`);
 	purgeCloudDavData(accountId);
 	return {removed: true};
 }
@@ -145,7 +145,7 @@ export async function updateCloudAccount(
 
 	if (nextSecret !== null) {
 		if (!nextSecret) throw new Error('Secret cannot be empty.');
-		await keytar.setPassword(SERVICE_NAME, `cloud:${accountId}`, nextSecret);
+		await secretStore.setPassword(SERVICE_NAME, `cloud:${accountId}`, nextSecret);
 	}
 
 	const rows = await getCloudAccounts();
@@ -159,7 +159,7 @@ export async function getCloudAccountCredentials(accountId: number): Promise<Clo
 	const row = await db.select().from(cloudAccounts).where(eq(cloudAccounts.id, accountId)).get();
 	if (!row?.id) throw new Error(`Cloud account ${accountId} not found.`);
 	assertCloudProviderEnabled(row.provider as CloudProvider);
-	const secret = await keytar.getPassword(SERVICE_NAME, `cloud:${row.id}`);
+	const secret = await secretStore.getPassword(SERVICE_NAME, `cloud:${row.id}`);
 	if (!secret) throw new Error('Cloud account secret not found in keychain.');
 	return {
 		id: row.id,
@@ -175,7 +175,7 @@ export async function getCloudAccountCredentials(accountId: number): Promise<Clo
 export async function setCloudAccountSecret(accountId: number, secret: string): Promise<void> {
 	const normalizedSecret = String(secret || '').trim();
 	if (!normalizedSecret) throw new Error('Secret cannot be empty.');
-	await keytar.setPassword(SERVICE_NAME, `cloud:${Number(accountId)}`, normalizedSecret);
+	await secretStore.setPassword(SERVICE_NAME, `cloud:${Number(accountId)}`, normalizedSecret);
 }
 
 export function cloudAccountToDavAccountId(accountId: number): number {
